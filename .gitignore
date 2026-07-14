@@ -38,3 +38,7 @@ output/
 
 # Mypy
 .mypy_cache/
+
+projects/
+__pycache__/
+*.pyc

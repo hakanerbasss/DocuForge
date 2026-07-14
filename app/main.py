@@ -19,8 +19,12 @@ def version_command():
 @app.command("generate")
 def generate_command(topic: str):
     """Generate a new documentary project."""
-    typer.echo(f"Generating project: {topic}")
 
+    from app.cli.generate import generate
+
+    project_dir = generate(topic)
+
+    typer.echo(f"✅ Project created: {project_dir}")
 
 def main():
     app()
