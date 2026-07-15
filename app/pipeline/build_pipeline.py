@@ -6,6 +6,7 @@ from typing import Callable
 from rich.console import Console
 
 from app.agents.image_prompt import ImagePromptAgent
+from app.agents.narration import NarrationAgent
 from app.agents.research import ResearchAgent
 from app.agents.script import ScriptAgent
 from app.agents.storyboard import StoryboardAgent
@@ -110,6 +111,16 @@ class BuildPipeline:
                     )
                 ),
             ),
+            (
+                "narration",
+                "🎙",
+                "Narration",
+                lambda: NarrationAgent().run(
+                    self._read_required_file(
+                        project_dir / "storyboard.json"
+                    )
+                ),
+            ),
         ]
 
         output_files = {
@@ -118,6 +129,7 @@ class BuildPipeline:
             "storyboard": "storyboard.json",
             "images": "image_prompts.json",
             "videos": "video_prompts.json",
+            "narration": "narration.txt",
         }
 
         total_steps = len(steps)
@@ -162,6 +174,9 @@ class BuildPipeline:
                     "output": str(output_path),
                     "error": None,
                 }
+
+                state["status"] = "running"
+                state["failed_step"] = None
 
                 self._save_state(project_dir, state)
 
@@ -276,7 +291,7 @@ class BuildPipeline:
         )
 
     def _read_required_file(self, file_path: Path) -> str:
-        """Read a required input file and reject missing/empty files."""
+        """Read a required input file and reject missing or empty files."""
 
         if not file_path.exists():
             raise FileNotFoundError(
