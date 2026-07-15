@@ -1,17 +1,15 @@
 import json
 import time
 from pathlib import Path
-from typing import Callable
 
 from rich.console import Console
 
-from app.agents.image_prompt import ImagePromptAgent
-from app.agents.narration import NarrationAgent
-from app.agents.research import ResearchAgent
-from app.agents.script import ScriptAgent
-from app.agents.storyboard import StoryboardAgent
-from app.agents.video_prompt import VideoPromptAgent
+from app.agents.registry import AgentRegistry
 from app.models.project import DocumentaryProject
+from app.pipeline.definitions import (
+    get_agent_definition,
+    get_default_pipeline_steps,
+)
 from app.services.project_service import ProjectService, load_project
 
 
@@ -58,108 +56,47 @@ class BuildPipeline:
         return self._run_pipeline(project_dir)
 
     def _run_pipeline(self, project_dir: Path) -> Path:
-        """Run incomplete pipeline stages in the correct order."""
+        """Run incomplete registered pipeline stages in order."""
 
         project_data = load_project(str(project_dir))
         total_start = time.perf_counter()
         state = self._load_state(project_dir)
 
-        steps: list[tuple[str, str, str, Callable[[], str]]] = [
-            (
-                "research",
-                "🔍",
-                "Research",
-                lambda: ResearchAgent().run(project_data["title"]),
-            ),
-            (
-                "script",
-                "🎬",
-                "Script",
-                lambda: ScriptAgent().run(
-                    self._read_required_file(
-                        project_dir / "research.md"
-                    )
-                ),
-            ),
-            (
-                "storyboard",
-                "🎞",
-                "Storyboard",
-                lambda: StoryboardAgent().run(
-                    self._read_required_file(
-                        project_dir / "script.md"
-                    )
-                ),
-            ),
-            (
-                "images",
-                "🖼",
-                "Image Prompts",
-                lambda: ImagePromptAgent().run(
-                    self._read_required_file(
-                        project_dir / "storyboard.json"
-                    )
-                ),
-            ),
-            (
-                "videos",
-                "🎥",
-                "Video Prompts",
-                lambda: VideoPromptAgent().run(
-                    self._read_required_file(
-                        project_dir / "storyboard.json"
-                    )
-                ),
-            ),
-            (
-                "narration",
-                "🎙",
-                "Narration",
-                lambda: NarrationAgent().run(
-                    self._read_required_file(
-                        project_dir / "storyboard.json"
-                    )
-                ),
-            ),
-        ]
-
-        output_files = {
-            "research": "research.md",
-            "script": "script.md",
-            "storyboard": "storyboard.json",
-            "images": "image_prompts.json",
-            "videos": "video_prompts.json",
-            "narration": "narration.txt",
-        }
-
+        steps = get_default_pipeline_steps()
         total_steps = len(steps)
 
-        for index, (step_key, icon, step_name, action) in enumerate(
-            steps,
-            start=1,
-        ):
-            output_path = project_dir / output_files[step_key]
+        for index, step in enumerate(steps, start=1):
+            definition = get_agent_definition(step.key)
+            output_path = project_dir / definition.output_file
 
             if self._is_step_complete(
                 state=state,
-                step_key=step_key,
+                step_key=step.key,
                 output_path=output_path,
             ):
                 console.print(
                     f"[dim][{index}/{total_steps}] "
-                    f"{icon} {step_name} already completed — skipped[/dim]\n"
+                    f"{definition.icon} {definition.name} "
+                    "already completed — skipped[/dim]\n"
                 )
                 continue
 
             console.print(
                 f"[bold][{index}/{total_steps}] "
-                f"{icon} Running {step_name} Agent...[/bold]"
+                f"{definition.icon} Running "
+                f"{definition.name} Agent...[/bold]"
             )
 
             step_start = time.perf_counter()
 
             try:
-                result = action()
+                agent_input = step.input_loader(
+                    project_dir,
+                    project_data,
+                )
+
+                agent = AgentRegistry.create(step.key)
+                result = agent.run(agent_input)
 
                 output_path.write_text(
                     result,
@@ -168,7 +105,7 @@ class BuildPipeline:
 
                 elapsed = time.perf_counter() - step_start
 
-                state["steps"][step_key] = {
+                state["steps"][step.key] = {
                     "status": "completed",
                     "duration_seconds": round(elapsed, 2),
                     "output": str(output_path),
@@ -181,16 +118,18 @@ class BuildPipeline:
                 self._save_state(project_dir, state)
 
                 console.print(
-                    f"[bold green]✅ {step_name} completed[/bold green]"
+                    f"[bold green]✅ {definition.name} "
+                    "completed[/bold green]"
                 )
                 console.print(
-                    f"[cyan]⏱ Step time: {elapsed:.2f} seconds[/cyan]\n"
+                    f"[cyan]⏱ Step time: "
+                    f"{elapsed:.2f} seconds[/cyan]\n"
                 )
 
             except Exception as error:
                 elapsed = time.perf_counter() - step_start
 
-                state["steps"][step_key] = {
+                state["steps"][step.key] = {
                     "status": "failed",
                     "duration_seconds": round(elapsed, 2),
                     "output": str(output_path),
@@ -198,12 +137,13 @@ class BuildPipeline:
                 }
 
                 state["status"] = "failed"
-                state["failed_step"] = step_key
+                state["failed_step"] = step.key
 
                 self._save_state(project_dir, state)
 
                 console.print(
-                    f"\n[bold red]❌ {step_name} Agent failed[/bold red]"
+                    f"\n[bold red]❌ {definition.name} "
+                    "Agent failed[/bold red]"
                 )
                 console.print(f"[red]Error: {error}[/red]")
 
@@ -216,7 +156,7 @@ class BuildPipeline:
                 )
 
                 raise RuntimeError(
-                    f"{step_name} Agent failed: {error}"
+                    f"{definition.name} Agent failed: {error}"
                 ) from error
 
         total_elapsed = time.perf_counter() - total_start
@@ -280,7 +220,7 @@ class BuildPipeline:
         step_key: str,
         output_path: Path,
     ) -> bool:
-        """Check both state data and output file validity."""
+        """Check state data and output file validity."""
 
         step_state = state.get("steps", {}).get(step_key, {})
 
@@ -289,20 +229,3 @@ class BuildPipeline:
             and output_path.exists()
             and output_path.stat().st_size > 0
         )
-
-    def _read_required_file(self, file_path: Path) -> str:
-        """Read a required input file and reject missing or empty files."""
-
-        if not file_path.exists():
-            raise FileNotFoundError(
-                f"Required file not found: {file_path}"
-            )
-
-        content = file_path.read_text(encoding="utf-8").strip()
-
-        if not content:
-            raise ValueError(
-                f"Required file is empty: {file_path}"
-            )
-
-        return content

@@ -1,13 +1,26 @@
 from openai import OpenAI
 
 from app.core.config import settings
+from app.providers.base import TextProvider
 
 
-class DeepSeekProvider:
-    def __init__(self):
+class DeepSeekProvider(TextProvider):
+    """DeepSeek text generation provider."""
+
+    provider_key = "deepseek"
+    provider_name = "DeepSeek"
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        if not settings.deepseek_api_key:
+            raise ValueError(
+                "DEEPSEEK_API_KEY is not configured."
+            )
+
         self.client = OpenAI(
             api_key=settings.deepseek_api_key,
-            base_url="https://api.deepseek.com"
+            base_url="https://api.deepseek.com",
         )
 
     def generate(self, prompt: str) -> str:
@@ -16,11 +29,18 @@ class DeepSeekProvider:
             messages=[
                 {
                     "role": "user",
-                    "content": prompt
+                    "content": prompt,
                 }
             ],
             temperature=0.7,
             max_tokens=4000,
         )
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError(
+                "DeepSeek returned an empty response."
+            )
+
+        return content.strip()

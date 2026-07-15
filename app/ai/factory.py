@@ -1,11 +1,23 @@
 from app.core.config import settings
-from app.ai.deepseek import DeepSeekProvider
+from app.providers.base import TextProvider
+from app.providers.defaults import register_default_providers
+from app.providers.registry import ProviderRegistry
 
 
-def get_ai():
-    provider = settings.ai_provider.lower()
+def get_ai() -> TextProvider:
+    """Return the configured text provider."""
 
-    if provider == "deepseek":
-        return DeepSeekProvider()
+    register_default_providers()
 
-    raise ValueError(f"Unsupported AI provider: {provider}")
+    provider = ProviderRegistry.create(
+        category="text",
+        key=settings.ai_provider,
+    )
+
+    if not isinstance(provider, TextProvider):
+        raise TypeError(
+            f"Configured provider is not a text provider: "
+            f"{settings.ai_provider}"
+        )
+
+    return provider
