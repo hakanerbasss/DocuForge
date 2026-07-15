@@ -4,10 +4,16 @@ from app.providers.registry import ProviderRegistry
 from app.providers.video.pexels import PexelsVideoProvider
 from app.providers.voice.espeak import EspeakVoiceProvider
 
-def register_default_providers() -> None:
-    """Register DocuForge's built-in providers."""
 
-    if not ProviderRegistry.all("text"):
+def register_default_providers() -> None:
+    """Register DocuForge built-in providers."""
+
+    registered = {
+        (provider.category, provider.key)
+        for provider in ProviderRegistry.all()
+    }
+
+    if ("text", "deepseek") not in registered:
         ProviderRegistry.register(
             category="text",
             key="deepseek",
@@ -15,7 +21,15 @@ def register_default_providers() -> None:
             factory=DeepSeekProvider,
         )
 
-    if not ProviderRegistry.all("video"):
+    if ("image", "pexels") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="pexels",
+            name="Pexels Images",
+            factory=PexelsImageProvider,
+        )
+
+    if ("video", "pexels") not in registered:
         ProviderRegistry.register(
             category="video",
             key="pexels",
@@ -23,17 +37,19 @@ def register_default_providers() -> None:
             factory=PexelsVideoProvider,
         )
 
-    if not ProviderRegistry.all("image"):
-        ProviderRegistry.register(
-            category="image",
-            key="pexels",
-            name="Pexels Images",
-            factory=PexelsImageProvider,
-        )
-    if not ProviderRegistry.all("voice"):
+    if ("voice", "espeak") not in registered:
         ProviderRegistry.register(
             category="voice",
             key="espeak",
             name="eSpeak NG",
+            factory=EspeakVoiceProvider,
+        )
+
+    # Generic local TTS alias.
+    if ("voice", "local_tts") not in registered:
+        ProviderRegistry.register(
+            category="voice",
+            key="local_tts",
+            name="Local TTS (eSpeak NG)",
             factory=EspeakVoiceProvider,
         )

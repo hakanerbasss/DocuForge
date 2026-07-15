@@ -139,27 +139,73 @@ def storyboard(project: str):
     console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
 
 @app.command()
-def build(topic: str):
-    """Generate a complete documentary project."""
+def build(
+    topic: str,
+    language: str = typer.Option(
+        "tr",
+        "--language",
+        "-l",
+        help="Content language code, for example: tr, en, de.",
+    ),
+    template: str = typer.Option(
+        "documentary",
+        "--template",
+        "-t",
+        help="Content template, for example: documentary, shorts, news.",
+    ),
+):
+    """Generate a complete content project."""
 
     import time
 
+    language = language.strip().lower()
+    template = template.strip().lower()
+
+    if not language:
+        console.print(
+            "[bold red]❌ Language cannot be empty.[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
+    if not template:
+        console.print(
+            "[bold red]❌ Template cannot be empty.[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
     start = time.perf_counter()
 
-    console.print("\n[bold green]🚀 DocuForge Build Pipeline[/bold green]\n")
-
-    console.print(f"[bold]📖 Topic:[/bold] {topic}\n")
+    console.print(
+        "\n[bold green]🚀 DocuForge Build Pipeline[/bold green]\n"
+    )
+    console.print(f"[bold]📖 Topic:[/bold] {topic}")
+    console.print(f"[bold]🌐 Language:[/bold] {language}")
+    console.print(f"[bold]🧩 Template:[/bold] {template}\n")
 
     pipeline = BuildPipeline()
 
-    project_dir = pipeline.run(topic)
+    try:
+        project_dir = pipeline.run(
+            topic=topic,
+            language=language,
+            template=template,
+        )
+    except Exception as error:
+        console.print(
+            "\n[bold red]❌ Build failed[/bold red]"
+        )
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
 
     elapsed = time.perf_counter() - start
 
-    console.print("\n[bold green]🎉 Build completed successfully![/bold green]")
+    console.print(
+        "\n[bold green]🎉 Build completed successfully![/bold green]"
+    )
     console.print(f"[bold]📁 Project:[/bold] {project_dir}")
-    console.print(f"[cyan]⏱ Total time: {elapsed:.2f} seconds[/cyan]")
-
+    console.print(
+        f"[cyan]⏱ Total time: {elapsed:.2f} seconds[/cyan]"
+    )
 @app.command()
 def resume(project: str):
     """Resume an interrupted documentary build."""

@@ -1,51 +1,96 @@
 import json
 from pathlib import Path
+from typing import Any
 
 from app.models.project import DocumentaryProject
 
 
 class ProjectService:
+    """Create and persist DocuForge projects."""
 
     ROOT = Path("projects")
 
-    def create(self, project: DocumentaryProject):
+    def create(
+        self,
+        project: DocumentaryProject,
+    ) -> Path:
+        """Create a project directory and project.json file."""
 
-        folder = project.title.lower()
+        folder = self._slugify(project.title)
+        project_dir = self.ROOT / folder
 
-        folder = (
-            folder
-            .replace(" ", "_")
-            .replace("ı", "i")
-            .replace("ğ", "g")
-            .replace("ü", "u")
-            .replace("ş", "s")
-            .replace("ö", "o")
-            .replace("ç", "c")
+        project_dir.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
-        project_dir = self.ROOT / folder
-        project_dir.mkdir(parents=True, exist_ok=True)
+        project_path = project_dir / "project.json"
 
-        data = {
-            "title": project.title,
-            "language": project.language,
-            "duration": project.duration,
-            "style": project.style,
-            "status": project.status,
-            "created_at": project.created_at,
-        }
-
-        with open(project_dir / "project.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        project_path.write_text(
+            json.dumps(
+                project.to_dict(),
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
         return project_dir
 
-import json
-from pathlib import Path
+    def _slugify(self, title: str) -> str:
+        """Convert a project title into a safe folder name."""
+
+        replacements = str.maketrans(
+            {
+                "ı": "i",
+                "ğ": "g",
+                "ü": "u",
+                "ş": "s",
+                "ö": "o",
+                "ç": "c",
+                "İ": "i",
+                "Ğ": "g",
+                "Ü": "u",
+                "Ş": "s",
+                "Ö": "o",
+                "Ç": "c",
+            }
+        )
+
+        slug = title.translate(replacements).lower()
+        slug = "_".join(slug.split())
+
+        if not slug:
+            raise ValueError(
+                "Project folder name cannot be empty."
+            )
+
+        return slug
 
 
-def load_project(project_path: str) -> dict:
+def load_project(project_path: str) -> dict[str, Any]:
+    """Read project.json from an existing project directory."""
+
     project_dir = Path(project_path)
+    project_file = project_dir / "project.json"
 
-    with open(project_dir / "project.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+    if not project_file.exists():
+        raise FileNotFoundError(
+            f"project.json not found: {project_file}"
+        )
+
+    try:
+        data = json.loads(
+            project_file.read_text(encoding="utf-8")
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"Invalid project.json: {project_file}: {error}"
+        ) from error
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"project.json root must be an object: {project_file}"
+        )
+
+    return data

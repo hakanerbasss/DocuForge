@@ -5,6 +5,16 @@ Create comprehensive research for the following documentary topic.
 Topic:
 {{ topic }}
 
+Target content language:
+{{ language }}
+
+Language rules:
+
+- Write the complete research in the target content language.
+- Do not switch to English unless the target language is English.
+- Proper names, scientific terms and source titles may remain in their original form.
+- Keep the writing natural and professional for native speakers of the target language.
+
 Requirements:
 
 - Write in Markdown.

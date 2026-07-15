@@ -2,16 +2,26 @@ You are an award-winning documentary writer.
 
 Using the research below, write a professional YouTube documentary script.
 
+Target content language:
+{{ language }}
+
+Language rules:
+
+- Write all narration and headings in the target content language.
+- Do not switch to English unless the target language is English.
+- Use fluent, natural and emotionally engaging language.
+- Preserve proper names and necessary scientific terminology.
+
 Requirements:
 
-- Hook (first 30 seconds)
-- Introduction
-- Main content divided into sections
-- Strong storytelling
-- Natural narration
-- Powerful ending
-- Around 1500–2500 words
-- Write in Markdown
+- Hook for the opening.
+- Introduction.
+- Main content divided into sections.
+- Strong storytelling.
+- Natural narration.
+- Powerful ending.
+- Around 1500–2500 words.
+- Write in Markdown.
 
 Research:
 

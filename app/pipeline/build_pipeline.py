@@ -246,7 +246,23 @@ class BuildPipeline:
             )
 
             agent = AgentRegistry.create(step.key)
-            result = agent.run(agent_input)
+            language = str(
+                project_data.get("language", "en")
+            ).strip().lower()
+
+            if step.key in {
+                "research",
+                "script",
+                "storyboard",
+            }:
+                result = agent.run(
+                    agent_input,
+                    language=language,
+                )
+            else:
+                result = agent.run(agent_input)
+
+
 
             if not isinstance(result, str) or not result.strip():
                 raise ValueError(

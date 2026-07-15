@@ -8,13 +8,18 @@ from app.utils.prompt_loader import load_prompt
 class StoryboardAgent(BaseAgent):
     """Generate and validate a documentary storyboard."""
 
-    def run(self, script: str) -> str:
+    def run(
+        self,
+        script: str,
+        language: str = "en",
+    ) -> str:
         last_error: Exception | None = None
 
         for attempt in range(1, self.MAX_ATTEMPTS + 1):
             prompt = load_prompt(
                 "storyboard",
                 script=script,
+                language=language,
             )
 
             if attempt > 1:
@@ -37,7 +42,11 @@ Do not include explanations before or after the JSON.
                     indent=2,
                 )
 
-            except (json.JSONDecodeError, ValueError, TypeError) as error:
+            except (
+                json.JSONDecodeError,
+                ValueError,
+                TypeError,
+            ) as error:
                 last_error = error
 
         raise ValueError(
@@ -46,29 +55,44 @@ Do not include explanations before or after the JSON.
             f"Last error: {last_error}"
         )
 
-    def _parse_and_validate(self, response: str) -> dict[str, Any]:
+    def _parse_and_validate(
+        self,
+        response: str,
+    ) -> dict[str, Any]:
         cleaned_response = self._remove_code_fences(response)
         data = json.loads(cleaned_response)
 
         if not isinstance(data, dict):
-            raise ValueError("Storyboard root must be a JSON object.")
+            raise ValueError(
+                "Storyboard root must be a JSON object."
+            )
 
         scenes = data.get("scenes")
 
         if not isinstance(scenes, list):
-            raise ValueError("Storyboard must contain a 'scenes' list.")
+            raise ValueError(
+                "Storyboard must contain a 'scenes' list."
+            )
 
         if not scenes:
-            raise ValueError("Storyboard must contain at least one scene.")
+            raise ValueError(
+                "Storyboard must contain at least one scene."
+            )
 
         for index, scene in enumerate(scenes, start=1):
             self._validate_scene(scene, index)
 
         return data
 
-    def _validate_scene(self, scene: Any, index: int) -> None:
+    def _validate_scene(
+        self,
+        scene: Any,
+        index: int,
+    ) -> None:
         if not isinstance(scene, dict):
-            raise ValueError(f"Scene {index} must be a JSON object.")
+            raise ValueError(
+                f"Scene {index} must be a JSON object."
+            )
 
         required_fields = {
             "scene",
@@ -82,6 +106,7 @@ Do not include explanations before or after the JSON.
 
         if missing_fields:
             missing = ", ".join(sorted(missing_fields))
+
             raise ValueError(
                 f"Scene {index} is missing fields: {missing}"
             )
@@ -96,9 +121,10 @@ Do not include explanations before or after the JSON.
                 f"Scene {index}: 'duration' must be an integer."
             )
 
-        if not 1 <= scene["duration"] <= 30:
+        if not 1 <= scene["duration"] <= 60:
             raise ValueError(
-                f"Scene {index}: duration must be between 1 and 30 seconds."
+                f"Scene {index}: duration must be "
+                "between 1 and 60 seconds."
             )
 
         for field in ("title", "narration", "visual"):
@@ -106,10 +132,14 @@ Do not include explanations before or after the JSON.
 
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
-                    f"Scene {index}: '{field}' must be a non-empty string."
+                    f"Scene {index}: '{field}' must be "
+                    "a non-empty string."
                 )
 
-    def _remove_code_fences(self, response: str) -> str:
+    def _remove_code_fences(
+        self,
+        response: str,
+    ) -> str:
         cleaned = response.strip()
 
         if cleaned.startswith("```json"):

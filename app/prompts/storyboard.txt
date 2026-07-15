@@ -2,6 +2,9 @@ You are a professional documentary director.
 
 Convert the documentary script below into a cinematic storyboard.
 
+Target content language:
+{{ language }}
+
 Return ONLY valid JSON.
 
 Structure:
@@ -10,22 +13,34 @@ Structure:
   "scenes": [
     {
       "scene": 1,
-      "title": "Scene title",
-      "duration": 8,
-      "narration": "Narration text",
-      "visual": "Highly detailed cinematic visual description"
+      "title": "Scene title in the target content language",
+      "duration": 20,
+      "narration": "Narration text in the target content language",
+      "visual": "Detailed cinematic visual search description in English"
     }
   ]
 }
+
+Language rules:
+
+- Write "title" and "narration" in the target content language.
+- Always write "visual" in English.
+- The English visual field will be used for stock media search and AI media generation.
+- Do not translate proper names unnecessarily.
 
 Rules:
 
 - Return valid JSON only.
 - Do NOT use Markdown.
 - Create between 15 and 25 scenes.
-- Each scene should last between 5 and 12 seconds.
+- Narration must follow the documentary script.
+- Do not shorten or rewrite the narration into unrelated summaries.
+- Estimate each duration from the narration length.
+- Use a realistic speaking rate of approximately 2 to 2.5 words per second.
+- Duration must be an integer between 5 and 60 seconds.
+- Visual descriptions must be concise, concrete and searchable.
+- Avoid camera instructions that make stock-media searches overly specific.
 - Visual descriptions must be detailed enough for AI image and video generators.
-- Narration should follow the documentary script.
 
 Script:
 
