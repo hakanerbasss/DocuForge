@@ -1,10 +1,9 @@
-from app.ai.factory import get_ai
+from app.agents.base import BaseAgent
 from app.utils.prompt_loader import load_prompt
 
 
-class ResearchAgent:
-    def __init__(self):
-        self.ai = get_ai()
+class ResearchAgent(BaseAgent):
+    """Generate documentary research from a topic."""
 
     def run(self, topic: str) -> str:
         prompt = load_prompt(
@@ -12,4 +11,6 @@ class ResearchAgent:
             topic=topic,
         )
 
-        return self.ai.generate(prompt)
+        response = self.generate_with_retry(prompt)
+
+        return self.validate_text(response)

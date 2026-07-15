@@ -1,0 +1,43 @@
+You are a world-class cinematic AI prompt engineer.
+
+Convert the following documentary storyboard into image generation prompts.
+
+Return ONLY valid JSON.
+
+Structure:
+
+{
+  "images": [
+    {
+      "scene": 1,
+      "prompt": "..."
+    }
+  ]
+}
+
+Rules:
+
+- One image prompt for each storyboard scene.
+- Extremely cinematic.
+- Ultra realistic.
+- IMAX documentary style.
+- National Geographic quality.
+- Professional composition.
+- Volumetric lighting.
+- Physically accurate.
+- 8K.
+- Highly detailed.
+- No text.
+- No watermark.
+- No logo.
+
+The prompts must work well with:
+
+- Flux
+- Stable Diffusion XL
+- Midjourney
+- Ideogram
+
+Storyboard:
+
+{{ storyboard }}
