@@ -1,5 +1,6 @@
 import time
 import typer
+from app.pipeline.build_pipeline import BuildPipeline
 from pathlib import Path
 from app.agents.storyboard import StoryboardAgent
 from rich.console import Console
@@ -129,6 +130,51 @@ def storyboard(project: str):
 
     console.print("\n[bold green]✅ storyboard.json created[/bold green]")
     console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
+
+@app.command()
+def build(topic: str):
+    """Generate a complete documentary project."""
+
+    import time
+
+    start = time.perf_counter()
+
+    console.print("\n[bold green]🚀 DocuForge Build Pipeline[/bold green]\n")
+
+    console.print(f"[bold]📖 Topic:[/bold] {topic}\n")
+
+    pipeline = BuildPipeline()
+
+    project_dir = pipeline.run(topic)
+
+    elapsed = time.perf_counter() - start
+
+    console.print("\n[bold green]🎉 Build completed successfully![/bold green]")
+    console.print(f"[bold]📁 Project:[/bold] {project_dir}")
+    console.print(f"[cyan]⏱ Total time: {elapsed:.2f} seconds[/cyan]")
+
+@app.command()
+def resume(project: str):
+    """Resume an interrupted documentary build."""
+
+    import time
+
+    start = time.perf_counter()
+
+    console.print("\n[bold yellow]▶ DocuForge Resume Pipeline[/bold yellow]\n")
+    console.print(f"[bold]📁 Project:[/bold] {project}\n")
+
+    pipeline = BuildPipeline()
+    project_dir = pipeline.resume(project)
+
+    elapsed = time.perf_counter() - start
+
+    console.print(
+        "\n[bold green]🎉 Pipeline resumed and completed successfully!"
+        "[/bold green]"
+    )
+    console.print(f"[bold]📁 Project:[/bold] {project_dir}")
+    console.print(f"[cyan]⏱ Total time: {elapsed:.2f} seconds[/cyan]")
 
 def main():
     app()
