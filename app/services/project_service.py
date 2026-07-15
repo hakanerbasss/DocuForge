@@ -15,7 +15,8 @@ class ProjectService:
         self,
         project: DocumentaryProject,
     ) -> Path:
-        project_dir = self.ROOT / self._slugify(project.title)
+        slug = self.resolve_unique_slug(project.title)
+        project_dir = self.ROOT / slug
 
         project_dir.mkdir(
             parents=True,
@@ -28,6 +29,22 @@ class ProjectService:
         )
 
         return project_dir
+
+    def resolve_unique_slug(
+        self,
+        title: str,
+    ) -> str:
+        """Return a project.json-free slug, appending _2, _3, ... on collision."""
+
+        base_slug = self._slugify(title)
+        candidate = base_slug
+        suffix = 2
+
+        while (self.ROOT / candidate / "project.json").exists():
+            candidate = f"{base_slug}_{suffix}"
+            suffix += 1
+
+        return candidate
 
     def save(
         self,

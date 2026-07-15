@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.pipeline.build_pipeline import BuildPipeline
+from app.services.project_service import ProjectService
 
 
 router = APIRouter()
@@ -35,19 +36,6 @@ class BuildRequest(BaseModel):
     subtitles_enabled: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
 
-
-def slugify(title: str) -> str:
-    replacements = str.maketrans({
-        "\u0131": "i", "\u011f": "g", "\u00fc": "u",
-        "\u015f": "s", "\u00f6": "o", "\u00e7": "c",
-        "\u0130": "i", "\u011e": "g", "\u00dc": "u",
-        "\u015e": "s", "\u00d6": "o", "\u00c7": "c",
-    })
-    slug = title.translate(replacements).lower()
-    slug = "_".join(slug.split())
-    if not slug:
-        raise ValueError("Geçerli bir proje konusu girilmelidir.")
-    return slug
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -185,6 +173,13 @@ button:disabled{opacity:.6;cursor:wait}
 </div>
 </div>
 
+<label for="fps">Kare H\u0131z\u0131 (FPS)</label>
+<select id="fps">
+<option value="24">24</option>
+<option value="30" selected>30</option>
+<option value="60">60</option>
+</select>
+
 <h3>\ud83c\udf99 Ses</h3>
 <div class="row">
 <div>
@@ -283,7 +278,7 @@ async function startBuild(){
     voice_name:document.getElementById("voice_name").value,
     voice_speed:parseFloat(document.getElementById("voice_speed").value),
     resolution:document.getElementById("resolution").value,
-    fps:30,
+    fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:false,
     subtitles_enabled:false,
     thumbnail_enabled:false,
@@ -344,7 +339,7 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
     if not topic:
         raise HTTPException(status_code=400, detail="Proje konusu boş olamaz.")
 
-    project_slug = slugify(topic)
+    project_slug = ProjectService().resolve_unique_slug(topic)
     project_dir = PROJECTS_ROOT / project_slug
     job_id = uuid.uuid4().hex
 

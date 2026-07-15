@@ -96,6 +96,7 @@ class VoiceService:
                 audio_path,
                 language=language,
                 voice=language,
+                voice_name=voice_name,
                 speed=speed,
             )
 
@@ -108,6 +109,7 @@ class VoiceService:
                 3,
             )
             scene["voice_provider"] = selected_provider
+            scene["voice_name"] = voice_name
             scene["status"] = "audio_ready"
 
             print(
@@ -121,6 +123,7 @@ class VoiceService:
             )
 
         manifest["voice_provider"] = selected_provider
+        manifest["voice_name"] = voice_name
         manifest["language"] = language
         manifest["completed_count"] = sum(
             scene.get("status") == "audio_ready"
