@@ -256,6 +256,7 @@ class RenderService:
             ),
             "-r",
             str(self.FPS),
+            "-map", "0:v:0",
             "-c:v",
             "libx264",
             "-preset",
@@ -268,6 +269,7 @@ class RenderService:
 
         if audio_path is not None:
             command.extend([
+                "-map", "1:a:0",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -285,6 +287,8 @@ class RenderService:
                 "lavfi",
                 "-i",
                 "anullsrc=r=48000:cl=stereo",
+                "-map", "0:v:0",
+                "-map", "2:a:0",
                 "-c:a",
                 "aac",
                 "-b:a",
