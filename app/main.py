@@ -1,5 +1,6 @@
 import time
 import typer
+from app.services.media_builder import MediaBuilder
 from app.agents.narration import NarrationAgent
 from app.agents.video_prompt import VideoPromptAgent
 from app.agents.image_prompt import ImagePromptAgent
@@ -11,6 +12,7 @@ from app.agents.script import ScriptAgent
 from app.core.config import settings
 from app.agents.research import ResearchAgent
 from app.services.project_service import load_project
+from app.services.render_service import RenderService
 
 app = typer.Typer(
     help="AI-powered documentary production platform."
@@ -350,6 +352,56 @@ def narration_command(project: str):
     console.print(
         f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
     )
+
+@app.command("render")
+def render_command(project: str):
+    """Render project media into a final MP4 video."""
+
+    import time
+
+    console.print("\n[bold cyan]🎬 FFmpeg Render Engine[/bold cyan]\n")
+    console.print(f"[bold]📁 Project:[/bold] {project}\n")
+    console.print("[yellow]⏳ Rendering video...[/yellow]")
+
+    start = time.perf_counter()
+
+    try:
+        output_path = RenderService().render(project)
+    except Exception as error:
+        console.print("\n[bold red]❌ Render failed[/bold red]")
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+
+    elapsed = time.perf_counter() - start
+
+    console.print("\n[bold green]✅ final_video.mp4 created[/bold green]")
+    console.print(f"[bold]📄 Output:[/bold] {output_path}")
+    console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
+
+@app.command("media")
+def media_command(project: str):
+    """Download media for every storyboard scene."""
+
+    import time
+
+    console.print("\n[bold cyan]📦 Media Builder[/bold cyan]\n")
+    console.print(f"[bold]📁 Project:[/bold] {project}\n")
+    console.print("[yellow]⏳ Downloading scene media...[/yellow]\n")
+
+    start = time.perf_counter()
+
+    try:
+        manifest_path = MediaBuilder().build(project)
+    except Exception as error:
+        console.print("\n[bold red]❌ Media Builder failed[/bold red]")
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+
+    elapsed = time.perf_counter() - start
+
+    console.print("\n[bold green]✅ Scene media prepared[/bold green]")
+    console.print(f"[bold]📄 Manifest:[/bold] {manifest_path}")
+    console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
 
 def main():
     app()
