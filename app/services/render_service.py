@@ -13,8 +13,35 @@ class RenderService:
     HEIGHT = 720
     FPS = 30
 
+    RESOLUTION_MAP = {
+        "720p":     (1280, 720),
+        "1080p":    (1920, 1080),
+        "vertical": (1080, 1920),
+        "4k":       (3840, 2160),
+    }
+
     def render(self, project_path: str) -> Path:
         project_dir = Path(project_path)
+
+        # Read resolution and fps from project.json
+        project_json = project_dir / "project.json"
+        project_data: dict[str, Any] = {}
+        if project_json.exists():
+            try:
+                project_data = json.loads(
+                    project_json.read_text(encoding="utf-8")
+                )
+            except Exception:
+                pass
+
+        resolution_key = str(project_data.get("resolution", "720p")).lower()
+        w, h = self.RESOLUTION_MAP.get(resolution_key, (1280, 720))
+        self.WIDTH = w
+        self.HEIGHT = h
+        self.FPS = int(project_data.get("fps", self.FPS))
+
+        print(f"  Render: {self.WIDTH}x{self.HEIGHT} @ {self.FPS}fps")
+
         media_dir = project_dir / "media"
         audio_dir = project_dir / "audio"
         render_dir = project_dir / "render"

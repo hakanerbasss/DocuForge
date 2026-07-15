@@ -26,14 +26,31 @@ class MediaBuilder:
 
         register_default_providers()
 
+        # Read project settings
+        project_json = project_dir / "project.json"
+        project_data: dict[str, Any] = {}
+        if project_json.exists():
+            import json as _json
+            try:
+                project_data = _json.loads(
+                    project_json.read_text(encoding="utf-8")
+                )
+            except Exception:
+                pass
+
+        media_mode = str(project_data.get("media_mode", "mixed")).lower()
+        image_provider_key = str(project_data.get("image_provider", "pexels"))
+        video_provider_key = str(project_data.get("video_provider", "pexels"))
+
         video_provider = ProviderRegistry.create(
             category="video",
-            key="pexels",
-        )
+            key=video_provider_key,
+        ) if media_mode != "image" else None
+
         image_provider = ProviderRegistry.create(
             category="image",
-            key="pexels",
-        )
+            key=image_provider_key,
+        ) if media_mode != "video" else None
 
         manifest_items: list[dict[str, Any]] = []
 
@@ -49,21 +66,38 @@ class MediaBuilder:
 
             print(
                 f"[{index}/{len(storyboard['scenes'])}] "
-                f"Scene {scene_number}: {query}"
+                f"Scene {scene_number}: {query} [{media_mode}]"
             )
 
-            result = self._acquire_video(
-                provider=video_provider,
-                query=query,
-                scene_dir=scene_dir,
-            )
+            result = None
 
-            if result is None:
+            if media_mode == "image":
+                # Only images
                 result = self._acquire_image(
                     provider=image_provider,
                     query=query,
                     scene_dir=scene_dir,
                 )
+            elif media_mode == "video":
+                # Only videos, no image fallback
+                result = self._acquire_video(
+                    provider=video_provider,
+                    query=query,
+                    scene_dir=scene_dir,
+                )
+            else:
+                # mixed: try video first, fall back to image
+                result = self._acquire_video(
+                    provider=video_provider,
+                    query=query,
+                    scene_dir=scene_dir,
+                )
+                if result is None:
+                    result = self._acquire_image(
+                        provider=image_provider,
+                        query=query,
+                        scene_dir=scene_dir,
+                    )
 
             if result is None:
                 manifest_item = {
