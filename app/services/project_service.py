@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -6,7 +7,7 @@ from app.models.project import DocumentaryProject
 
 
 class ProjectService:
-    """Create and persist DocuForge projects."""
+    """Create, load and persist DocuForge projects."""
 
     ROOT = Path("projects")
 
@@ -14,51 +15,76 @@ class ProjectService:
         self,
         project: DocumentaryProject,
     ) -> Path:
-        """Create a project directory and project.json file."""
-
-        folder = self._slugify(project.title)
-        project_dir = self.ROOT / folder
+        project_dir = self.ROOT / self._slugify(project.title)
 
         project_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        project_path = project_dir / "project.json"
-
-        project_path.write_text(
-            json.dumps(
-                project.to_dict(),
-                indent=4,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        self.save(
+            project_dir,
+            project,
         )
 
         return project_dir
 
-    def _slugify(self, title: str) -> str:
-        """Convert a project title into a safe folder name."""
+    def save(
+        self,
+        project_dir: Path,
+        project: DocumentaryProject,
+    ) -> Path:
+        project_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-        replacements = str.maketrans(
+        project_file = project_dir / "project.json"
+
+        project_file.write_text(
+            json.dumps(
+                project.to_dict(),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        return project_file
+
+    def load(
+        self,
+        project_path: str | Path,
+    ) -> DocumentaryProject:
+        project_dir = Path(project_path)
+        data = load_project(project_dir)
+
+        return DocumentaryProject.from_dict(data)
+
+    def _slugify(
+        self,
+        title: str,
+    ) -> str:
+        translations = str.maketrans(
             {
                 "ı": "i",
-                "ğ": "g",
-                "ü": "u",
-                "ş": "s",
-                "ö": "o",
-                "ç": "c",
                 "İ": "i",
+                "ğ": "g",
                 "Ğ": "g",
+                "ü": "u",
                 "Ü": "u",
+                "ş": "s",
                 "Ş": "s",
+                "ö": "o",
                 "Ö": "o",
+                "ç": "c",
                 "Ç": "c",
             }
         )
 
-        slug = title.translate(replacements).lower()
-        slug = "_".join(slug.split())
+        slug = title.translate(translations).lower()
+        slug = re.sub(r"[^a-z0-9]+", "_", slug)
+        slug = slug.strip("_")
 
         if not slug:
             raise ValueError(
@@ -68,9 +94,9 @@ class ProjectService:
         return slug
 
 
-def load_project(project_path: str) -> dict[str, Any]:
-    """Read project.json from an existing project directory."""
-
+def load_project(
+    project_path: str | Path,
+) -> dict[str, Any]:
     project_dir = Path(project_path)
     project_file = project_dir / "project.json"
 
@@ -81,7 +107,9 @@ def load_project(project_path: str) -> dict[str, Any]:
 
     try:
         data = json.loads(
-            project_file.read_text(encoding="utf-8")
+            project_file.read_text(
+                encoding="utf-8",
+            )
         )
     except json.JSONDecodeError as error:
         raise ValueError(

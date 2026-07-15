@@ -31,16 +31,52 @@ class BuildPipeline:
         self,
         topic: str,
         language: str = "tr",
-        template: str = "documentary",
+        content_type: str = "documentary",
+        target_duration_seconds: int = 600,
+        media_mode: str = "mixed",
+        text_provider: str = "deepseek",
+        image_provider: str = "pexels",
+        video_provider: str = "pexels",
+        voice_provider: str = "supertonic",
+        voice_name: str = "M1",
+        voice_speed: float = 1.0,
+        resolution: str = "720p",
+        fps: int = 30,
+        background_music_enabled: bool = False,
+        subtitles_enabled: bool = False,
+        thumbnail_enabled: bool = False,
+        template: str | None = None,
     ) -> Path:
-        """Create a new project and run all pipeline stages."""
+        """Create a configured project and run all pipeline stages."""
 
         console.print("[bold]📂 Creating project...[/bold]")
+
+        resolved_content_type = content_type.strip().lower()
+
+        # Backward compatibility for older callers using template=...
+        if (
+            template
+            and resolved_content_type == "documentary"
+        ):
+            resolved_content_type = template.strip().lower()
 
         project = DocumentaryProject(
             title=topic,
             language=language,
-            template=template,
+            content_type=resolved_content_type,
+            target_duration_seconds=target_duration_seconds,
+            media_mode=media_mode,
+            text_provider=text_provider,
+            image_provider=image_provider,
+            video_provider=video_provider,
+            voice_provider=voice_provider,
+            voice_name=voice_name,
+            voice_speed=voice_speed,
+            resolution=resolution,
+            fps=fps,
+            background_music_enabled=background_music_enabled,
+            subtitles_enabled=subtitles_enabled,
+            thumbnail_enabled=thumbnail_enabled,
         )
 
         project_service = ProjectService()
@@ -112,7 +148,25 @@ class BuildPipeline:
                 "name": "Voice Generation",
                 "output": project_dir / "audio" / "manifest.json",
                 "action": lambda: VoiceService().generate(
-                    str(project_dir)
+                    str(project_dir),
+                    provider_key=str(
+                        project_data.get(
+                            "voice_provider",
+                            "supertonic",
+                        )
+                    ),
+                    voice_name=str(
+                        project_data.get(
+                            "voice_name",
+                            "M1",
+                        )
+                    ),
+                    speed=float(
+                        project_data.get(
+                            "voice_speed",
+                            1.0,
+                        )
+                    ),
                 ),
                 "validator": lambda: self._voice_is_complete(
                     project_dir
