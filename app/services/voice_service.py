@@ -12,12 +12,14 @@ from app.providers.base import VoiceProvider
 class VoiceService:
     """Generate scene-based narration audio using a configured provider."""
 
+
     def generate(
         self,
         project_path: str,
         *,
         provider_key: str | None = None,
-        speed: int = 145,
+        voice_name: str | None = None,
+        speed: float = 1.0,
     ) -> Path:
         project_dir = Path(project_path)
         audio_dir = project_dir / "audio"

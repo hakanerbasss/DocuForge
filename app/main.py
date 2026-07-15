@@ -288,64 +288,6 @@ def images_command(project: str):
         f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
     )
 
-@app.command("videos")
-def videos_command(project: str):
-    """Generate video prompts from storyboard."""
-
-    import time
-    from pathlib import Path
-
-    console.print("\n[bold cyan]🎥 Video Prompt Agent[/bold cyan]\n")
-
-    project_data = load_project(project)
-
-    console.print(f"[bold]📂 Project :[/bold] {project_data['title']}")
-    console.print("[bold]🤖 Model   :[/bold] DeepSeek Chat")
-    console.print("[bold]📝 Step    :[/bold] Video Prompts\n")
-
-    storyboard_file = Path(project) / "storyboard.json"
-
-    if not storyboard_file.exists():
-        console.print("[bold red]❌ storyboard.json not found[/bold red]")
-        raise typer.Exit(code=1)
-
-    storyboard_content = storyboard_file.read_text(
-        encoding="utf-8"
-    ).strip()
-
-    if not storyboard_content:
-        console.print("[bold red]❌ storyboard.json is empty[/bold red]")
-        raise typer.Exit(code=1)
-
-    start = time.perf_counter()
-
-    console.print(
-        "[yellow]⏳ Generating video prompts...[/yellow]"
-    )
-
-    try:
-        result = VideoPromptAgent().run(storyboard_content)
-    except Exception as error:
-        console.print(
-            "\n[bold red]❌ Video Prompt Agent failed[/bold red]"
-        )
-        console.print(f"[red]Error: {error}[/red]")
-        raise typer.Exit(code=1)
-
-    output_file = Path(project) / "video_prompts.json"
-    output_file.write_text(
-        result,
-        encoding="utf-8",
-    )
-
-    elapsed = time.perf_counter() - start
-
-    console.print(
-        "\n[bold green]✅ video_prompts.json created[/bold green]"
-    )
-    console.print(
-        f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
-    )
 
 @app.command("narration")
 def narration_command(project: str):
@@ -485,8 +427,24 @@ def narration_scenes_command(project: str):
 @app.command("voice")
 def voice_command(
     project: str,
-    provider: str = "espeak",
-    speed: int = 145,
+    provider: str = typer.Option(
+        "espeak",
+        "--provider",
+        "-p",
+        help="Voice provider: espeak, piper, supertonic, xtts.",
+    ),
+    voice: str = typer.Option(
+        "M1",
+        "--voice",
+        "-v",
+        help="Voice name, for example: M1, M2, M3, F1, F2, F3.",
+    ),
+    speed: float = typer.Option(
+        1.0,
+        "--speed",
+        "-s",
+        help="Voice speed multiplier.",
+    ),
 ):
     """Generate scene narration audio files."""
 
@@ -495,6 +453,7 @@ def voice_command(
     console.print("\n[bold cyan]🎙 Voice Generator[/bold cyan]\n")
     console.print(f"[bold]📁 Project:[/bold] {project}")
     console.print(f"[bold]🔊 Provider:[/bold] {provider}")
+    console.print(f"[bold]🗣 Voice:[/bold] {voice}")
     console.print(f"[bold]⚡ Speed:[/bold] {speed}\n")
     console.print("[yellow]⏳ Generating scene audio...[/yellow]\n")
 
@@ -504,6 +463,7 @@ def voice_command(
         manifest_path = VoiceService().generate(
             project,
             provider_key=provider,
+            voice_name=voice,
             speed=speed,
         )
     except Exception as error:
