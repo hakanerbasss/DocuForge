@@ -1,5 +1,6 @@
 import time
 import typer
+from app.services.voice_service import VoiceService
 from app.services.narration_builder import NarrationBuilder
 from app.services.media_builder import MediaBuilder
 from app.agents.narration import NarrationAgent
@@ -434,6 +435,41 @@ def narration_scenes_command(project: str):
     console.print(
         f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
     )
+
+@app.command("voice")
+def voice_command(
+    project: str,
+    provider: str = "espeak",
+    speed: int = 145,
+):
+    """Generate scene narration audio files."""
+
+    import time
+
+    console.print("\n[bold cyan]🎙 Voice Generator[/bold cyan]\n")
+    console.print(f"[bold]📁 Project:[/bold] {project}")
+    console.print(f"[bold]🔊 Provider:[/bold] {provider}")
+    console.print(f"[bold]⚡ Speed:[/bold] {speed}\n")
+    console.print("[yellow]⏳ Generating scene audio...[/yellow]\n")
+
+    start = time.perf_counter()
+
+    try:
+        manifest_path = VoiceService().generate(
+            project,
+            provider_key=provider,
+            speed=speed,
+        )
+    except Exception as error:
+        console.print("\n[bold red]❌ Voice generation failed[/bold red]")
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+
+    elapsed = time.perf_counter() - start
+
+    console.print("\n[bold green]✅ Scene audio generated[/bold green]")
+    console.print(f"[bold]📄 Manifest:[/bold] {manifest_path}")
+    console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
 
 def main():
     app()

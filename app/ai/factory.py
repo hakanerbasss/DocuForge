@@ -11,13 +11,13 @@ def get_ai() -> TextProvider:
 
     provider = ProviderRegistry.create(
         category="text",
-        key=settings.ai_provider,
+        key=settings.text_provider,
     )
 
     if not isinstance(provider, TextProvider):
         raise TypeError(
-            f"Configured provider is not a text provider: "
-            f"{settings.ai_provider}"
+            "Configured provider is not a text provider: "
+            f"{settings.text_provider}"
         )
 
     return provider
