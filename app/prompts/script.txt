@@ -1,9 +1,15 @@
 You are an award-winning documentary writer.
 
-Using the research below, write a professional YouTube documentary script.
+Using the research below, write a professional YouTube {{ content_type }} script.
 
 Target content language:
 {{ language }}
+
+Content type:
+{{ content_type }}
+
+Target video duration:
+{{ target_duration_seconds }} seconds (approximately {{ target_duration_minutes }} minutes)
 
 Language rules:
 
@@ -12,16 +18,27 @@ Language rules:
 - Use fluent, natural and emotionally engaging language.
 - Preserve proper names and necessary scientific terminology.
 
+Content type style:
+
+- documentary: strong hook, narrative arc, historical/scientific context, section transitions, cinematic language.
+- news: most important fact first, 5W1H, verified neutral language, no unnecessary dramatization, short intro, fast tempo.
+- shorts: hook in first 1-2 seconds, short punchy sentences, high tempo, single main idea, strong closing call-to-action.
+- informational: problem -> explanation -> examples -> summary, educational and clear tone.
+
+Script length guidelines based on target duration:
+
+- Up to 60 seconds: 100-150 words total. Very concise.
+- 1-3 minutes: 200-450 words.
+- 3-10 minutes: 500-1500 words.
+- 10-20 minutes: 1500-3000 words.
+
 Requirements:
 
-- Hook for the opening.
-- Introduction.
-- Main content divided into sections.
-- Strong storytelling.
-- Natural narration.
-- Powerful ending.
-- Around 1500–2500 words.
 - Write in Markdown.
+- Scale the total word count to match the target duration above.
+- For shorts: omit section headers, write as a single flowing narration block.
+- For documentary/informational: use clear section headings.
+- For news: use a short headline, then flowing narration without sub-headers.
 
 Research:
 

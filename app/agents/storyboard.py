@@ -12,6 +12,8 @@ class StoryboardAgent(BaseAgent):
         self,
         script: str,
         language: str = "en",
+        content_type: str = "documentary",
+        target_duration_seconds: int = 600,
     ) -> str:
         last_error: Exception | None = None
 
@@ -20,6 +22,9 @@ class StoryboardAgent(BaseAgent):
                 "storyboard",
                 script=script,
                 language=language,
+                content_type=content_type,
+                target_duration_seconds=target_duration_seconds,
+                target_duration_minutes=round(target_duration_seconds / 60, 1),
             )
 
             if attempt > 1:

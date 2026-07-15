@@ -304,6 +304,13 @@ class BuildPipeline:
                 project_data.get("language", "en")
             ).strip().lower()
 
+            content_type = str(
+                project_data.get("content_type", "documentary")
+            )
+            target_duration_seconds = int(
+                project_data.get("target_duration_seconds", 600)
+            )
+
             if step.key in {
                 "research",
                 "script",
@@ -312,6 +319,8 @@ class BuildPipeline:
                 result = agent.run(
                     agent_input,
                     language=language,
+                    content_type=content_type,
+                    target_duration_seconds=target_duration_seconds,
                 )
             else:
                 result = agent.run(agent_input)
