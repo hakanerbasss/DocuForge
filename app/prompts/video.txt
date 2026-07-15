@@ -1,0 +1,46 @@
+You are an award-winning AI cinematographer.
+
+Convert the documentary storyboard into professional AI video generation prompts.
+
+Return ONLY valid JSON.
+
+Structure:
+
+{
+  "videos": [
+    {
+      "scene": 1,
+      "duration": 8,
+      "camera_motion": "Slow cinematic dolly in",
+      "prompt": "Ultra realistic black hole, cinematic lighting, volumetric fog, IMAX, NASA documentary, 8K"
+    }
+  ]
+}
+
+Rules:
+
+- Return valid JSON only.
+- One video prompt for every storyboard scene.
+- Keep the same duration as the storyboard scene.
+- Every prompt must be cinematic.
+- Include camera movement.
+- Mention lighting.
+- Mention composition.
+- Mention atmosphere.
+- Mention realism.
+- Mention documentary style.
+- No text.
+- No logo.
+- No watermark.
+
+The prompts must work well with:
+
+- Google Veo 3
+- Kling AI
+- Luma Dream Machine
+- Runway Gen-4
+- Pika
+
+Storyboard:
+
+{{ storyboard }}

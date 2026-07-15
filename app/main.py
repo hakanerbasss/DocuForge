@@ -1,5 +1,6 @@
 import time
 import typer
+from app.agents.video_prompt import VideoPromptAgent
 from app.agents.image_prompt import ImagePromptAgent
 from app.pipeline.build_pipeline import BuildPipeline
 from pathlib import Path
@@ -231,6 +232,65 @@ def images_command(project: str):
 
     console.print(
         "\n[bold green]✅ image_prompts.json created[/bold green]"
+    )
+    console.print(
+        f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
+    )
+
+@app.command("videos")
+def videos_command(project: str):
+    """Generate video prompts from storyboard."""
+
+    import time
+    from pathlib import Path
+
+    console.print("\n[bold cyan]🎥 Video Prompt Agent[/bold cyan]\n")
+
+    project_data = load_project(project)
+
+    console.print(f"[bold]📂 Project :[/bold] {project_data['title']}")
+    console.print("[bold]🤖 Model   :[/bold] DeepSeek Chat")
+    console.print("[bold]📝 Step    :[/bold] Video Prompts\n")
+
+    storyboard_file = Path(project) / "storyboard.json"
+
+    if not storyboard_file.exists():
+        console.print("[bold red]❌ storyboard.json not found[/bold red]")
+        raise typer.Exit(code=1)
+
+    storyboard_content = storyboard_file.read_text(
+        encoding="utf-8"
+    ).strip()
+
+    if not storyboard_content:
+        console.print("[bold red]❌ storyboard.json is empty[/bold red]")
+        raise typer.Exit(code=1)
+
+    start = time.perf_counter()
+
+    console.print(
+        "[yellow]⏳ Generating video prompts...[/yellow]"
+    )
+
+    try:
+        result = VideoPromptAgent().run(storyboard_content)
+    except Exception as error:
+        console.print(
+            "\n[bold red]❌ Video Prompt Agent failed[/bold red]"
+        )
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+
+    output_file = Path(project) / "video_prompts.json"
+    output_file.write_text(
+        result,
+        encoding="utf-8",
+    )
+
+    elapsed = time.perf_counter() - start
+
+    console.print(
+        "\n[bold green]✅ video_prompts.json created[/bold green]"
     )
     console.print(
         f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"

@@ -5,9 +5,11 @@ from typing import Callable
 
 from rich.console import Console
 
+from app.agents.image_prompt import ImagePromptAgent
 from app.agents.research import ResearchAgent
 from app.agents.script import ScriptAgent
 from app.agents.storyboard import StoryboardAgent
+from app.agents.video_prompt import VideoPromptAgent
 from app.models.project import DocumentaryProject
 from app.services.project_service import ProjectService, load_project
 
@@ -59,7 +61,6 @@ class BuildPipeline:
 
         project_data = load_project(str(project_dir))
         total_start = time.perf_counter()
-
         state = self._load_state(project_dir)
 
         steps: list[tuple[str, str, str, Callable[[], str]]] = [
@@ -89,12 +90,34 @@ class BuildPipeline:
                     )
                 ),
             ),
+            (
+                "images",
+                "🖼",
+                "Image Prompts",
+                lambda: ImagePromptAgent().run(
+                    self._read_required_file(
+                        project_dir / "storyboard.json"
+                    )
+                ),
+            ),
+            (
+                "videos",
+                "🎥",
+                "Video Prompts",
+                lambda: VideoPromptAgent().run(
+                    self._read_required_file(
+                        project_dir / "storyboard.json"
+                    )
+                ),
+            ),
         ]
 
         output_files = {
             "research": "research.md",
             "script": "script.md",
             "storyboard": "storyboard.json",
+            "images": "image_prompts.json",
+            "videos": "video_prompts.json",
         }
 
         total_steps = len(steps)
@@ -167,9 +190,8 @@ class BuildPipeline:
                 console.print(
                     f"\n[bold red]❌ {step_name} Agent failed[/bold red]"
                 )
-                console.print(
-                    f"[red]Error: {error}[/red]"
-                )
+                console.print(f"[red]Error: {error}[/red]")
+
                 console.print(
                     "\n[yellow]Run the resume command after fixing "
                     "the problem:[/yellow]"

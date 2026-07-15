@@ -1,0 +1,111 @@
+import json
+from typing import Any
+
+from app.agents.base import BaseAgent
+from app.utils.prompt_loader import load_prompt
+
+
+class VideoPromptAgent(BaseAgent):
+    """Generate and validate video prompts from a storyboard."""
+
+    def run(self, storyboard: str) -> str:
+        prompt = load_prompt(
+            "video",
+            storyboard=storyboard,
+        )
+
+        response = self.generate_with_retry(prompt)
+        data = self._parse_and_validate(response)
+
+        return json.dumps(
+            data,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def _parse_and_validate(self, response: str) -> dict[str, Any]:
+        cleaned_response = self._remove_code_fences(response)
+        data = json.loads(cleaned_response)
+
+        if not isinstance(data, dict):
+            raise ValueError("Video prompt output must be a JSON object.")
+
+        videos = data.get("videos")
+
+        if not isinstance(videos, list):
+            raise ValueError(
+                "Video prompt output must contain a 'videos' list."
+            )
+
+        if not videos:
+            raise ValueError(
+                "Video prompt output must contain at least one item."
+            )
+
+        for index, video in enumerate(videos, start=1):
+            self._validate_video(video, index)
+
+        return data
+
+    def _validate_video(
+        self,
+        video: Any,
+        index: int,
+    ) -> None:
+        if not isinstance(video, dict):
+            raise ValueError(
+                f"Video item {index} must be a JSON object."
+            )
+
+        required_fields = {
+            "scene",
+            "prompt",
+            "camera_motion",
+            "duration",
+        }
+
+        missing_fields = required_fields - video.keys()
+
+        if missing_fields:
+            missing = ", ".join(sorted(missing_fields))
+            raise ValueError(
+                f"Video item {index} is missing fields: {missing}"
+            )
+
+        if not isinstance(video["scene"], int):
+            raise ValueError(
+                f"Video item {index}: 'scene' must be an integer."
+            )
+
+        if not isinstance(video["duration"], int):
+            raise ValueError(
+                f"Video item {index}: 'duration' must be an integer."
+            )
+
+        if not 1 <= video["duration"] <= 30:
+            raise ValueError(
+                f"Video item {index}: duration must be between 1 and 30 seconds."
+            )
+
+        for field in ("prompt", "camera_motion"):
+            value = video[field]
+
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"Video item {index}: '{field}' "
+                    "must be a non-empty string."
+                )
+
+    def _remove_code_fences(self, response: str) -> str:
+        cleaned = response.strip()
+
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[len("```json"):]
+
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[len("```"):]
+
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+
+        return cleaned.strip()
