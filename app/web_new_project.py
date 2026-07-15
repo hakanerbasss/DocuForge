@@ -20,432 +20,342 @@ JOBS_LOCK = threading.Lock()
 
 class BuildRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
-    language: str = Field(default="tr", min_length=2, max_length=10)
-    template: str = Field(default="documentary", min_length=2, max_length=30)
+    language: str = Field(default="tr")
+    content_type: str = Field(default="documentary")
+    target_duration_seconds: int = Field(default=600, ge=10, le=7200)
+    media_mode: str = Field(default="mixed")
+    image_provider: str = Field(default="pexels")
+    video_provider: str = Field(default="pexels")
+    voice_provider: str = Field(default="supertonic")
+    voice_name: str = Field(default="M1")
+    voice_speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    resolution: str = Field(default="720p")
+    fps: int = Field(default=30)
+    background_music_enabled: bool = Field(default=False)
+    subtitles_enabled: bool = Field(default=False)
+    thumbnail_enabled: bool = Field(default=False)
 
 
 def slugify(title: str) -> str:
-    replacements = str.maketrans(
-        {
-            "ı": "i",
-            "ğ": "g",
-            "ü": "u",
-            "ş": "s",
-            "ö": "o",
-            "ç": "c",
-            "İ": "i",
-            "Ğ": "g",
-            "Ü": "u",
-            "Ş": "s",
-            "Ö": "o",
-            "Ç": "c",
-        }
-    )
-
+    replacements = str.maketrans({
+        "\u0131": "i", "\u011f": "g", "\u00fc": "u",
+        "\u015f": "s", "\u00f6": "o", "\u00e7": "c",
+        "\u0130": "i", "\u011e": "g", "\u00dc": "u",
+        "\u015e": "s", "\u00d6": "o", "\u00c7": "c",
+    })
     slug = title.translate(replacements).lower()
     slug = "_".join(slug.split())
-
     if not slug:
         raise ValueError("Geçerli bir proje konusu girilmelidir.")
-
     return slug
 
 
 def load_json(path: Path) -> dict[str, Any]:
     if not path.exists() or path.stat().st_size == 0:
         return {}
-
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-
     return data if isinstance(data, dict) else {}
 
 
-def run_build_job(
-    job_id: str,
-    topic: str,
-    language: str,
-    template: str,
-    project_dir: Path,
-) -> None:
+def run_build_job(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
-
     try:
         result_dir = BuildPipeline().run(
-            topic=topic,
-            language=language,
-            template=template,
+            topic=req["topic"],
+            language=req["language"],
+            content_type=req["content_type"],
+            target_duration_seconds=req["target_duration_seconds"],
+            media_mode=req["media_mode"],
+            image_provider=req["image_provider"],
+            video_provider=req["video_provider"],
+            voice_provider=req["voice_provider"],
+            voice_name=req["voice_name"],
+            voice_speed=req["voice_speed"],
+            resolution=req["resolution"],
+            fps=req["fps"],
+            background_music_enabled=req["background_music_enabled"],
+            subtitles_enabled=req["subtitles_enabled"],
+            thumbnail_enabled=req["thumbnail_enabled"],
         )
-
         with JOBS_LOCK:
-            JOBS[job_id].update(
-                {
-                    "status": "completed",
-                    "project_path": str(result_dir),
-                    "error": None,
-                }
-            )
-
+            JOBS[job_id].update({
+                "status": "completed",
+                "project_path": str(result_dir),
+                "error": None,
+            })
     except Exception as error:
         with JOBS_LOCK:
-            JOBS[job_id].update(
-                {
-                    "status": "failed",
-                    "error": str(error),
-                }
-            )
+            JOBS[job_id].update({
+                "status": "failed",
+                "error": str(error),
+            })
 
 
 @router.get("/new", response_class=HTMLResponse)
 def new_project_page() -> HTMLResponse:
-    return HTMLResponse(
-        """<!doctype html>
+    return HTMLResponse("""<!doctype html>
 <html lang="tr">
 <head>
-    <meta charset="utf-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-    <title>Yeni Proje · DocuForge</title>
-
-    <style>
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background: #f3f6fb;
-            color: #172033;
-            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-        }
-
-        header {
-            padding: 18px;
-            background: white;
-            border-bottom: 1px solid #e1e8f2;
-        }
-
-        header div,
-        main {
-            width: min(760px, calc(100% - 28px));
-            margin: auto;
-        }
-
-        main {
-            padding: 28px 0 70px;
-        }
-
-        .back {
-            color: #245ec7;
-            text-decoration: none;
-            font-weight: 700;
-        }
-
-        .card {
-            margin-top: 18px;
-            padding: 24px;
-            background: white;
-            border: 1px solid #e0e7f1;
-            border-radius: 22px;
-            box-shadow: 0 12px 35px rgba(34, 54, 80, .08);
-        }
-
-        h1 {
-            margin: 0 0 8px;
-            font-size: clamp(29px, 6vw, 42px);
-        }
-
-        .muted {
-            color: #66758c;
-        }
-
-        label {
-            display: block;
-            margin-top: 18px;
-            margin-bottom: 7px;
-            font-weight: 750;
-        }
-
-        input,
-        select {
-            width: 100%;
-            min-height: 48px;
-            padding: 0 13px;
-            border: 1px solid #cbd6e5;
-            border-radius: 12px;
-            background: white;
-            color: #172033;
-            font: inherit;
-        }
-
-        button {
-            width: 100%;
-            min-height: 50px;
-            margin-top: 23px;
-            border: 0;
-            border-radius: 13px;
-            background: #2166f3;
-            color: white;
-            font-size: 16px;
-            font-weight: 800;
-            cursor: pointer;
-        }
-
-        button:disabled {
-            opacity: .6;
-            cursor: wait;
-        }
-
-        .status {
-            display: none;
-            margin-top: 20px;
-            padding: 17px;
-            border-radius: 14px;
-            background: #edf4ff;
-        }
-
-        .progress {
-            height: 11px;
-            margin: 12px 0;
-            overflow: hidden;
-            border-radius: 999px;
-            background: #dbe5f4;
-        }
-
-        .progress > div {
-            width: 4%;
-            height: 100%;
-            background: #2166f3;
-            transition: width .4s ease;
-        }
-
-        .error {
-            background: #ffe9e9;
-            color: #9f2020;
-        }
-
-        .success {
-            background: #e8f8ee;
-            color: #08763a;
-        }
-
-        .open-project {
-            display: none;
-            margin-top: 14px;
-            color: #2166f3;
-            font-weight: 800;
-            text-decoration: none;
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yeni Proje · DocuForge</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#f3f6fb;color:#172033;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:18px;background:white;border-bottom:1px solid #e1e8f2}
+header div,main{width:min(760px,calc(100% - 28px));margin:auto}
+main{padding:28px 0 70px}
+.back{color:#245ec7;text-decoration:none;font-weight:700}
+.card{margin-top:18px;padding:24px;background:white;border:1px solid #e0e7f1;border-radius:22px;box-shadow:0 12px 35px rgba(34,54,80,.08)}
+h1{margin:0 0 8px;font-size:clamp(26px,6vw,38px)}
+h3{margin:22px 0 6px;font-size:15px;color:#445;text-transform:uppercase;letter-spacing:.05em}
+.muted{color:#66758c}
+label{display:block;margin-top:14px;margin-bottom:5px;font-weight:700;font-size:14px}
+input,select{width:100%;min-height:44px;padding:0 12px;border:1px solid #cbd6e5;border-radius:10px;background:white;color:#172033;font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.hint{font-size:12px;color:#8899aa;margin-top:3px}
+button{width:100%;min-height:50px;margin-top:20px;border:0;border-radius:13px;background:#2166f3;color:white;font-size:16px;font-weight:800;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.status{display:none;margin-top:20px;padding:17px;border-radius:14px;background:#edf4ff}
+.progress{height:11px;margin:12px 0;overflow:hidden;border-radius:999px;background:#dbe5f4}
+.progress>div{width:4%;height:100%;background:#2166f3;transition:width .4s ease}
+.error{background:#ffe9e9;color:#9f2020}
+.success{background:#e8f8ee;color:#08763a}
+.open-project{display:none;margin-top:14px;color:#2166f3;font-weight:800;text-decoration:none}
+</style>
 </head>
-
 <body>
-<header>
-    <div>
-        <a class="back" href="/">← Projelere dön</a>
-    </div>
-</header>
+<header><div><a class="back" href="/">\u2190 Projelere d\u00f6n</a></div></header>
+<main><section class="card">
+<h1>Yeni Proje</h1>
+<p class="muted">Konuyu ve ayarlar\u0131 se\u00e7. DocuForge ara\u015ft\u0131rma, senaryo, medya, seslendirme ve videoyu otomatik haz\u0131rlas\u0131n.</p>
 
-<main>
-    <section class="card">
-        <h1>Yeni Proje</h1>
-        <p class="muted">
-            Konuyu ve üretim dilini seç. DocuForge araştırma,
-            senaryo, medya, seslendirme ve videoyu otomatik hazırlasın.
-        </p>
+<h3>\ud83d\udcdd \u0130\u00e7erik</h3>
+<label for="topic">Konu</label>
+<input id="topic" placeholder="\u00d6rnek: Kara Deliklerin S\u0131rr\u0131" required minlength="2" maxlength="200">
 
-        <form id="buildForm">
-            <label for="topic">Belgesel konusu</label>
-            <input
-                id="topic"
-                name="topic"
-                placeholder="Örnek: Amazon Ormanlarının Gizli Dünyası"
-                required
-                minlength="2"
-                maxlength="200"
-            >
+<div class="row">
+<div>
+<label for="language">Dil</label>
+<select id="language">
+<option value="tr" selected>T\u00fcrk\u00e7e</option>
+<option value="en">\u0130ngilizce</option>
+<option value="de">Almanca</option>
+<option value="fr">Frans\u0131zca</option>
+<option value="es">\u0130spanyolca</option>
+</select>
+</div>
+<div>
+<label for="content_type">\u0130\u00e7erik T\u00fcr\u00fc</label>
+<select id="content_type" onchange="onTypeChange()">
+<option value="documentary">Belgesel</option>
+<option value="news">Haber</option>
+<option value="shorts">Shorts / Reels</option>
+<option value="informational">Bilgi Videosu</option>
+</select>
+</div>
+</div>
 
-            <label for="language">İçerik dili</label>
-            <select id="language" name="language">
-                <option value="tr" selected>Türkçe</option>
-                <option value="en">İngilizce</option>
-                <option value="de">Almanca</option>
-                <option value="fr">Fransızca</option>
-                <option value="es">İspanyolca</option>
-            </select>
+<label for="duration">Hedef S\u00fcre (saniye)</label>
+<input id="duration" type="number" value="600" min="10" max="7200">
+<div class="hint" id="durationHint">~10 dakika</div>
 
-            <label for="template">Şablon</label>
-            <select id="template" name="template">
-                <option value="documentary" selected>
-                    Belgesel
-                </option>
-            </select>
+<h3>\ud83c\udfac Medya</h3>
+<div class="row">
+<div>
+<label for="media_mode">Medya Modu</label>
+<select id="media_mode">
+<option value="mixed" selected>Video + Foto\u011fraf</option>
+<option value="video">Sadece Video</option>
+<option value="image">Sadece Foto\u011fraf</option>
+</select>
+</div>
+<div>
+<label for="resolution">\u00c7\u00f6z\u00fcn\u00fcrl\u00fck</label>
+<select id="resolution">
+<option value="720p" selected>720p (1280x720)</option>
+<option value="1080p">1080p (1920x1080)</option>
+<option value="vertical">Dikey (1080x1920)</option>
+<option value="4k">4K (3840x2160)</option>
+</select>
+</div>
+</div>
 
-            <button id="startButton" type="submit">
-                Üretimi Başlat
-            </button>
-        </form>
+<h3>\ud83c\udf99 Ses</h3>
+<div class="row">
+<div>
+<label for="voice_provider">Ses Sa\u011flay\u0131c\u0131</label>
+<select id="voice_provider" onchange="onProviderChange()">
+<option value="supertonic" selected>Supertonic</option>
+<option value="piper">Piper</option>
+<option value="espeak">eSpeak</option>
+</select>
+</div>
+<div>
+<label for="voice_name">Ses</label>
+<select id="voice_name">
+<option value="M1" selected>M1</option>
+<option value="M2">M2</option>
+<option value="M3">M3</option>
+<option value="F1">F1</option>
+<option value="F2">F2</option>
+<option value="F3">F3</option>
+</select>
+</div>
+</div>
 
-        <div id="statusBox" class="status">
-            <strong id="statusTitle">Proje hazırlanıyor…</strong>
+<label for="voice_speed">Konu\u015fma H\u0131z\u0131: <span id="speedLabel">1.0x</span></label>
+<input id="voice_speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('speedLabel').textContent=parseFloat(this.value).toFixed(1)+'x'">
 
-            <div class="progress">
-                <div id="progressBar"></div>
-            </div>
+<button id="startButton" onclick="startBuild()">\u00dcretimi Ba\u015flat</button>
 
-            <div id="statusText" class="muted">
-                İş başlatılıyor.
-            </div>
-
-            <a id="openProject" class="open-project" href="#">
-                Projeyi Aç →
-            </a>
-        </div>
-    </section>
-</main>
+<div id="statusBox" class="status">
+<strong id="statusTitle">Proje haz\u0131rlan\u0131yor\u2026</strong>
+<div class="progress"><div id="progressBar"></div></div>
+<div id="statusText" class="muted">\u0130\u015f ba\u015flat\u0131l\u0131yor.</div>
+<a id="openProject" class="open-project" href="#">Projeyi A\u00e7 \u2192</a>
+</div>
+</section></main>
 
 <script>
-const form = document.getElementById("buildForm");
-const button = document.getElementById("startButton");
-const statusBox = document.getElementById("statusBox");
-const statusTitle = document.getElementById("statusTitle");
-const statusText = document.getElementById("statusText");
-const progressBar = document.getElementById("progressBar");
-const openProject = document.getElementById("openProject");
+let pollTimer=null;
 
-let pollTimer = null;
-
-form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    button.disabled = true;
-    statusBox.style.display = "block";
-    statusBox.className = "status";
-    statusTitle.textContent = "Proje oluşturuluyor…";
-    statusText.textContent = "Üretim işi sunucuya gönderiliyor.";
-    progressBar.style.width = "4%";
-    openProject.style.display = "none";
-
-    const payload = {
-        topic: document.getElementById("topic").value.trim(),
-        language: document.getElementById("language").value,
-        template: document.getElementById("template").value,
-    };
-
-    try {
-        const response = await fetch("/api/builds", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.detail || "Üretim başlatılamadı.");
-        }
-
-        statusTitle.textContent = "Üretim devam ediyor";
-        statusText.textContent =
-            "Araştırma, senaryo, medya, ses ve video hazırlanıyor.";
-
-        pollJob(result.job_id);
-
-    } catch (error) {
-        showError(error.message);
-    }
-});
-
-async function pollJob(jobId) {
-    clearTimeout(pollTimer);
-
-    try {
-        const response = await fetch(`/api/builds/${jobId}`);
-        const job = await response.json();
-
-        if (!response.ok) {
-            throw new Error(job.detail || "İş durumu alınamadı.");
-        }
-
-        const progress = Math.max(
-            4,
-            Math.min(100, Number(job.progress_percent || 4))
-        );
-
-        progressBar.style.width = `${progress}%`;
-
-        if (job.current_step) {
-            statusText.textContent =
-                `${job.completed_steps}/10 · ${job.current_step}`;
-        }
-
-        if (job.status === "completed") {
-            statusBox.className = "status success";
-            statusTitle.textContent = "Video hazır";
-            statusText.textContent = "Tüm üretim aşamaları tamamlandı.";
-            progressBar.style.width = "100%";
-            openProject.href = `/projects/${job.project_slug}`;
-            openProject.style.display = "inline-block";
-            button.disabled = false;
-            return;
-        }
-
-        if (job.status === "failed") {
-            showError(job.error || "Üretim sırasında hata oluştu.");
-            return;
-        }
-
-        pollTimer = setTimeout(() => pollJob(jobId), 2500);
-
-    } catch (error) {
-        showError(error.message);
-    }
+function onTypeChange(){
+  const t=document.getElementById("content_type").value;
+  const d=document.getElementById("duration");
+  const r=document.getElementById("resolution");
+  const h=document.getElementById("durationHint");
+  if(t==="shorts"){d.value=60;r.value="vertical";h.textContent="~1 dakika";}
+  else if(t==="news"){d.value=180;r.value="720p";h.textContent="~3 dakika";}
+  else if(t==="informational"){d.value=300;r.value="720p";h.textContent="~5 dakika";}
+  else{d.value=600;r.value="720p";h.textContent="~10 dakika";}
+  updateHint();
 }
 
-function showError(message) {
-    clearTimeout(pollTimer);
-    statusBox.style.display = "block";
-    statusBox.className = "status error";
-    statusTitle.textContent = "Üretim başarısız";
-    statusText.textContent = message;
-    progressBar.style.width = "100%";
-    button.disabled = false;
+function updateHint(){
+  const s=parseInt(document.getElementById("duration").value)||0;
+  const m=Math.floor(s/60),sec=s%60;
+  document.getElementById("durationHint").textContent=
+    m>0?(sec>0?`~${m} dk ${sec} sn`:`~${m} dakika`):`${s} saniye`;
+}
+
+function onProviderChange(){
+  const p=document.getElementById("voice_provider").value;
+  const n=document.getElementById("voice_name");
+  n.innerHTML="";
+  if(p==="supertonic"){
+    ["M1","M2","M3","F1","F2","F3"].forEach(v=>{
+      const o=document.createElement("option");o.value=v;o.textContent=v;n.appendChild(o);
+    });
+  } else {
+    const o=document.createElement("option");o.value="default";o.textContent="Varsay\u0131lan";n.appendChild(o);
+  }
+}
+
+document.getElementById("duration").addEventListener("input",updateHint);
+
+async function startBuild(){
+  const btn=document.getElementById("startButton");
+  const topic=document.getElementById("topic").value.trim();
+  if(!topic){alert("Konu giriniz.");return;}
+  btn.disabled=true;
+  const statusBox=document.getElementById("statusBox");
+  statusBox.style.display="block";
+  statusBox.className="status";
+  document.getElementById("statusTitle").textContent="Proje olu\u015fturuluyor\u2026";
+  document.getElementById("statusText").textContent="\u00dcretim i\u015fi sunucuya g\u00f6nderiliyor.";
+  document.getElementById("progressBar").style.width="4%";
+  document.getElementById("openProject").style.display="none";
+
+  const payload={
+    topic,
+    language:document.getElementById("language").value,
+    content_type:document.getElementById("content_type").value,
+    target_duration_seconds:parseInt(document.getElementById("duration").value),
+    media_mode:document.getElementById("media_mode").value,
+    image_provider:"pexels",
+    video_provider:"pexels",
+    voice_provider:document.getElementById("voice_provider").value,
+    voice_name:document.getElementById("voice_name").value,
+    voice_speed:parseFloat(document.getElementById("voice_speed").value),
+    resolution:document.getElementById("resolution").value,
+    fps:30,
+    background_music_enabled:false,
+    subtitles_enabled:false,
+    thumbnail_enabled:false,
+  };
+
+  try{
+    const r=await fetch("/api/builds",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const res=await r.json();
+    if(!r.ok)throw new Error(res.detail||"\u00dcretim ba\u015flat\u0131lamad\u0131.");
+    document.getElementById("statusTitle").textContent="\u00dcretim devam ediyor";
+    document.getElementById("statusText").textContent="Ara\u015ft\u0131rma, senaryo, medya, ses ve video haz\u0131rlan\u0131yor.";
+    pollJob(res.job_id);
+  }catch(e){showError(e.message);}
+}
+
+async function pollJob(jobId){
+  clearTimeout(pollTimer);
+  try{
+    const r=await fetch(`/api/builds/${jobId}`);
+    const job=await r.json();
+    if(!r.ok)throw new Error(job.detail||"\u0130\u015f durumu al\u0131namad\u0131.");
+    const pct=Math.max(4,Math.min(100,Number(job.progress_percent||4)));
+    document.getElementById("progressBar").style.width=`${pct}%`;
+    if(job.current_step)document.getElementById("statusText").textContent=`${job.completed_steps}/10 \u00b7 ${job.current_step}`;
+    if(job.status==="completed"){
+      const sb=document.getElementById("statusBox");
+      sb.className="status success";
+      document.getElementById("statusTitle").textContent="Video haz\u0131r";
+      document.getElementById("statusText").textContent="T\u00fcm \u00fcretim a\u015famalar\u0131 tamamland\u0131.";
+      document.getElementById("progressBar").style.width="100%";
+      const op=document.getElementById("openProject");
+      op.href=`/projects/${job.project_slug}`;
+      op.style.display="inline-block";
+      document.getElementById("startButton").disabled=false;
+      return;
+    }
+    if(job.status==="failed"){showError(job.error||"\u00dcretim s\u0131ras\u0131nda hata olu\u015ftu.");return;}
+    pollTimer=setTimeout(()=>pollJob(jobId),2500);
+  }catch(e){showError(e.message);}
+}
+
+function showError(msg){
+  clearTimeout(pollTimer);
+  const sb=document.getElementById("statusBox");
+  sb.style.display="block";sb.className="status error";
+  document.getElementById("statusTitle").textContent="\u00dcretim ba\u015far\u0131s\u0131z";
+  document.getElementById("statusText").textContent=msg;
+  document.getElementById("progressBar").style.width="100%";
+  document.getElementById("startButton").disabled=false;
 }
 </script>
-</body>
-</html>"""
-    )
+</body></html>""")
 
 
 @router.post("/api/builds")
 def create_build(request: BuildRequest) -> dict[str, Any]:
     topic = request.topic.strip()
-    language = request.language.strip().lower()
-    template = request.template.strip().lower()
-
     if not topic:
-        raise HTTPException(
-            status_code=400,
-            detail="Proje konusu boş olamaz.",
-        )
+        raise HTTPException(status_code=400, detail="Proje konusu boş olamaz.")
 
     project_slug = slugify(topic)
     project_dir = PROJECTS_ROOT / project_slug
     job_id = uuid.uuid4().hex
+
+    req = request.model_dump()
+    req["topic"] = topic
 
     with JOBS_LOCK:
         JOBS[job_id] = {
             "job_id": job_id,
             "status": "queued",
             "topic": topic,
-            "language": language,
-            "template": template,
             "project_slug": project_slug,
             "project_path": str(project_dir),
             "error": None,
@@ -453,55 +363,34 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
 
     thread = threading.Thread(
         target=run_build_job,
-        args=(
-            job_id,
-            topic,
-            language,
-            template,
-            project_dir,
-        ),
+        args=(job_id, req, project_dir),
         daemon=True,
     )
     thread.start()
 
-    return {
-        "job_id": job_id,
-        "status": "queued",
-        "project_slug": project_slug,
-    }
+    return {"job_id": job_id, "status": "queued", "project_slug": project_slug}
 
 
 @router.get("/api/builds/{job_id}")
 def build_status(job_id: str) -> dict[str, Any]:
     with JOBS_LOCK:
         job = JOBS.get(job_id)
-
         if job is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Üretim işi bulunamadı.",
-            )
-
+            raise HTTPException(status_code=404, detail="Üretim işi bulunamadı.")
         result = dict(job)
 
     project_dir = Path(result["project_path"])
-    pipeline_state = load_json(
-        project_dir / "pipeline_state.json"
-    )
-
+    pipeline_state = load_json(project_dir / "pipeline_state.json")
     steps = pipeline_state.get("steps", {})
     completed_steps = 0
     current_step = "İş sırası bekleniyor"
 
     if isinstance(steps, dict):
         completed_steps = sum(
-            isinstance(value, dict)
-            and value.get("status") == "completed"
-            for value in steps.values()
+            isinstance(v, dict) and v.get("status") == "completed"
+            for v in steps.values()
         )
-
         failed_step = pipeline_state.get("failed_step")
-
         if failed_step:
             current_step = f"Hata: {failed_step}"
         elif completed_steps:
@@ -513,8 +402,5 @@ def build_status(job_id: str) -> dict[str, Any]:
 
     result["completed_steps"] = completed_steps
     result["current_step"] = current_step
-    result["progress_percent"] = round(
-        min(completed_steps, 10) / 10 * 100
-    )
-
+    result["progress_percent"] = round(min(completed_steps, 10) / 10 * 100)
     return result
