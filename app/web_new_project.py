@@ -15,6 +15,7 @@ from app.services.project_service import ProjectService
 router = APIRouter()
 
 PROJECTS_ROOT = Path("projects")
+JOBS_DIR = Path("jobs")
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
 
@@ -48,27 +49,41 @@ def load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def run_build_job(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
+def _persist_job(job_id: str) -> None:
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    job_file = JOBS_DIR / f"{job_id}.json"
+    job_file.write_text(
+        json.dumps(JOBS[job_id], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
+        _persist_job(job_id)
     try:
-        result_dir = BuildPipeline().run(
-            topic=req["topic"],
-            language=req["language"],
-            content_type=req["content_type"],
-            target_duration_seconds=req["target_duration_seconds"],
-            media_mode=req["media_mode"],
-            image_provider=req["image_provider"],
-            video_provider=req["video_provider"],
-            voice_provider=req["voice_provider"],
-            voice_name=req["voice_name"],
-            voice_speed=req["voice_speed"],
-            resolution=req["resolution"],
-            fps=req["fps"],
-            background_music_enabled=req["background_music_enabled"],
-            subtitles_enabled=req["subtitles_enabled"],
-            thumbnail_enabled=req["thumbnail_enabled"],
-        )
+        if (project_dir / "project.json").exists():
+            # Project already created by a previous (possibly crashed) run.
+            result_dir = BuildPipeline().resume(str(project_dir))
+        else:
+            result_dir = BuildPipeline().run(
+                topic=req["topic"],
+                language=req["language"],
+                content_type=req["content_type"],
+                target_duration_seconds=req["target_duration_seconds"],
+                media_mode=req["media_mode"],
+                image_provider=req["image_provider"],
+                video_provider=req["video_provider"],
+                voice_provider=req["voice_provider"],
+                voice_name=req["voice_name"],
+                voice_speed=req["voice_speed"],
+                resolution=req["resolution"],
+                fps=req["fps"],
+                background_music_enabled=req["background_music_enabled"],
+                subtitles_enabled=req["subtitles_enabled"],
+                thumbnail_enabled=req["thumbnail_enabled"],
+            )
         with JOBS_LOCK:
             JOBS[job_id].update({
                 "status": "completed",
@@ -81,6 +96,42 @@ def run_build_job(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 "status": "failed",
                 "error": str(error),
             })
+    finally:
+        with JOBS_LOCK:
+            _persist_job(job_id)
+
+
+def _recover_jobs_from_disk() -> None:
+    """Reload job records after a service restart and resume unfinished builds."""
+
+    if not JOBS_DIR.exists():
+        return
+
+    for job_file in sorted(JOBS_DIR.glob("*.json")):
+        job = load_json(job_file)
+        job_id = job.get("job_id")
+
+        if not job_id:
+            continue
+
+        with JOBS_LOCK:
+            JOBS[job_id] = job
+
+        if job.get("status") not in ("queued", "running"):
+            continue
+
+        project_dir = Path(job["project_path"])
+        req = job.get("request") or {}
+
+        thread = threading.Thread(
+            target=_execute_build,
+            args=(job_id, req, project_dir),
+            daemon=True,
+        )
+        thread.start()
+
+
+_recover_jobs_from_disk()
 
 
 @router.get("/new", response_class=HTMLResponse)
@@ -354,10 +405,12 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
             "project_slug": project_slug,
             "project_path": str(project_dir),
             "error": None,
+            "request": req,
         }
+        _persist_job(job_id)
 
     thread = threading.Thread(
-        target=run_build_job,
+        target=_execute_build,
         args=(job_id, req, project_dir),
         daemon=True,
     )

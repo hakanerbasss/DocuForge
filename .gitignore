@@ -40,5 +40,6 @@ output/
 .mypy_cache/
 
 projects/
+jobs/
 __pycache__/
 *.pyc
