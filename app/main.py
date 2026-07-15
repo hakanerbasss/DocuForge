@@ -1,5 +1,6 @@
 import time
 import typer
+from app.services.narration_builder import NarrationBuilder
 from app.services.media_builder import MediaBuilder
 from app.agents.narration import NarrationAgent
 from app.agents.video_prompt import VideoPromptAgent
@@ -402,6 +403,37 @@ def media_command(project: str):
     console.print("\n[bold green]✅ Scene media prepared[/bold green]")
     console.print(f"[bold]📄 Manifest:[/bold] {manifest_path}")
     console.print(f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]")
+
+@app.command("narration-scenes")
+def narration_scenes_command(project: str):
+    """Create scene-based narration text files."""
+
+    import time
+
+    console.print("\n[bold cyan]🎙 Scene Narration Builder[/bold cyan]\n")
+    console.print(f"[bold]📁 Project:[/bold] {project}\n")
+    console.print("[yellow]⏳ Preparing scene narration files...[/yellow]")
+
+    start = time.perf_counter()
+
+    try:
+        manifest_path = NarrationBuilder().build(project)
+    except Exception as error:
+        console.print(
+            "\n[bold red]❌ Scene Narration Builder failed[/bold red]"
+        )
+        console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+
+    elapsed = time.perf_counter() - start
+
+    console.print(
+        "\n[bold green]✅ Scene narration files created[/bold green]"
+    )
+    console.print(f"[bold]📄 Manifest:[/bold] {manifest_path}")
+    console.print(
+        f"[cyan]⏱ Completed in {elapsed:.2f} seconds[/cyan]"
+    )
 
 def main():
     app()
