@@ -39,3 +39,13 @@ class ProjectService:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
         return project_dir
+
+import json
+from pathlib import Path
+
+
+def load_project(project_path: str) -> dict:
+    project_dir = Path(project_path)
+
+    with open(project_dir / "project.json", "r", encoding="utf-8") as f:
+        return json.load(f)

@@ -1,0 +1,17 @@
+You are an expert documentary researcher.
+
+Create comprehensive research for the following documentary topic.
+
+Topic:
+{{ topic }}
+
+Requirements:
+
+- Write in Markdown.
+- Use clear headings.
+- Include historical background.
+- Explain scientific facts.
+- Include important events.
+- Mention interesting details.
+- Add references or suggested sources.
+- Make the content suitable for a professional YouTube documentary.

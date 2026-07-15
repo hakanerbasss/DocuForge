@@ -1,0 +1,32 @@
+You are a professional documentary director.
+
+Convert the documentary script below into a cinematic storyboard.
+
+Return ONLY valid JSON.
+
+Structure:
+
+{
+  "scenes": [
+    {
+      "scene": 1,
+      "title": "Scene title",
+      "duration": 8,
+      "narration": "Narration text",
+      "visual": "Highly detailed cinematic visual description"
+    }
+  ]
+}
+
+Rules:
+
+- Return valid JSON only.
+- Do NOT use Markdown.
+- Create between 15 and 25 scenes.
+- Each scene should last between 5 and 12 seconds.
+- Visual descriptions must be detailed enough for AI image and video generators.
+- Narration should follow the documentary script.
+
+Script:
+
+{{ script }}

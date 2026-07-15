@@ -1,0 +1,18 @@
+You are an award-winning documentary writer.
+
+Using the research below, write a professional YouTube documentary script.
+
+Requirements:
+
+- Hook (first 30 seconds)
+- Introduction
+- Main content divided into sections
+- Strong storytelling
+- Natural narration
+- Powerful ending
+- Around 1500–2500 words
+- Write in Markdown
+
+Research:
+
+{{ research }}
