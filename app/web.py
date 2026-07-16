@@ -6,6 +6,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
+from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
 
 
@@ -520,42 +521,60 @@ def project_detail(slug: str) -> HTMLResponse:
         """
 
     steps = pipeline.get("steps", {})
+    thumbnail_enabled = bool(project.get("thumbnail_enabled"))
+
+    active_step_defs = [
+        (key, label)
+        for key, label in PIPELINE_STEP_ORDER
+        if key != "thumbnail" or thumbnail_enabled
+    ]
+
     step_rows: list[str] = []
+    escaped_slug_js = quote(project_dir.name)
 
-    if isinstance(steps, dict):
-        for key, value in steps.items():
-            if not isinstance(value, dict):
-                continue
+    for key, label in active_step_defs:
+        info = steps.get(key) if isinstance(steps, dict) else None
+        status = (
+            str(info.get("status", "pending"))
+            if isinstance(info, dict)
+            else "pending"
+        )
+        duration = (
+            info.get("duration_seconds", 0)
+            if isinstance(info, dict)
+            else 0
+        )
 
-            status = str(
-                value.get("status", "unknown")
-            )
-            duration = value.get(
-                "duration_seconds",
-                0,
-            )
+        icon = (
+            "✅"
+            if status == "completed"
+            else "❌"
+            if status == "failed"
+            else "⏳"
+        )
 
-            icon = (
-                "✅"
-                if status == "completed"
-                else "❌"
-                if status == "failed"
-                else "⏳"
-            )
-
-            step_rows.append(
-                f"""
-                <div class="status-row">
-                    <strong>
-                        {icon} {html.escape(str(key))}
-                    </strong>
+        step_rows.append(
+            f"""
+            <div class="status-row">
+                <strong>
+                    {icon} {html.escape(label)}
+                </strong>
+                <span style="display:flex;align-items:center;gap:10px">
                     <span class="muted">
                         {html.escape(status)}
                         · {html.escape(str(duration))} sn
                     </span>
-                </div>
-                """
-            )
+                    <button
+                        class="button secondary"
+                        style="min-height:34px;padding:0 12px;font-size:13px"
+                        onclick="regenerateStep('{escaped_slug_js}','{key}',this)"
+                    >
+                        🔄 Yeniden Üret
+                    </button>
+                </span>
+            </div>
+            """
+        )
 
     if not step_rows:
         step_rows.append(
@@ -606,6 +625,17 @@ def project_detail(slug: str) -> HTMLResponse:
                 🗣 {html.escape(voice_name)}
             </span>
         </div>
+
+        <div class="buttons">
+            <button
+                class="button"
+                onclick="resumeProject('{escaped_slug_js}',this)"
+            >
+                ▶ Devam Et
+            </button>
+        </div>
+
+        <div id="actionStatus" class="muted" style="margin-top:10px"></div>
     </section>
 
     {video_section}
@@ -618,6 +648,12 @@ def project_detail(slug: str) -> HTMLResponse:
     >
         <article class="card">
             <h2>Üretim aşamaları</h2>
+            <p class="muted" style="margin-bottom:14px">
+                Bir aşamayı beğenmediysen "Yeniden Üret" ile sadece onu ve
+                sonrasındaki aşamaları sıfırlayıp yeniden çalıştırabilirsin.
+                Ardından "▶ Devam Et" ile pipeline'ın geri kalanını
+                tamamlayabilirsin.
+            </p>
             {''.join(step_rows)}
         </article>
 
@@ -630,6 +666,73 @@ def project_detail(slug: str) -> HTMLResponse:
             ))}</pre>
         </article>
     </section>
+
+    <script>
+    async function pollUntilDone(jobId) {{
+        while (true) {{
+            const r = await fetch(`/api/builds/${{jobId}}`);
+            const job = await r.json();
+            if (job.status === "completed") return;
+            if (job.status === "failed") {{
+                throw new Error(job.error || "İşlem başarısız oldu.");
+            }}
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }}
+    }}
+
+    async function regenerateStep(slug, stepKey, btn) {{
+        if (!confirm(
+            "Bu aşamayı ve sonrasındaki tüm aşamaları yeniden üretmek " +
+            "istediğine emin misin? Sonraki aşamaların çıktıları silinecek."
+        )) return;
+
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Üretiliyor...";
+        document.getElementById("actionStatus").textContent =
+            `${{stepKey}} yeniden üretiliyor...`;
+
+        try {{
+            const r = await fetch(
+                `/api/projects/${{slug}}/regenerate/${{stepKey}}`,
+                {{method: "POST"}}
+            );
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Başlatılamadı.");
+            await pollUntilDone(res.job_id);
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
+            document.getElementById("actionStatus").textContent = "";
+        }}
+    }}
+
+    async function resumeProject(slug, btn) {{
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Devam ediyor...";
+        document.getElementById("actionStatus").textContent =
+            "Kalan aşamalar üretiliyor...";
+
+        try {{
+            const r = await fetch(
+                `/api/projects/${{slug}}/resume`,
+                {{method: "POST"}}
+            );
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Başlatılamadı.");
+            await pollUntilDone(res.job_id);
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
+            document.getElementById("actionStatus").textContent = "";
+        }}
+    }}
+    </script>
     """
 
     return page(

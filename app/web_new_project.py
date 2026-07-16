@@ -115,6 +115,36 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
             _persist_job(job_id)
 
 
+def _execute_regenerate(
+    job_id: str,
+    project_dir: Path,
+    step_key: str,
+) -> None:
+    with JOBS_LOCK:
+        JOBS[job_id]["status"] = "running"
+        _persist_job(job_id)
+    try:
+        result_dir = BuildPipeline().regenerate_step(
+            str(project_dir),
+            step_key,
+        )
+        with JOBS_LOCK:
+            JOBS[job_id].update({
+                "status": "completed",
+                "project_path": str(result_dir),
+                "error": None,
+            })
+    except Exception as error:
+        with JOBS_LOCK:
+            JOBS[job_id].update({
+                "status": "failed",
+                "error": str(error),
+            })
+    finally:
+        with JOBS_LOCK:
+            _persist_job(job_id)
+
+
 def _recover_jobs_from_disk() -> None:
     """Reload job records after a service restart and resume unfinished builds."""
 
@@ -135,13 +165,27 @@ def _recover_jobs_from_disk() -> None:
             continue
 
         project_dir = Path(job["project_path"])
-        req = job.get("request") or {}
 
-        thread = threading.Thread(
-            target=_execute_build,
-            args=(job_id, req, project_dir),
-            daemon=True,
-        )
+        if job.get("kind") == "regenerate":
+            step_key = job.get("step_key")
+
+            if not step_key:
+                continue
+
+            thread = threading.Thread(
+                target=_execute_regenerate,
+                args=(job_id, project_dir, step_key),
+                daemon=True,
+            )
+        else:
+            req = job.get("request") or {}
+
+            thread = threading.Thread(
+                target=_execute_build,
+                args=(job_id, req, project_dir),
+                daemon=True,
+            )
+
         thread.start()
 
 
@@ -437,6 +481,7 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
         JOBS[job_id] = {
             "job_id": job_id,
             "status": "queued",
+            "kind": "build",
             "topic": topic,
             "project_slug": project_slug,
             "project_path": str(project_dir),
@@ -453,6 +498,78 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
     thread.start()
 
     return {"job_id": job_id, "status": "queued", "project_slug": project_slug}
+
+
+@router.post("/api/projects/{slug}/resume")
+def resume_project(slug: str) -> dict[str, Any]:
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    job_id = uuid.uuid4().hex
+
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "kind": "build",
+            "topic": slug,
+            "project_slug": slug,
+            "project_path": str(project_dir),
+            "error": None,
+            "request": {},
+        }
+        _persist_job(job_id)
+
+    thread = threading.Thread(
+        target=_execute_build,
+        args=(job_id, {}, project_dir),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id, "status": "queued", "project_slug": slug}
+
+
+@router.post("/api/projects/{slug}/regenerate/{step_key}")
+def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    valid_keys = {key for key, _label in PIPELINE_STEP_ORDER}
+
+    if step_key not in valid_keys:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Geçersiz aşama: {step_key}",
+        )
+
+    job_id = uuid.uuid4().hex
+
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "kind": "regenerate",
+            "step_key": step_key,
+            "topic": slug,
+            "project_slug": slug,
+            "project_path": str(project_dir),
+            "error": None,
+        }
+        _persist_job(job_id)
+
+    thread = threading.Thread(
+        target=_execute_regenerate,
+        args=(job_id, project_dir, step_key),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id, "status": "queued", "project_slug": slug}
 
 
 @router.get("/api/builds/{job_id}")
