@@ -30,21 +30,21 @@ An optional 11th stage (**Thumbnail**) runs when enabled on the project.
   - `target_duration_seconds` drives script length and storyboard scene count/duration targets
   - `media_mode` (video / image / mixed) controls what MediaBuilder actually fetches
   - `resolution` (720p / 1080p / vertical / 4k) and `fps` are read by RenderService and used in the real FFmpeg filters — nothing is hardcoded
-- ✅ Voice: eSpeak, Piper (Turkish Fahrettin model), Supertonic (M1–M5 / F1–F5) — provider, voice name and speed are all honored
+- ✅ Voice: eSpeak, Piper (Turkish Fahrettin model), Supertonic (M1–M5 / F1–F5), **XTTS voice clone** — provider, voice name and speed are all honored
 - ✅ Background music: if `background_music_enabled` is set and an audio file exists in `projects/<slug>/music/` (or an explicit `music_track` path), it's looped/trimmed to the video length, mixed in below narration volume, and faded out
 - ✅ Subtitles: if `subtitles_enabled` is set, a scene-timed `subtitles.srt` is written next to the final video (sidecar only — not burned into the video yet)
 - ✅ Thumbnail: if `thumbnail_enabled` is set, a 1280x720 YouTube thumbnail is generated from a scene frame with a title overlay (plus a 1080x1920 cover for shorts/vertical projects) — pure FFmpeg, no extra dependency
-- ✅ FastAPI web panel (not Flask): project list, project detail with a video player, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
-- ✅ Job state survives a web service restart: builds are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing
+- ✅ FastAPI web panel (not Flask): project list (with a "+ Yeni Proje" link), project detail with a video player, thumbnail preview, subtitle download, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
+- ✅ Per-stage regenerate from the web UI: each stage has its own "Yeniden Üret" button that invalidates that stage plus everything downstream of it and regenerates just that stage immediately, so you can review it before continuing with "▶ Devam Et"
+- ✅ Job state survives a web service restart: builds *and* per-stage regenerations are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing
 - ✅ Creating a project with a title that collides with an existing one gets a `_2`, `_3`, ... suffix instead of silently overwriting it
 
 ## Not implemented yet
 
 - ❌ Subtitle burn-in (currently sidecar `.srt` only)
-- ❌ XTTS voice cloning
 - ❌ Piper crackle/audio-quality cleanup (loudnorm, crossfade, DC offset)
-- ❌ A second image/video provider (only Pexels exists today, so `image_provider`/`video_provider` have nothing else to select)
-- ❌ Title/description/tag generation, YouTube upload
+- ❌ A second image/video provider (only Pexels exists today, so `image_provider`/`video_provider` have nothing else to select) — and `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) are generated but **never consumed** by MediaBuilder, which only ever searches Pexels using the storyboard's scene descriptions. Wiring an AI image/video generator to those prompts is still open.
+- ❌ Title/description/tag/SEO generation, YouTube upload
 
 ---
 
@@ -67,6 +67,14 @@ pip install fastapi uvicorn pydantic
 
 FFmpeg and ffprobe must be available on `PATH`. For Piper/Supertonic voices, see their respective setup docs under `models/`.
 
+For the XTTS voice-clone provider (optional, only needed if you select `voice_provider: xtts`):
+
+```bash
+pip install coqui-tts torch torchaudio
+```
+
+This is a heavy dependency (torch) — nothing else in DocuForge needs it, so it's not in `pyproject.toml` by default. XTTS-v2 also needs considerably more RAM than the rest of the pipeline; if it's fighting for memory with everything else on the same box, that will show up as the model failing to load rather than a clear error.
+
 ---
 
 # Configuration
@@ -84,7 +92,15 @@ IMAGE_PROVIDER=pexels
 VIDEO_PROVIDER=pexels
 VOICE_PROVIDER=local_tts
 MODEL=deepseek-chat
+
+# Only needed for voice_provider: xtts
+XTTS_REFERENCE_AUDIO=/path/to/your/reference_voice.wav
 ```
+
+If `XTTS_REFERENCE_AUDIO` isn't set, the XTTS provider falls back to
+`models/xtts/reference.wav` relative to the working directory. Either way, you
+need a 20–30s clean recording of the voice to clone (same approach as the
+`ses-klonu` reference audio in the Instagram bot project).
 
 ---
 
@@ -131,14 +147,21 @@ In production this typically runs as a systemd service (e.g. `docuforge-web.serv
 
 Routes:
 
-- `GET /` — project list
-- `GET /projects/{slug}` — project detail, pipeline progress, final video player
+- `GET /` — project list, with a "+ Yeni Proje" button
+- `GET /projects/{slug}` — project detail: pipeline progress per stage (with a "Yeniden
+  Üret" button each), final video player, thumbnail preview, subtitle download, a
+  "▶ Devam Et" (resume) button
 - `GET /files/{slug}/{file_path}` — serve project files (e.g. the rendered video)
 - `GET /new` — new-project wizard (content type, duration, media mode, resolution, fps,
-  voice provider/name/speed, background music/subtitles/thumbnail toggles)
+  voice provider/name/speed including xtts, background music/subtitles/thumbnail toggles)
 - `POST /api/builds` — start a build; runs in a background thread, state persisted to
   `jobs/<job_id>.json`
-- `GET /api/builds/{job_id}` — poll build progress (reads `pipeline_state.json`)
+- `GET /api/builds/{job_id}` — poll build/regenerate/resume progress (reads
+  `pipeline_state.json`)
+- `POST /api/projects/{slug}/regenerate/{step_key}` — invalidate one stage and everything
+  downstream of it, then regenerate just that stage
+- `POST /api/projects/{slug}/resume` — continue an existing project from its first
+  incomplete stage
 
 ---
 

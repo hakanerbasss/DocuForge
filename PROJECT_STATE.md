@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026
+Son güncelleme: 16 Temmuz 2026 (2. güncelleme aynı gün — XTTS, per-stage regenerate, web panel navigasyon düzeltmeleri)
 
 ## Ana hedef
 
@@ -57,6 +57,11 @@ Proje hiçbir Instagram botuna, haber botuna veya harici çalışan kişisel ser
 - **`subtitles_enabled` gerçekten çalışıyor** — sahne bazlı zamanlamalı `render/subtitles.srt` üretiliyor (Türkçe karakterler doğru). Henüz videoya burn-in edilmiyor, sadece sidecar dosya.
 - **`thumbnail_enabled` gerçekten çalışıyor** — yeni `ThumbnailService`, ffmpeg ile 1280x720 YouTube kapağı + shorts/dikey projelerde ek 1080x1920 kapak üretiyor (Pillow değil, sadece ffmpeg drawtext)
 - Web wizard artık içerik türü, hedef süre, medya modu, çözünürlük, FPS, ses sağlayıcısı/ismi/hızı, müzik/altyazı/thumbnail toggle'larını gösteriyor
+- **XTTS klon ses provider eklendi** — Instagram bot projesindeki (`hakanerbasss.github.io`, `supertonic-web/xtts_clone.py`, branch `claude/arduino-smart-home-uj82ef`) çalışan yaklaşımın birebir portu: Coqui XTTS-v2, referans sesten klonlama, cümle bazlı chunking. `torch`/`TTS` sadece gerektiğinde import ediliyor, DocuForge'un geri kalanına bağımlılık eklemiyor. Referans ses `XTTS_REFERENCE_AUDIO` env var veya `models/xtts/reference.wav`'dan okunuyor.
+- **Web sitesinde her aşamayı ayrı ayrı yeniden üretme artık var** — proje detay sayfasında her aşamanın yanında "Yeniden Üret" butonu var (o aşamayı VE sonrasındaki her şeyi geçersiz kılıp sadece o aşamayı hemen yeniden üretiyor), artı "▶ Devam Et" butonu kalanını tamamlıyor. `BuildPipeline.regenerate_step()` bunun arkasındaki mantık.
+- Ana sayfaya "+ Yeni Proje" butonu eklendi (önceden `/new`'e giden hiçbir link yoktu)
+- Proje detay sayfasında artık thumbnail görseli ve subtitles.srt indirme linki gösteriliyor
+- İlerleme çubuğu artık gerçek aşama ismini gösteriyor, toplam aşama sayısı thumbnail'e göre dinamik (10 veya 11)
 
 ---
 
@@ -93,8 +98,11 @@ stub/mock provider'larla izole test edildi:
 - Müzik mixleme ffmpeg komutunun doğru kurulduğu (volume, fade, amix) — geçti
 - SRT zamanlamasının gerçek sahne sürelerine göre doğru hesaplandığı, Türkçe karakterlerin korunduğu — geçti
 - Thumbnail için sahne görseli/video kare çıkarma ve metin escape'lemesi — geçti
+- XTTS metin chunking (400 token limiti için cümle/virgül bölme), referans ses çözümleme (explicit path → env var → default path → hata) — geçti
+- `regenerate_step()`: script'i yeniden üretince storyboard/media/audio/render/thumbnail'in silindiği, `voice`'u yeniden üretince SADECE ses dosyasının silinip narration metninin korunduğu (manifest silinmeden status resetleniyor) — geçti
+- Web endpoint'leri (`/api/projects/{slug}/regenerate/{step}`, `/resume`) ve restart-sonrası "kind"a göre doğru fonksiyona dispatch edilmesi — geçti
 
-**Bir sonraki oturumda gerçek bir VPS build'i (shorts/vertical/mixed, gerçek API anahtarlarıyla) çalıştırılıp çıktı gözle doğrulanmalı.**
+**Bir sonraki oturumda gerçek bir VPS build'i (shorts/vertical/mixed, gerçek API anahtarlarıyla) çalıştırılıp çıktı gözle doğrulanmalı. XTTS de gerçek referans sesle bir kere denenmeli.**
 
 ---
 
@@ -125,8 +133,11 @@ stub/mock provider'larla izole test edildi:
 
 ### XTTS-v2
 
-- **Henüz eklenmedi** — kasıtlı olarak ertelendi (büyük model indirme, GPU/RAM ihtiyacı, gerçek ses testi olmadan güvenle yazılamaz)
-- Kullanıcının diğer projesinde çalışan klon ses kodu mevcut, buraya taşınmadı
+- **Eklendi** — `app/providers/voice/xtts.py`, provider registry'de `"xtts"` olarak kayıtlı
+- Instagram bot'taki çalışan koddan birebir port edildi (chunking, speaker_wav cloning, sample rate 24000)
+- Web wizard'da ses sağlayıcısı olarak seçilebiliyor
+- **Test edilmedi** — bu container'da torch/coqui-tts/gerçek referans ses yok; sadece saf Python mantığı (chunking, referans ses çözümleme, hız normalizasyonu) izole test edildi. VPS'de gerçek bir referans ses dosyasıyla ilk kullanımda doğrulanmalı.
+- RAM notu: Instagram bot'un kendi `ses-klonu/README.md`'si CX23'ün (4GB) XTTS-v2 için yetersiz olabileceğini söylüyor, ama `supertonic-web/app.py` yine de doğrudan yerelde kullanıyor — bu server aynıysa dikkat, model yüklenirken RAM sorunu çıkabilir.
 
 ---
 
@@ -134,23 +145,23 @@ stub/mock provider'larla izole test edildi:
 
 ### Var
 
-- Proje listesi
-- Proje detay sayfası
-- Final video oynatıcı
-- Pipeline aşamalarını gösterme
-- Tam yeni proje formu: içerik türü, hedef süre, medya modu, çözünürlük, FPS, ses sağlayıcısı/ismi/hızı, müzik/altyazı/thumbnail toggle'ları
-- Job durumu kalıcı (`jobs/<job_id>.json`), restart sonrası kayıp yok
+- Proje listesi + "+ Yeni Proje" butonu
+- Proje detay sayfası: final video oynatıcı, thumbnail önizleme, subtitles.srt indirme
+- Pipeline aşamalarını gösterme — gerçek aşama ismiyle, dinamik toplam sayıyla
+- Tam yeni proje formu: içerik türü, hedef süre, medya modu, çözünürlük, FPS, ses sağlayıcısı/ismi/hızı (xtts dahil), müzik/altyazı/thumbnail toggle'ları
+- Job durumu kalıcı (`jobs/<job_id>.json`), restart sonrası kayıp yok (build VE regenerate işleri için)
+- **Resume butonu ("▶ Devam Et")** — proje detay sayfasında, `POST /api/projects/{slug}/resume`
+- **Yeniden üretme butonları** — her aşama için ayrı "Yeniden Üret", `POST /api/projects/{slug}/regenerate/{step_key}`
 
 ### Eksik
 
 - Gerçek canlı log (sadece pipeline_state.json polling var)
 - Ses sağlayıcısı kurulum ekranı
-- Resume butonu (arayüzden)
-- İptal butonu
-- Yeniden üretme butonları
+- İptal butonu (çalışan bir işi durdurma)
 - Sesleri arayüzden dinleme
 - Sahne ve medya düzenleme
 - Müzik dosyası yükleme arayüzü (şu an SSH ile `music/` klasörüne manuel kopyalama gerekiyor)
+- XTTS referans ses yükleme arayüzü (Instagram bot'ta var, DocuForge'da yok — şu an sadece env var / sabit dosya yolu)
 
 ---
 
@@ -159,10 +170,9 @@ stub/mock provider'larla izole test edildi:
 - Altyazının videoya burn-in edilmesi (şu an sadece sidecar .srt)
 - Otomatik ducking (şu an sabit düşük seviye, sidechain compress değil)
 - Piper ses temizleme / normalizasyon / mastering
-- XTTS klon ses provider
-- Referans ses yükleme
+- XTTS referans ses yükleme arayüzü
 - Thumbnail düzenleme (arayüzden başlık değiştirme vb.)
-- Başlık, açıklama ve etiket üretimi
+- Başlık, açıklama ve etiket (SEO) üretimi — **not: `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hiç okumuyor, sadece storyboard metniyle Pexels'te arıyor. Bu prompt'lar şu an tamamen kullanılmıyor — bir AI görsel/video üretim aracı eklenirse buraya bağlanmalı.**
 - YouTube yükleme
 - Instagram/Reels sürümü
 - Kalıcı iş kuyruğu (şu an per-request thread + disk üzerinde JSON; gerçek bir queue değil)
@@ -180,7 +190,7 @@ Yeni fikir eklenmeden şu sırayla ilerlenir:
 1. ~~Web panelini systemd servisi yap~~ ✅ (VPS'de zaten çalışıyor)
 2. ~~Kalıcı job sistemi~~ ✅ tamamlandı
 3. Canlı pipeline durumu — kısmen (polling var, gerçek log yok)
-4. Resume ve hata ekranı — arayüzden yok, CLI'dan var
+4. ~~Resume ve hata ekranı~~ ✅ arayüzden de var artık ("▶ Devam Et" + "Yeniden Üret" butonları)
 5. ~~Proje ayar modelini genişlet~~ ✅ tamamlandı
 
 ### Faz 2 — Gerçek yeni proje sihirbazı
@@ -192,8 +202,8 @@ resolution/FPS hepsi arayüzde var VE gerçekten project.json + pipeline davran�
 
 1. ~~Supertonic varsayılan~~ ✅
 2. Sesleri arayüzden test etme — yok
-3. XTTS provider — yok, ertelendi
-4. Referans ses yükleme — yok
+3. ~~XTTS provider~~ ✅ eklendi, VPS'de gerçek referans sesle henüz doğrulanmadı
+4. Referans ses yükleme — yok (env var / sabit dosya yolu)
 5. ~~Varsayılan ses ayarı~~ ✅
 6. TTS otomatik kurulum sistemi — kısmen (Supertonic auto_download var)
 

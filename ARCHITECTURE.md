@@ -93,14 +93,27 @@ deterministic production logic. Do not model them as `*Agent` classes.
 | `text` | `deepseek` |
 | `image` | `pexels` |
 | `video` | `pexels` |
-| `voice` | `espeak`, `local_tts` (alias for eSpeak), `piper`, `supertonic` |
+| `voice` | `espeak`, `local_tts` (alias for eSpeak), `piper`, `supertonic`, `xtts` |
 
 `image_provider`/`video_provider` are already threaded through the project model and
 `BuildPipeline`, but since only Pexels exists for each category today, there is
 nothing else to select yet — this becomes meaningful once a second provider is added.
+Note also that `ImagePromptAgent`/`VideoPromptAgent` produce `image_prompts.json` /
+`video_prompts.json` specifically so an AI image/video *generator* could use them, but
+`MediaBuilder` never reads either file — it only ever searches Pexels using the
+storyboard's scene description text. Those prompt files are currently dead output.
 
 `VoiceProvider.synthesize()` takes `text`, `output_path`, and `**options` (language,
 voice_name, speed, ...); each provider reads whichever options it understands.
+`XTTSVoiceProvider` (`app/providers/voice/xtts.py`) is a port of the same approach
+already running in the Instagram bot project
+(`hakanerbasss.github.io`, `supertonic-web/xtts_clone.py`, branch
+`claude/arduino-smart-home-uj82ef`): Coqui XTTS-v2, `speaker_wav` cloning from a
+reference recording, sentence-chunking to stay under XTTS's ~400 token limit per call.
+`torch`/`TTS.api` are imported lazily inside the provider so the rest of DocuForge
+doesn't need them installed. Reference audio resolves in order: an explicit
+`reference_audio` option, the `XTTS_REFERENCE_AUDIO` env var, then
+`models/xtts/reference.wav`.
 
 ---
 
@@ -123,6 +136,28 @@ calls `_run_pipeline()`. `BuildPipeline.resume(project_path)` calls the same
 This is why a fully-completed project resumes in a fraction of a second — every step's
 validator short-circuits once its output file is confirmed present.
 
+## Regenerating a single stage
+
+`BuildPipeline.regenerate_step(project_path, step_key)` lets you redo one stage (e.g.
+you don't like the script) without redoing the whole project:
+
+1. Determine the fixed step order (agent steps + service steps, same as
+   `_run_pipeline`).
+2. Delete the output file (and drop the `pipeline_state.json` entry) for every step
+   *after* `step_key`, so a later `resume()` naturally regenerates them — the agent/
+   service runners both treat "output file missing" as "needs to run," independent of
+   state.
+3. Regenerate `step_key` itself immediately, via the same `_run_agent_step`/
+   `_run_service_step` machinery `_run_pipeline` uses, and return.
+
+`voice` is a deliberate special case: its registered "output" file
+(`audio/manifest.json`) is the *same file* `narration_scenes` writes, and
+`VoiceService.generate()` reads it as an input (raises if missing). Regenerating
+`voice` on its own resets each scene's `status` back to `"text_ready"` in-place
+instead of deleting the manifest, so the scene text survives and only the audio gets
+redone. Regenerating anything *upstream* of `voice` (e.g. `script`) still deletes the
+manifest outright, since `narration_scenes` will recreate it from scratch anyway.
+
 ---
 
 # Web Layer
@@ -133,12 +168,24 @@ wizard and build API live in `app/web_new_project.py` (`APIRouter`, mounted via
 
 Build jobs run in a background `threading.Thread` per request (no task queue). Job
 records are kept in an in-memory `JOBS` dict for fast polling, but are also persisted to
-`jobs/<job_id>.json` on every status change. On process startup,
-`_recover_jobs_from_disk()` reloads those records and restarts any job still
-`queued`/`running` — via `BuildPipeline.resume()` if `project.json` already exists, or a
-fresh `.run()` (using the saved request payload) if the process crashed before the
-project was even created. This means a systemd restart mid-build no longer silently
-loses the job.
+`jobs/<job_id>.json` on every status change. Each record carries a `kind`
+(`"build"` or `"regenerate"`) so recovery dispatches to the right function. On process
+startup, `_recover_jobs_from_disk()` reloads those records and restarts any job still
+`queued`/`running` — `kind: "build"` via `BuildPipeline.resume()` if `project.json`
+already exists (or a fresh `.run()` using the saved request payload if the process
+crashed before the project was even created), `kind: "regenerate"` via
+`BuildPipeline.regenerate_step()`. This means a systemd restart mid-build (or
+mid-regeneration) no longer silently loses the job.
+
+Two more endpoints besides `/api/builds`: `POST /api/projects/{slug}/regenerate/{step_key}`
+(calls `regenerate_step`) and `POST /api/projects/{slug}/resume` (calls `resume`, reusing
+`_execute_build` — its "does project.json already exist" check naturally takes the
+resume branch). Both return a `job_id` pollable via the same `/api/builds/{job_id}`
+endpoint used for full builds. `PIPELINE_STEP_ORDER` (a fixed list of
+`(step_key, display_label)` pairs, minus `thumbnail` unless `thumbnail_enabled`) is the
+single source of truth both the progress-percentage math and the project detail page's
+per-stage buttons use — defined once in `app/web_new_project.py` and imported into
+`app/web.py`.
 
 ---
 
@@ -180,9 +227,13 @@ systemctl restart docuforge-web
 # Known Gaps
 
 - Subtitles are sidecar `.srt` only — not burned into the video.
-- No XTTS voice cloning provider yet.
 - Piper output has known crackle between sentences; no audio-cleanup pass
   (loudnorm/highpass/crossfade) has been added yet — needs validation against real
   audio before changing.
 - Only one image/video provider (Pexels) exists, so provider selection is currently a
-  no-op in practice.
+  no-op in practice — and `image_prompts.json`/`video_prompts.json` are generated but
+  never read by anything.
+- No title/description/tag/SEO generation stage.
+- XTTS reference audio must already exist on disk (env var or `models/xtts/reference.wav`)
+  — there's no upload flow from the web UI yet, unlike the Instagram bot's admin API for
+  managing its reference recording.
