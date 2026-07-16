@@ -1,4 +1,5 @@
 import json
+import shutil
 import threading
 import uuid
 from pathlib import Path
@@ -53,6 +54,7 @@ class BuildRequest(BaseModel):
     subtitles_enabled: bool = Field(default=False)
     subtitles_burn_in: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
+    thumbnail_source: str = Field(default="auto")
 
 
 class RegenerateRequest(BaseModel):
@@ -106,6 +108,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 subtitles_enabled=req["subtitles_enabled"],
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
+                thumbnail_source=req.get("thumbnail_source", "auto"),
             )
         with JOBS_LOCK:
             JOBS[job_id].update({
@@ -383,10 +386,21 @@ Altyaz\u0131y\u0131 videoya g\u00f6m (burn-in)
 <div id="burnInHint" class="hint" style="display:none;margin-left:22px">\u0130\u015faretlenmezse .srt ayr\u0131 dosya olarak kal\u0131r, video \u00fcst\u00fcnde g\u00f6r\u00fcnmez.</div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
-<input type="checkbox" id="thumbnail_enabled" style="width:auto;min-height:auto">
+<input type="checkbox" id="thumbnail_enabled" style="width:auto;min-height:auto" onchange="onThumbnailToggle()">
 Kapak g\u00f6rseli (thumbnail) olu\u015ftur
 </label>
-<div class="hint">1280x720 YouTube kapak g\u00f6rseli \u00fcretilir; dikey projelerde ayr\u0131ca 1080x1920 kapak da eklenir.</div>
+<div class="hint">4 farkl\u0131 tasar\u0131ml\u0131 kapak \u00fcretilir (1280x720, dikey projelerde ayr\u0131ca 1080x1920); birini proje sayfas\u0131ndan se\u00e7ebilirsin.</div>
+
+<div id="thumbnailSourceRow" style="display:none;margin-top:10px;margin-left:22px">
+<label for="thumbnail_source">Kapak G\u00f6rseli Kayna\u011f\u0131</label>
+<select id="thumbnail_source">
+<option value="auto" selected>Otomatik (\u00fccretsiz varsa onu kullan)</option>
+<option value="ai">Yapay Zeka (OpenAI \u2014 \u00fccretli, sadece 1 kapak \u00fcretir)</option>
+<option value="pexels">Pexels (\u00fccretsiz stok, 4 kapak \u00fcretir)</option>
+<option value="scene">Sahne Karesi (tamamen yerel, 4 kapak \u00fcretir)</option>
+</select>
+<div class="hint">"Yapay Zeka" se\u00e7iliyse maliyeti azaltmak i\u00e7in sadece 1 kapak \u00fcretilir; di\u011fer se\u00e7enekler \u00fccretsiz oldu\u011fu i\u00e7in 4'\u00fc de \u00fcretir.</div>
+</div>
 
 <button id="startButton" onclick="startBuild()">\u00dcretimi Ba\u015flat</button>
 
@@ -463,6 +477,11 @@ function onSubtitlesToggle(){
   if(!on)document.getElementById("subtitles_burn_in").checked=false;
 }
 
+function onThumbnailToggle(){
+  const on=document.getElementById("thumbnail_enabled").checked;
+  document.getElementById("thumbnailSourceRow").style.display=on?"block":"none";
+}
+
 function onProviderChange(){
   const p=document.getElementById("voice_provider").value;
   const n=document.getElementById("voice_name");
@@ -511,6 +530,7 @@ async function startBuild(){
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
+    thumbnail_source:document.getElementById("thumbnail_source").value,
   };
 
   try{
@@ -844,6 +864,47 @@ def select_thumbnail(slug: str, req: ThumbnailSelectRequest) -> dict[str, Any]:
     )
 
     return {"selected": req.variant}
+
+
+@router.delete("/api/projects/{slug}")
+def delete_project(slug: str) -> dict[str, Any]:
+    """Permanently remove a project directory and everything in it.
+
+    Refuses while a build/regenerate job for this project is still
+    queued or running, so a background thread never gets its working
+    directory pulled out from under it mid-write.
+    """
+
+    project_dir = (PROJECTS_ROOT / slug).resolve()
+
+    if (
+        PROJECTS_ROOT.resolve() not in project_dir.parents
+        or not project_dir.is_dir()
+    ):
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    with JOBS_LOCK:
+        active_job = next(
+            (
+                job for job in JOBS.values()
+                if job.get("project_slug") == slug
+                and job.get("status") in ("queued", "running")
+            ),
+            None,
+        )
+
+    if active_job is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Bu proje için devam eden bir üretim işi var. "
+                "Silmeden önce işin bitmesini bekleyin."
+            ),
+        )
+
+    shutil.rmtree(project_dir)
+
+    return {"deleted": slug}
 
 
 @router.get("/api/builds/{job_id}")

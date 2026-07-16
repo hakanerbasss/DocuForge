@@ -369,6 +369,13 @@ def dashboard() -> HTMLResponse:
                     >
                         Projeyi Aç
                     </a>
+                    <button
+                        class="button secondary"
+                        style="color:#b91c1c"
+                        onclick="deleteProjectCard('{escaped_slug}',this)"
+                    >
+                        🗑 Sil
+                    </button>
                 </div>
             </article>
             """
@@ -403,6 +410,29 @@ def dashboard() -> HTMLResponse:
     {content}
 
     <script>
+    async function deleteProjectCard(slug, btn) {{
+        if (!confirm(
+            "Bu projeyi ve tüm dosyalarını (video, ses, görseller, " +
+            "kapaklar) kalıcı olarak silmek istediğine emin misin? " +
+            "Bu işlem geri alınamaz."
+        )) return;
+
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Siliniyor...";
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}`, {{method: "DELETE"}});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Silinemedi.");
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
+        }}
+    }}
+
     async function refreshActiveJobs() {{
         try {{
             const r = await fetch("/api/jobs/active");
@@ -851,6 +881,13 @@ def project_detail(slug: str) -> HTMLResponse:
             >
                 ▶ Devam Et
             </button>
+            <button
+                class="button secondary"
+                style="color:#b91c1c"
+                onclick="deleteProject('{escaped_slug_js}',this)"
+            >
+                🗑 Projeyi Sil
+            </button>
         </div>
 
         <div id="actionStatus" class="muted" style="margin-top:10px"></div>
@@ -903,6 +940,7 @@ def project_detail(slug: str) -> HTMLResponse:
         music_provider: "Müzik Sağlayıcı",
         subtitles_enabled: "Altyazı (.srt) Üret",
         subtitles_burn_in: "Altyazıyı Videoya Göm",
+        thumbnail_source: "Kapak Görseli Kaynağı",
     }};
 
     const STATIC_CHOICES = {{
@@ -911,6 +949,12 @@ def project_detail(slug: str) -> HTMLResponse:
         media_mode: [["mixed","Video + Fotoğraf"],["video","Sadece Video"],["image","Sadece Fotoğraf"]],
         resolution: [["720p","720p (1280x720)"],["1080p","1080p (1920x1080)"],["vertical","Dikey (1080x1920)"],["4k","4K (3840x2160)"]],
         fps: [["24","24"],["30","30"],["60","60"]],
+        thumbnail_source: [
+            ["auto","Otomatik (ücretsiz varsa onu kullan)"],
+            ["ai","Yapay Zeka (OpenAI — ücretli, 1 kapak)"],
+            ["pexels","Pexels (ücretsiz stok, 4 kapak)"],
+            ["scene","Sahne Karesi (yerel, 4 kapak)"],
+        ],
     }};
 
     const NUMERIC_FIELDS = new Set(["fps","target_duration_seconds","voice_speed"]);
@@ -1095,6 +1139,29 @@ def project_detail(slug: str) -> HTMLResponse:
             btn.disabled = false;
             btn.textContent = original;
             document.getElementById("actionStatus").textContent = "";
+        }}
+    }}
+
+    async function deleteProject(slug, btn) {{
+        if (!confirm(
+            "Bu projeyi ve tüm dosyalarını (video, ses, görseller, " +
+            "kapaklar) kalıcı olarak silmek istediğine emin misin? " +
+            "Bu işlem geri alınamaz."
+        )) return;
+
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Siliniyor...";
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}`, {{method: "DELETE"}});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Silinemedi.");
+            location.href = "/";
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
         }}
     }}
     </script>

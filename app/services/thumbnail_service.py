@@ -59,6 +59,11 @@ class ThumbnailService:
         "informational": "split_contrast",
     }
 
+    THUMBNAIL_SOURCES = {"auto", "ai", "pexels", "scene"}
+    VARIANT_NAMES = tuple(
+        f"thumbnail_{i}.png" for i in range(1, 5)
+    )
+
     def generate(self, project_path: str) -> Path:
         project_dir = Path(project_path)
         project_data = self._load_json(project_dir / "project.json")
@@ -67,16 +72,37 @@ class ThumbnailService:
         brief = self._build_brief(project_data, seo_data)
         best_frame = self._select_best_frame(project_dir)
 
+        content_type = brief["content_type"]
+        default_key = self.DEFAULT_TEMPLATE_BY_CONTENT_TYPE.get(
+            content_type, "documentary_cinematic"
+        )
+
+        requested_source = str(
+            project_data.get("thumbnail_source", "auto")
+        ).strip().lower()
+        source = self._resolve_source(requested_source)
+
+        # "ai" costs a real API call per template -- generate only the one
+        # variant that would become canonical anyway. Free sources
+        # (pexels stock search / real scene frame) still get all 4.
+        if source == "ai":
+            keys_to_generate = [default_key]
+        else:
+            keys_to_generate = list(self.TEMPLATE_ORDER)
+
+        self._clear_variant_files(project_dir)
+
         ai_tmp_dir = project_dir / "thumbnail_ai_tmp"
         raw_backgrounds: dict[str, Image.Image] = {}
 
         try:
-            for key in self.TEMPLATE_ORDER:
+            for key in keys_to_generate:
                 raw_backgrounds[key] = self._obtain_background(
-                    key, brief, best_frame, ai_tmp_dir
+                    source, key, brief, best_frame, ai_tmp_dir
                 )
 
-            for index, key in enumerate(self.TEMPLATE_ORDER, start=1):
+            for key in keys_to_generate:
+                index = self.TEMPLATE_ORDER.index(key) + 1
                 fitted = self._cover_fit(
                     raw_backgrounds[key], self.WIDTH, self.HEIGHT
                 )
@@ -87,15 +113,12 @@ class ThumbnailService:
                     format="PNG",
                 )
 
-            content_type = brief["content_type"]
-            default_key = self.DEFAULT_TEMPLATE_BY_CONTENT_TYPE.get(
-                content_type, "documentary_cinematic"
-            )
-            default_index = self.TEMPLATE_ORDER.index(default_key) + 1
+            canonical_key = keys_to_generate[0]
+            canonical_index = self.TEMPLATE_ORDER.index(canonical_key) + 1
 
             canonical = project_dir / "thumbnail.jpg"
             with Image.open(
-                project_dir / f"thumbnail_{default_index}.png"
+                project_dir / f"thumbnail_{canonical_index}.png"
             ) as selected:
                 selected.convert("RGB").save(
                     canonical, format="JPEG", quality=92
@@ -107,11 +130,11 @@ class ThumbnailService:
 
             if resolution == "vertical" or content_type == "shorts":
                 fitted_vertical = self._cover_fit(
-                    raw_backgrounds[default_key],
+                    raw_backgrounds[canonical_key],
                     self.VERTICAL_WIDTH,
                     self.VERTICAL_HEIGHT,
                 )
-                composer = getattr(self, f"_compose_{default_key}")
+                composer = getattr(self, f"_compose_{canonical_key}")
                 vertical_image = composer(
                     fitted_vertical,
                     brief,
@@ -125,7 +148,7 @@ class ThumbnailService:
                 )
 
             self._record_selected_thumbnail(
-                project_dir, f"thumbnail_{default_index}.png"
+                project_dir, f"thumbnail_{canonical_index}.png"
             )
         finally:
             shutil.rmtree(ai_tmp_dir, ignore_errors=True)
@@ -133,6 +156,32 @@ class ThumbnailService:
                 image.close()
 
         return canonical
+
+    def _resolve_source(self, requested: str) -> str:
+        if requested in ("ai", "pexels", "scene"):
+            return requested
+
+        # "auto": prefer whichever source is actually configured, in a
+        # cost-conscious order -- paid AI only if that's genuinely the
+        # only thing set up, otherwise stay free.
+        if settings.pexels_api_key:
+            return "pexels"
+
+        if settings.openai_api_key:
+            return "ai"
+
+        return "scene"
+
+    def _clear_variant_files(self, project_dir: Path) -> None:
+        """Remove leftover variants from a previous generate() call so a
+        source-mode switch (e.g. pexels's 4 variants -> ai's 1) never
+        leaves stale, mismatched files in the gallery.
+        """
+
+        for name in self.VARIANT_NAMES:
+            path = project_dir / name
+            if path.exists():
+                path.unlink()
 
     # ------------------------------------------------------------------
     # Creative brief (SEO fields -> thumbnail text/prompt inputs)
@@ -185,17 +234,18 @@ class ThumbnailService:
         return text.replace("i", "İ").replace("ı", "I").upper()
 
     # ------------------------------------------------------------------
-    # Background sourcing: AI generation with a real-frame fallback
+    # Background sourcing: paid AI / free stock search / real scene frame
     # ------------------------------------------------------------------
 
     def _obtain_background(
         self,
+        source: str,
         template_key: str,
         brief: dict[str, str],
         best_frame: Path,
         ai_tmp_dir: Path,
     ) -> Image.Image:
-        if settings.openai_api_key:
+        if source == "ai":
             try:
                 from app.providers.defaults import register_default_providers
                 from app.providers.registry import ProviderRegistry
@@ -218,8 +268,50 @@ class ThumbnailService:
                     f"({template_key}): {error} -- gerçek sahne "
                     "karesine düşülüyor."
                 )
+        elif source == "pexels":
+            try:
+                from app.providers.defaults import register_default_providers
+                from app.providers.registry import ProviderRegistry
+
+                register_default_providers()
+                provider = ProviderRegistry.create("image", "pexels")
+                query = self._build_pexels_query(template_key, brief)
+
+                paths = provider.get_images(
+                    query,
+                    ai_tmp_dir,
+                    limit=1,
+                    orientation="landscape",
+                )
+                return Image.open(paths[0]).convert("RGB")
+            except Exception as error:
+                print(
+                    f"[ThumbnailService] Pexels stok görseli bulunamadı "
+                    f"({template_key}): {error} -- gerçek sahne "
+                    "karesine düşülüyor."
+                )
 
         return Image.open(best_frame).convert("RGB")
+
+    def _build_pexels_query(
+        self,
+        template_key: str,
+        brief: dict[str, str],
+    ) -> str:
+        """Pexels is keyword search, not a generative prompt -- a short
+        phrase works far better than the descriptive AI prompt.
+        """
+
+        mood_by_template = {
+            "split_contrast": "contrast",
+            "mystery_focus": "dark moody",
+            "documentary_cinematic": "cinematic",
+            "breaking_discovery": "dramatic",
+        }
+        mood = mood_by_template.get(template_key, "")
+        subject = brief["main_subject"]
+
+        return f"{subject} {mood}".strip()
 
     def _build_ai_prompt(
         self,

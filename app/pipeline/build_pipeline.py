@@ -37,6 +37,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "subtitles_enabled",
         "subtitles_burn_in",
     },
+    "thumbnail": {"thumbnail_source"},
 }
 
 
@@ -65,6 +66,7 @@ class BuildPipeline:
         subtitles_enabled: bool = False,
         subtitles_burn_in: bool = False,
         thumbnail_enabled: bool = False,
+        thumbnail_source: str = "auto",
         template: str | None = None,
     ) -> Path:
         """Create a configured project and run all pipeline stages."""
@@ -99,6 +101,7 @@ class BuildPipeline:
             subtitles_enabled=subtitles_enabled,
             subtitles_burn_in=subtitles_burn_in,
             thumbnail_enabled=thumbnail_enabled,
+            thumbnail_source=thumbnail_source,
         )
 
         project_service = ProjectService()

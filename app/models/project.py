@@ -35,6 +35,13 @@ class DocumentaryProject:
         "4k": (3840, 2160),
     }
 
+    THUMBNAIL_SOURCES: ClassVar[set[str]] = {
+        "auto",
+        "ai",
+        "pexels",
+        "scene",
+    }
+
     title: str
     language: str = "tr"
     content_type: str = "documentary"
@@ -58,6 +65,7 @@ class DocumentaryProject:
     subtitles_enabled: bool = False
     subtitles_burn_in: bool = False
     thumbnail_enabled: bool = False
+    thumbnail_source: str = "auto"
 
     status: str = "created"
     created_at: str = ""
@@ -77,6 +85,7 @@ class DocumentaryProject:
 
         self.resolution = str(self.resolution).strip().lower()
         self.music_track = str(self.music_track).strip()
+        self.thumbnail_source = str(self.thumbnail_source).strip().lower()
         self.status = str(self.status).strip().lower()
 
         self.target_duration_seconds = int(
@@ -148,6 +157,12 @@ class DocumentaryProject:
 
         if not 15 <= self.fps <= 60:
             raise ValueError("FPS must be between 15 and 60.")
+
+        if self.thumbnail_source not in self.THUMBNAIL_SOURCES:
+            raise ValueError(
+                f"Invalid thumbnail source: {self.thumbnail_source}. "
+                f"Allowed: {sorted(self.THUMBNAIL_SOURCES)}"
+            )
 
         if not self.status:
             raise ValueError("Project status cannot be empty.")
@@ -254,6 +269,9 @@ class DocumentaryProject:
             ),
             thumbnail_enabled=bool(
                 data.get("thumbnail_enabled", False)
+            ),
+            thumbnail_source=str(
+                data.get("thumbnail_source", "auto")
             ),
             status=str(data.get("status", "created")),
             created_at=str(data.get("created_at", "")),
