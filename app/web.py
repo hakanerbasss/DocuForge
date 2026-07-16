@@ -233,6 +233,12 @@ def page(title: str, body: str) -> HTMLResponse:
             color: #1e3a62;
         }}
 
+        .button:disabled,
+        button:disabled {{
+            opacity: .55;
+            cursor: not-allowed;
+        }}
+
         .buttons {{
             display: flex;
             flex-wrap: wrap;
