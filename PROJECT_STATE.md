@@ -20,11 +20,12 @@ Proje hiçbir Instagram botuna, haber botuna veya harici çalışan kişisel ser
 4. Image Prompts
 5. Video Prompts
 6. Narration
-7. Media Builder
-8. Scene Narrations
-9. Voice Generation
-10. FFmpeg Render
-11. Thumbnail (opsiyonel, `thumbnail_enabled` ise çalışır)
+7. SEO Metadata (başlık önerileri, açıklama, etiketler)
+8. Media Builder
+9. Scene Narrations
+10. Voice Generation
+11. FFmpeg Render
+12. Thumbnail (opsiyonel, `thumbnail_enabled` ise çalışır)
 
 ### Çalışan özellikler
 
@@ -172,7 +173,8 @@ stub/mock provider'larla izole test edildi:
 - Piper ses temizleme / normalizasyon / mastering
 - XTTS referans ses yükleme arayüzü
 - Thumbnail düzenleme (arayüzden başlık değiştirme vb.)
-- Başlık, açıklama ve etiket (SEO) üretimi — **not: `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hiç okumuyor, sadece storyboard metniyle Pexels'te arıyor. Bu prompt'lar şu an tamamen kullanılmıyor — bir AI görsel/video üretim aracı eklenirse buraya bağlanmalı.**
+- ~~Başlık, açıklama ve etiket (SEO) üretimi~~ ✅ tamamlandı — `SEOAgent`, `seo.json`, proje detay sayfasında gösteriliyor
+- `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hiç okumuyor, sadece storyboard metniyle Pexels'te arıyor. Bu prompt'lar şu an tamamen kullanılmıyor — bir AI görsel/video üretim aracı eklenirse buraya bağlanmalı (bkz. aşağıdaki "Ek görsel/video üretim araçları" bölümü).
 - YouTube yükleme
 - Instagram/Reels sürümü
 - Kalıcı iş kuyruğu (şu an per-request thread + disk üzerinde JSON; gerçek bir queue değil)
@@ -220,9 +222,9 @@ resolution/FPS hepsi arayüzde var VE gerçekten project.json + pipeline davran�
 
 1. ~~Thumbnail~~ ✅ tamamlandı
 2. Altyazı — ✅ sidecar SRT tamamlandı, burn-in henüz yok
-3. Başlık — yok
-4. Açıklama — yok
-5. Etiketler — yok
+3. ~~Başlık~~ ✅ SEOAgent 3 başlık önerisi üretiyor
+4. ~~Açıklama~~ ✅ SEOAgent üretiyor
+5. ~~Etiketler~~ ✅ SEOAgent 10-20 etiket üretiyor
 6. Chapters — yok
 7. YouTube yükleme — yok
 

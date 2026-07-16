@@ -2,7 +2,7 @@
 
 > AI-powered documentary/shorts/news video production platform.
 
-DocuForge turns a topic into a finished MP4 through a single 10-stage pipeline:
+DocuForge turns a topic into a finished MP4 through a single 11-stage pipeline:
 
 1. Research
 2. Script
@@ -10,12 +10,13 @@ DocuForge turns a topic into a finished MP4 through a single 10-stage pipeline:
 4. Image Prompts
 5. Video Prompts
 6. Narration
-7. Media Builder (Pexels image/video download)
-8. Scene Narrations
-9. Voice Generation (TTS)
-10. FFmpeg Render
+7. SEO Metadata (title suggestions, description, tags)
+8. Media Builder (Pexels image/video download)
+9. Scene Narrations
+10. Voice Generation (TTS)
+11. FFmpeg Render
 
-An optional 11th stage (**Thumbnail**) runs when enabled on the project.
+An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 ---
 
@@ -34,6 +35,7 @@ An optional 11th stage (**Thumbnail**) runs when enabled on the project.
 - ✅ Background music: if `background_music_enabled` is set and an audio file exists in `projects/<slug>/music/` (or an explicit `music_track` path), it's looped/trimmed to the video length, mixed in below narration volume, and faded out
 - ✅ Subtitles: if `subtitles_enabled` is set, a scene-timed `subtitles.srt` is written next to the final video (sidecar only — not burned into the video yet)
 - ✅ Thumbnail: if `thumbnail_enabled` is set, a 1280x720 YouTube thumbnail is generated from a scene frame with a title overlay (plus a 1080x1920 cover for shorts/vertical projects) — pure FFmpeg, no extra dependency
+- ✅ SEO Metadata: `seo.json` with 3 title suggestions, a full description, and 10-20 tags, generated from the finished script and shown on the project detail page
 - ✅ FastAPI web panel (not Flask): project list (with a "+ Yeni Proje" link), project detail with a video player, thumbnail preview, subtitle download, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
 - ✅ Per-stage regenerate from the web UI: each stage has its own "Yeniden Üret" button that invalidates that stage plus everything downstream of it and regenerates just that stage immediately, so you can review it before continuing with "▶ Devam Et"
 - ✅ Job state survives a web service restart: builds *and* per-stage regenerations are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing
@@ -44,7 +46,7 @@ An optional 11th stage (**Thumbnail**) runs when enabled on the project.
 - ❌ Subtitle burn-in (currently sidecar `.srt` only)
 - ❌ Piper crackle/audio-quality cleanup (loudnorm, crossfade, DC offset)
 - ❌ A second image/video provider (only Pexels exists today, so `image_provider`/`video_provider` have nothing else to select) — and `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) are generated but **never consumed** by MediaBuilder, which only ever searches Pexels using the storyboard's scene descriptions. Wiring an AI image/video generator to those prompts is still open.
-- ❌ Title/description/tag/SEO generation, YouTube upload
+- ❌ YouTube upload (SEO metadata is generated but nothing pushes it or the video to YouTube)
 
 ---
 
