@@ -109,15 +109,165 @@ class BuildPipeline:
 
         return self._run_pipeline(project_dir)
 
-    def _run_pipeline(self, project_dir: Path) -> Path:
-        """Run AI-agent and production-service stages in order."""
+    def regenerate_step(
+        self,
+        project_path: str,
+        step_key: str,
+    ) -> Path:
+        """Re-run a single stage, invalidating everything downstream of it.
+
+        Downstream output files are deleted so a later resume() naturally
+        regenerates them; this step itself is generated immediately so the
+        caller can review it before continuing.
+        """
+
+        project_dir = Path(project_path)
+
+        if not (project_dir / "project.json").exists():
+            raise FileNotFoundError(
+                f"project.json not found in: {project_dir}"
+            )
 
         project_data = load_project(str(project_dir))
         state = self._load_state(project_dir)
-        total_start = time.perf_counter()
 
         agent_steps = get_default_pipeline_steps()
+        service_steps = self._build_service_steps(
+            project_dir,
+            project_data,
+        )
 
+        agent_step_by_key = {step.key: step for step in agent_steps}
+        service_step_by_key = {
+            step["key"]: step for step in service_steps
+        }
+
+        ordered_keys = [step.key for step in agent_steps] + [
+            step["key"] for step in service_steps
+        ]
+
+        if step_key not in ordered_keys:
+            raise ValueError(f"Unknown pipeline step: {step_key}")
+
+        step_index = ordered_keys.index(step_key)
+        downstream_keys = ordered_keys[step_index + 1:]
+
+        for key in downstream_keys:
+            self._invalidate_step(
+                project_dir=project_dir,
+                state=state,
+                step_key=key,
+                agent_step_by_key=agent_step_by_key,
+                service_step_by_key=service_step_by_key,
+                is_target=False,
+            )
+
+        self._invalidate_step(
+            project_dir=project_dir,
+            state=state,
+            step_key=step_key,
+            agent_step_by_key=agent_step_by_key,
+            service_step_by_key=service_step_by_key,
+            is_target=True,
+        )
+
+        state["status"] = "running"
+        self._save_state(project_dir, state)
+
+        console.print(
+            f"[bold cyan]🔁 Regenerating step:[/bold cyan] "
+            f"{step_key}\n"
+        )
+
+        if step_key in agent_step_by_key:
+            definition = get_agent_definition(step_key)
+            self._run_agent_step(
+                index=1,
+                total_steps=1,
+                step=agent_step_by_key[step_key],
+                definition=definition,
+                project_dir=project_dir,
+                project_data=project_data,
+                state=state,
+            )
+        else:
+            self._run_service_step(
+                index=1,
+                total_steps=1,
+                step=service_step_by_key[step_key],
+                project_dir=project_dir,
+                state=state,
+            )
+
+        return project_dir
+
+    def _invalidate_step(
+        self,
+        *,
+        project_dir: Path,
+        state: dict[str, Any],
+        step_key: str,
+        agent_step_by_key: dict[str, Any],
+        service_step_by_key: dict[str, Any],
+        is_target: bool,
+    ) -> None:
+        """Delete a step's output (or reset it) and drop it from state.
+
+        `voice` is a special case: its registered output file
+        (audio/manifest.json) is also narration_scenes' output and is read
+        as VoiceService's *input*. When voice is the step being
+        regenerated directly, reset its per-scene status instead of
+        deleting the manifest outright, so VoiceService still has
+        somewhere to read scene text from.
+        """
+
+        if step_key == "voice" and is_target:
+            self._reset_voice_manifest(project_dir)
+        else:
+            if step_key in agent_step_by_key:
+                definition = get_agent_definition(step_key)
+                output_path = project_dir / definition.output_file
+            else:
+                output_path = Path(
+                    service_step_by_key[step_key]["output"]
+                )
+
+            if output_path.exists():
+                output_path.unlink()
+
+        state.get("steps", {}).pop(step_key, None)
+
+    def _reset_voice_manifest(self, project_dir: Path) -> None:
+        """Mark every scene as needing new audio without losing scene text."""
+
+        manifest_path = project_dir / "audio" / "manifest.json"
+        manifest = self._try_load_json(manifest_path)
+
+        if manifest is None:
+            return
+
+        scenes = manifest.get("scenes")
+
+        if isinstance(scenes, list):
+            for scene in scenes:
+                if isinstance(scene, dict):
+                    scene["status"] = "text_ready"
+                    scene["audio_duration"] = None
+
+        manifest_path.write_text(
+            json.dumps(
+                manifest,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _build_service_steps(
+        self,
+        project_dir: Path,
+        project_data: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         service_steps: list[dict[str, Any]] = [
             {
                 "key": "media",
@@ -204,6 +354,21 @@ class BuildPipeline:
                     project_dir / "thumbnail.jpg"
                 ).exists(),
             })
+
+        return service_steps
+
+    def _run_pipeline(self, project_dir: Path) -> Path:
+        """Run AI-agent and production-service stages in order."""
+
+        project_data = load_project(str(project_dir))
+        state = self._load_state(project_dir)
+        total_start = time.perf_counter()
+
+        agent_steps = get_default_pipeline_steps()
+        service_steps = self._build_service_steps(
+            project_dir,
+            project_data,
+        )
 
         total_steps = len(agent_steps) + len(service_steps)
 

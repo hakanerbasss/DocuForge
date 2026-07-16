@@ -3,6 +3,7 @@ from app.providers.voice.supertonic import (
 )
 from app.ai.deepseek import DeepSeekProvider
 from app.providers.voice.piper import PiperVoiceProvider
+from app.providers.voice.xtts import XTTSVoiceProvider
 from app.providers.image.pexels import PexelsImageProvider
 from app.providers.registry import ProviderRegistry
 from app.providers.video.pexels import PexelsVideoProvider
@@ -72,4 +73,12 @@ def register_default_providers() -> None:
             key="supertonic",
             name="Supertonic",
             factory=SupertonicVoiceProvider,
+        )
+
+    if ("voice", "xtts") not in registered:
+        ProviderRegistry.register(
+            category="voice",
+            key="xtts",
+            name="XTTS Voice Clone",
+            factory=XTTSVoiceProvider,
         )

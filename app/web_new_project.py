@@ -253,6 +253,7 @@ button:disabled{opacity:.6;cursor:wait}
 <option value="supertonic" selected>Supertonic</option>
 <option value="piper">Piper</option>
 <option value="espeak">eSpeak</option>
+<option value="xtts">XTTS (Klon Sesim)</option>
 </select>
 </div>
 <div>
@@ -330,6 +331,8 @@ function onProviderChange(){
     ["M1","M2","M3","F1","F2","F3"].forEach(v=>{
       const o=document.createElement("option");o.value=v;o.textContent=v;n.appendChild(o);
     });
+  } else if(p==="xtts"){
+    const o=document.createElement("option");o.value="clone";o.textContent="Klon Sesim";n.appendChild(o);
   } else {
     const o=document.createElement("option");o.value="default";o.textContent="Varsay\u0131lan";n.appendChild(o);
   }
