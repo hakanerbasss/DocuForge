@@ -355,11 +355,14 @@ def dashboard() -> HTMLResponse:
             / "final_video.mp4"
         )
 
-        video_badge = (
-            '<span class="badge success">🎬 Video hazır</span>'
-            if final_video.exists()
-            else '<span class="badge warning">⏳ Video yok</span>'
-        )
+        if final_video.exists():
+            video_size_mb = final_video.stat().st_size / (1024 * 1024)
+            video_badge = (
+                f'<span class="badge success">🎬 Video hazır '
+                f'({video_size_mb:.1f} MB)</span>'
+            )
+        else:
+            video_badge = '<span class="badge warning">⏳ Video yok</span>'
 
         escaped_slug = quote(project_dir.name)
 
@@ -538,9 +541,11 @@ def project_detail(slug: str) -> HTMLResponse:
     """
 
     if final_video.exists():
+        video_size_mb = final_video.stat().st_size / (1024 * 1024)
+
         video_section = f"""
         <section class="card">
-            <h2>Final video</h2>
+            <h2>Final video <span class="muted" style="font-weight:400;font-size:15px">({video_size_mb:.1f} MB)</span></h2>
 
             <video controls preload="metadata">
                 <source
@@ -555,7 +560,7 @@ def project_detail(slug: str) -> HTMLResponse:
                     href="/files/{quote(project_dir.name)}/render/final_video.mp4"
                     download
                 >
-                    Videoyu İndir
+                    Videoyu İndir ({video_size_mb:.1f} MB)
                 </a>
             </div>
         </section>
