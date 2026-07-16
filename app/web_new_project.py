@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from app.pipeline.build_pipeline import BuildPipeline
+from app.pipeline.build_pipeline import STEP_ALLOWED_OVERRIDES, BuildPipeline
 from app.services.project_service import ProjectService
 
 
@@ -50,7 +50,12 @@ class BuildRequest(BaseModel):
     fps: int = Field(default=30)
     background_music_enabled: bool = Field(default=False)
     subtitles_enabled: bool = Field(default=False)
+    subtitles_burn_in: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
+
+
+class RegenerateRequest(BaseModel):
+    overrides: dict[str, Any] = Field(default_factory=dict)
 
 
 
@@ -97,6 +102,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 fps=req["fps"],
                 background_music_enabled=req["background_music_enabled"],
                 subtitles_enabled=req["subtitles_enabled"],
+                subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
             )
         with JOBS_LOCK:
@@ -120,6 +126,7 @@ def _execute_regenerate(
     job_id: str,
     project_dir: Path,
     step_key: str,
+    overrides: dict[str, Any] | None = None,
 ) -> None:
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
@@ -128,6 +135,7 @@ def _execute_regenerate(
         result_dir = BuildPipeline().regenerate_step(
             str(project_dir),
             step_key,
+            overrides=overrides,
         )
         with JOBS_LOCK:
             JOBS[job_id].update({
@@ -175,7 +183,7 @@ def _recover_jobs_from_disk() -> None:
 
             thread = threading.Thread(
                 target=_execute_regenerate,
-                args=(job_id, project_dir, step_key),
+                args=(job_id, project_dir, step_key, job.get("overrides")),
                 daemon=True,
             )
         else:
@@ -228,7 +236,9 @@ button:disabled{opacity:.6;cursor:wait}
 </head>
 <body>
 <header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><a class="back" href="/">\u2190 Projelere d\u00f6n</a><a class="back" href="/settings">\u2699 Ayarlar</a></div></header>
-<main><section class="card">
+<main>
+<div id="activeJobBanner"></div>
+<section class="card">
 <h1>Yeni Proje</h1>
 <p class="muted">Konuyu ve ayarlar\u0131 se\u00e7. DocuForge ara\u015ft\u0131rma, senaryo, medya, seslendirme ve videoyu otomatik haz\u0131rlas\u0131n.</p>
 
@@ -349,10 +359,16 @@ Arka plan m\u00fczi\u011fi ekle
 <div class="hint">\u00dcretim s\u0131ras\u0131nda <code>projects/&lt;proje&gt;/music/</code> klas\u00f6r\u00fcne bir mp3/wav dosyas\u0131 koy (render a\u015famas\u0131na kadar vaktin var); yoksa m\u00fczik olmadan devam eder.</div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
-<input type="checkbox" id="subtitles_enabled" style="width:auto;min-height:auto">
+<input type="checkbox" id="subtitles_enabled" style="width:auto;min-height:auto" onchange="onSubtitlesToggle()">
 Altyaz\u0131 (.srt) olu\u015ftur
 </label>
-<div class="hint">Sahne bazl\u0131 zamanlamal\u0131 .srt dosyas\u0131 render klas\u00f6r\u00fcne yaz\u0131l\u0131r (hen\u00fcz videoya g\u00f6m\u00fclm\u00fcyor).</div>
+<div class="hint">Sahne bazl\u0131 zamanlamal\u0131 .srt dosyas\u0131 render klas\u00f6r\u00fcne yaz\u0131l\u0131r.</div>
+
+<label id="burnInLabel" style="display:none;align-items:center;gap:8px;font-weight:400;margin-top:10px;margin-left:22px">
+<input type="checkbox" id="subtitles_burn_in" style="width:auto;min-height:auto">
+Altyaz\u0131y\u0131 videoya g\u00f6m (burn-in)
+</label>
+<div id="burnInHint" class="hint" style="display:none;margin-left:22px">\u0130\u015faretlenmezse .srt ayr\u0131 dosya olarak kal\u0131r, video \u00fcst\u00fcnde g\u00f6r\u00fcnmez.</div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
 <input type="checkbox" id="thumbnail_enabled" style="width:auto;min-height:auto">
@@ -373,6 +389,35 @@ Kapak g\u00f6rseli (thumbnail) olu\u015ftur
 <script>
 let pollTimer=null;
 
+async function checkActiveJobs(){
+  try{
+    const r=await fetch("/api/jobs/active");
+    const data=await r.json();
+    const banner=document.getElementById("activeJobBanner");
+    if(!data.jobs||data.jobs.length===0){banner.innerHTML="";return;}
+    const rows=data.jobs.map(job=>{
+      const pct=Math.max(4,Math.min(100,Number(job.progress_percent||4)));
+      const label=job.current_step||"Başlatılıyor...";
+      const link=job.project_slug?`<a class="button secondary" href="/projects/${job.project_slug}">Projeyi Aç</a>`:"";
+      return `<div style="padding:10px 0;border-bottom:1px solid #edf1f6">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+          <strong>${job.topic||job.project_slug||"Proje"}</strong>${link}
+        </div>
+        <div class="progress"><div style="width:${pct}%"></div></div>
+        <div class="muted" style="font-size:13px;margin-top:4px">${job.completed_steps}/${job.total_steps} · ${label}</div>
+      </div>`;
+    }).join("");
+    banner.innerHTML=`<section class="card" style="margin-bottom:18px">
+      <h2 style="margin-bottom:10px">⏳ Devam eden üretim${data.jobs.length>1?"ler":""}</h2>
+      <p class="muted" style="margin-bottom:6px">Bu sırada yeni bir proje de başlatabilirsin, ikisi birbirini etkilemez.</p>
+      ${rows}
+    </section>`;
+  }catch(e){/* sessizce yut */}
+}
+
+checkActiveJobs();
+setInterval(checkActiveJobs,4000);
+
 function onTypeChange(){
   const t=document.getElementById("content_type").value;
   const d=document.getElementById("duration");
@@ -390,6 +435,15 @@ function updateHint(){
   const m=Math.floor(s/60),sec=s%60;
   document.getElementById("durationHint").textContent=
     m>0?(sec>0?`~${m} dk ${sec} sn`:`~${m} dakika`):`${s} saniye`;
+}
+
+function onSubtitlesToggle(){
+  const on=document.getElementById("subtitles_enabled").checked;
+  const label=document.getElementById("burnInLabel");
+  const hint=document.getElementById("burnInHint");
+  label.style.display=on?"flex":"none";
+  hint.style.display=on?"block":"none";
+  if(!on)document.getElementById("subtitles_burn_in").checked=false;
 }
 
 function onProviderChange(){
@@ -437,6 +491,7 @@ async function startBuild(){
     fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:document.getElementById("background_music_enabled").checked,
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
+    subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
   };
 
@@ -558,7 +613,11 @@ def resume_project(slug: str) -> dict[str, Any]:
 
 
 @router.post("/api/projects/{slug}/regenerate/{step_key}")
-def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
+def regenerate_project_step(
+    slug: str,
+    step_key: str,
+    request: RegenerateRequest = RegenerateRequest(),
+) -> dict[str, Any]:
     project_dir = PROJECTS_ROOT / slug
 
     if not (project_dir / "project.json").exists():
@@ -572,6 +631,20 @@ def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
             detail=f"Geçersiz aşama: {step_key}",
         )
 
+    overrides = request.overrides
+    allowed = STEP_ALLOWED_OVERRIDES.get(step_key, set())
+    unknown = set(overrides) - allowed
+
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{step_key}' aşaması şu ayarları kabul etmiyor: "
+                f"{', '.join(sorted(unknown))}. "
+                f"İzin verilenler: {', '.join(sorted(allowed)) or '(yok)'}"
+            ),
+        )
+
     job_id = uuid.uuid4().hex
 
     with JOBS_LOCK:
@@ -580,6 +653,7 @@ def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
             "status": "queued",
             "kind": "regenerate",
             "step_key": step_key,
+            "overrides": overrides,
             "topic": slug,
             "project_slug": slug,
             "project_path": str(project_dir),
@@ -589,7 +663,7 @@ def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
 
     thread = threading.Thread(
         target=_execute_regenerate,
-        args=(job_id, project_dir, step_key),
+        args=(job_id, project_dir, step_key, overrides),
         daemon=True,
     )
     thread.start()
@@ -654,6 +728,53 @@ def compute_pipeline_progress(
             if total_steps
             else 0
         ),
+    }
+
+
+@router.get("/api/projects/{slug}/step-options/{step_key}")
+def step_options(slug: str, step_key: str) -> dict[str, Any]:
+    """What can be changed before regenerating this step, and its current values.
+
+    Drives the "Yeniden Üret" form on the project page: which fields are
+    editable for this step (per STEP_ALLOWED_OVERRIDES), their current
+    project.json values, and -- for provider fields -- the choices
+    actually registered right now (so a newly added provider shows up
+    with no frontend change needed).
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    allowed = STEP_ALLOWED_OVERRIDES.get(step_key, set())
+    project_data = load_json(project_dir / "project.json")
+    current = {field: project_data.get(field) for field in allowed}
+
+    from app.providers.defaults import register_default_providers
+    from app.providers.registry import ProviderRegistry
+
+    register_default_providers()
+
+    choices: dict[str, list[dict[str, str]]] = {}
+    provider_categories = {
+        "voice_provider": "voice",
+        "image_provider": "image",
+        "video_provider": "video",
+    }
+
+    for field, category in provider_categories.items():
+        if field in allowed:
+            choices[field] = [
+                {"key": definition.key, "name": definition.name}
+                for definition in ProviderRegistry.all(category=category)
+            ]
+
+    return {
+        "step_key": step_key,
+        "allowed_fields": sorted(allowed),
+        "current": current,
+        "choices": choices,
     }
 
 

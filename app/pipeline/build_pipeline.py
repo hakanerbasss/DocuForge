@@ -22,6 +22,22 @@ from app.services.voice_service import VoiceService
 
 console = Console()
 
+# Which project.json fields may be changed when regenerating a given step.
+# Keeps "regenerate with different settings" from silently accepting an
+# override that a step's action doesn't actually read.
+STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
+    "research": {"language", "content_type", "target_duration_seconds"},
+    "voice": {"voice_provider", "voice_name", "voice_speed"},
+    "media": {"image_provider", "video_provider", "media_mode"},
+    "render": {
+        "resolution",
+        "fps",
+        "background_music_enabled",
+        "subtitles_enabled",
+        "subtitles_burn_in",
+    },
+}
+
 
 class BuildPipeline:
     """Run and resume the complete DocuForge production pipeline."""
@@ -45,6 +61,7 @@ class BuildPipeline:
         fps: int = 30,
         background_music_enabled: bool = False,
         subtitles_enabled: bool = False,
+        subtitles_burn_in: bool = False,
         thumbnail_enabled: bool = False,
         template: str | None = None,
     ) -> Path:
@@ -77,6 +94,7 @@ class BuildPipeline:
             fps=fps,
             background_music_enabled=background_music_enabled,
             subtitles_enabled=subtitles_enabled,
+            subtitles_burn_in=subtitles_burn_in,
             thumbnail_enabled=thumbnail_enabled,
         )
 
@@ -113,12 +131,20 @@ class BuildPipeline:
         self,
         project_path: str,
         step_key: str,
+        overrides: dict[str, Any] | None = None,
     ) -> Path:
         """Re-run a single stage, invalidating everything downstream of it.
 
         Downstream output files are deleted so a later resume() naturally
         regenerates them; this step itself is generated immediately so the
         caller can review it before continuing.
+
+        `overrides` lets the caller change the project settings that
+        matter for this specific step (e.g. voice_name when regenerating
+        "voice") before it runs -- persisted to project.json, not just
+        used for this one call. Only fields listed in
+        STEP_ALLOWED_OVERRIDES[step_key] are accepted; anything else
+        raises, since a step's action wouldn't read it anyway.
         """
 
         project_dir = Path(project_path)
@@ -127,6 +153,9 @@ class BuildPipeline:
             raise FileNotFoundError(
                 f"project.json not found in: {project_dir}"
             )
+
+        if overrides:
+            self._apply_overrides(project_dir, step_key, overrides)
 
         project_data = load_project(str(project_dir))
         state = self._load_state(project_dir)
@@ -200,6 +229,31 @@ class BuildPipeline:
             )
 
         return project_dir
+
+    def _apply_overrides(
+        self,
+        project_dir: Path,
+        step_key: str,
+        overrides: dict[str, Any],
+    ) -> None:
+        allowed = STEP_ALLOWED_OVERRIDES.get(step_key, set())
+        unknown = set(overrides) - allowed
+
+        if unknown:
+            raise ValueError(
+                f"Step '{step_key}' does not accept overrides for: "
+                f"{', '.join(sorted(unknown))}. "
+                f"Allowed: {', '.join(sorted(allowed)) or '(none)'}"
+            )
+
+        project_service = ProjectService()
+        project = project_service.load(project_dir)
+
+        data = project.to_dict()
+        data.update(overrides)
+
+        updated_project = DocumentaryProject.from_dict(data)
+        project_service.save(project_dir, updated_project)
 
     def _invalidate_step(
         self,

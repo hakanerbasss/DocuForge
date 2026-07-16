@@ -164,12 +164,14 @@ stub/mock provider'larla izole test edildi:
 - Sahne ve medya düzenleme
 - Müzik dosyası yükleme arayüzü (şu an SSH ile `music/` klasörüne manuel kopyalama gerekiyor)
 - XTTS referans ses dosyasının kendisini yükleme arayüzü (yolu artık `/settings`'ten girilebiliyor ama dosyanın kendisini upload etme yok — sunucuya SSH ile konması gerekiyor)
+- **Yeniden Üret'te ayar değiştirme eklendi** — kullanıcı "sesi/görseli/dili beğenmezsem değiştirebilmeliyim" dedi. Artık `research` (dil/içerik türü/süre), `voice` (sağlayıcı/isim/hız), `media` (görsel/video sağlayıcı), `render` (çözünürlük/fps/müzik/altyazı/burn-in) aşamalarını yeniden üretirken ayarları değiştirebiliyorsun — "Yeniden Üret" butonu artık önce ilgili ayarları gösteren bir form açıyor. `GET /api/projects/{slug}/step-options/{step_key}` hangi alanların değişebileceğini ve mevcut değerleri dönüyor.
+- **Altyazı burn-in eklendi** — `subtitles_burn_in` ayarı, ffmpeg'in `subtitles` filtresiyle (libass) videoya gerçekten gömüyor. **Test edilmedi** — bu container'da gerçek ffmpeg/libass yok, sadece komut kurulumu doğrulandı. VPS'de gerçek bir video ile denenmeli.
+- **`/new` ve ana sayfa artık aktif işleri gösteriyor** — kullanıcı "üretim başlatıp sayfa değiştirince kayboluyor" diye bildirdi. `journalctl` logu incelendi: üretim ASLA durmamış, sadece hiçbir yerde görünmüyordu. `GET /api/jobs/active` artık her iki sayfada da 4 saniyede bir poll ediliyor.
 
 ---
 
 ## Henüz yapılmayan ana özellikler
 
-- Altyazının videoya burn-in edilmesi (şu an sadece sidecar .srt)
 - Otomatik ducking (şu an sabit düşük seviye, sidechain compress değil)
 - Piper ses temizleme / normalizasyon / mastering
 - XTTS referans ses yükleme arayüzü

@@ -191,6 +191,30 @@ instead of deleting the manifest, so the scene text survives and only the audio 
 redone. Regenerating anything *upstream* of `voice` (e.g. `script`) still deletes the
 manifest outright, since `narration_scenes` will recreate it from scratch anyway.
 
+### Regenerating with different settings
+
+`regenerate_step(project_path, step_key, overrides=None)` applies `overrides` to
+`project.json` *before* the invalidate/regenerate sequence above, so "I don't like this
+voice, try a different one" doesn't require a whole new project. `STEP_ALLOWED_OVERRIDES`
+(module-level dict in `build_pipeline.py`) is the single source of truth for which
+fields are safe to change per step — `research` (language/content_type/duration, since
+changing these should cascade through the whole downstream chain anyway), `voice`
+(provider/name/speed), `media` (image_provider/video_provider/media_mode), `render`
+(resolution/fps/background_music_enabled/subtitles_enabled/subtitles_burn_in). Anything
+not in that set is rejected with `ValueError` (surfaced as HTTP 400 from the web layer)
+rather than silently ignored, since a step's action wouldn't read an unlisted field
+anyway. `_apply_overrides` round-trips through `DocumentaryProject.from_dict()`, so
+invalid values (e.g. an unregistered voice_provider) fail with the model's own
+validation message, not a confusing downstream crash.
+
+`GET /api/projects/{slug}/step-options/{step_key}` exposes this to the frontend:
+allowed fields, their current values, and — for provider fields — the choices actually
+registered in `ProviderRegistry` right now (so a newly added provider needs no frontend
+change to show up). The project page's "Yeniden Üret" button fetches this first; if
+`allowed_fields` is non-empty it renders a small form (select for provider/enum fields,
+checkbox for booleans, number/text otherwise) before submitting
+`POST .../regenerate/{step_key}` with `{"overrides": {...}}`.
+
 ---
 
 # Web Layer
@@ -286,14 +310,22 @@ systemctl restart docuforge-web
 
 # Known Gaps
 
-- Subtitles are sidecar `.srt` only — not burned into the video.
+- Subtitle burn-in (`_burn_in_subtitles`, the `subtitles` ffmpeg filter via libass) has
+  not been run against a real ffmpeg/libass install in this codebase — verified only by
+  inspecting the constructed command. No `FontName` is forced in `force_style`
+  deliberately (letting fontconfig resolve a default is more portable than guessing a
+  font file's internal family name), but that also means Turkish characters' rendering
+  quality depends on whatever fontconfig picks on the server.
 - Piper output has known crackle between sentences; no audio-cleanup pass
   (loudnorm/highpass/crossfade) has been added yet — needs validation against real
   audio before changing.
-- Only one image/video provider (Pexels) exists, so provider selection is currently a
-  no-op in practice — and `image_prompts.json`/`video_prompts.json` are generated but
-  never read by anything.
-- No title/description/tag/SEO generation stage.
-- XTTS reference audio must already exist on disk (env var or `models/xtts/reference.wav`)
-  — there's no upload flow from the web UI yet, unlike the Instagram bot's admin API for
-  managing its reference recording.
+- None of the new AI generation providers (DALL-E, Imagen, Veo, fal.ai) have been
+  exercised against live traffic — verified against documented API shapes with mocked
+  HTTP only.
+- XTTS reference audio must already exist on disk (configured via `/settings` or
+  `XTTS_REFERENCE_AUDIO`) — there's no upload flow for the audio file itself, unlike the
+  Instagram bot's admin API for managing its reference recording.
+- `STEP_ALLOWED_OVERRIDES` only covers research/voice/media/render. Regenerating
+  script/storyboard/images/videos/narration/seo/thumbnail always reuses the existing
+  settings verbatim — there was no clearly "editable" setting for those to expose yet
+  (e.g. a custom instruction/prompt override for script would be a reasonable follow-up).

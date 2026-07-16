@@ -550,11 +550,18 @@ def project_detail(slug: str) -> HTMLResponse:
     subtitles_section = ""
 
     if subtitles_path.exists():
+        burned_in = bool(project.get("subtitles_burn_in"))
+        burn_in_note = (
+            "Altyazı videoya gömüldü (final videoyu izlediğinde görünür)."
+            if burned_in
+            else "Sahne bazlı zamanlamalı .srt dosyası (videoya gömülü değil, ayrı dosya)."
+        )
+
         subtitles_section = f"""
         <section class="card">
             <h2>Altyazı</h2>
             <p class="muted">
-                Sahne bazlı zamanlamalı .srt dosyası (henüz videoya gömülmüyor).
+                {burn_in_note}
             </p>
             <div class="buttons">
                 <a
@@ -761,6 +768,101 @@ def project_detail(slug: str) -> HTMLResponse:
     </section>
 
     <script>
+    const FIELD_LABELS_TR = {{
+        voice_provider: "Ses Sağlayıcı",
+        voice_name: "Ses",
+        voice_speed: "Konuşma Hızı",
+        image_provider: "Görsel Sağlayıcı",
+        video_provider: "Video Sağlayıcı",
+        media_mode: "Medya Modu",
+        language: "Dil",
+        content_type: "İçerik Türü",
+        target_duration_seconds: "Hedef Süre (saniye)",
+        resolution: "Çözünürlük",
+        fps: "FPS",
+        background_music_enabled: "Arka Plan Müziği",
+        subtitles_enabled: "Altyazı (.srt) Üret",
+        subtitles_burn_in: "Altyazıyı Videoya Göm",
+    }};
+
+    const STATIC_CHOICES = {{
+        language: [["tr","Türkçe"],["en","İngilizce"],["de","Almanca"],["fr","Fransızca"],["es","İspanyolca"]],
+        content_type: [["documentary","Belgesel"],["news","Haber"],["shorts","Shorts / Reels"],["informational","Bilgi Videosu"]],
+        media_mode: [["mixed","Video + Fotoğraf"],["video","Sadece Video"],["image","Sadece Fotoğraf"]],
+        resolution: [["720p","720p (1280x720)"],["1080p","1080p (1920x1080)"],["vertical","Dikey (1080x1920)"],["4k","4K (3840x2160)"]],
+        fps: [["24","24"],["30","30"],["60","60"]],
+    }};
+
+    const NUMERIC_FIELDS = new Set(["fps","target_duration_seconds","voice_speed"]);
+
+    function showRegenerateForm(opts) {{
+        return new Promise(resolve => {{
+            const overlay = document.createElement("div");
+            overlay.style.cssText = "position:fixed;inset:0;background:rgba(10,20,35,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px";
+
+            const box = document.createElement("div");
+            box.style.cssText = "background:white;border-radius:18px;padding:24px;width:min(420px,100%);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)";
+
+            let fieldsHtml = "";
+            for (const field of opts.allowed_fields) {{
+                const label = FIELD_LABELS_TR[field] || field;
+                const current = opts.current[field];
+                const providerChoices = opts.choices[field];
+                const staticChoices = STATIC_CHOICES[field];
+
+                if (providerChoices) {{
+                    const options = providerChoices.map(c =>
+                        `<option value="${{c.key}}" ${{c.key===current?"selected":""}}>${{c.name}}</option>`
+                    ).join("");
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <select data-field="${{field}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">${{options}}</select>`;
+                }} else if (staticChoices) {{
+                    const options = staticChoices.map(([key, name]) =>
+                        `<option value="${{key}}" ${{String(current)===key?"selected":""}}>${{name}}</option>`
+                    ).join("");
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <select data-field="${{field}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">${{options}}</select>`;
+                }} else if (typeof current === "boolean") {{
+                    fieldsHtml += `<label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;font-weight:400">
+                        <input type="checkbox" data-field="${{field}}" ${{current?"checked":""}} style="width:auto;min-height:auto"> ${{label}}
+                    </label>`;
+                }} else if (typeof current === "number") {{
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <input type="number" step="any" data-field="${{field}}" value="${{current}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">`;
+                }} else {{
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <input type="text" data-field="${{field}}" value="${{current ?? ""}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">`;
+                }}
+            }}
+
+            box.innerHTML = `
+                <h3 style="margin-top:0">Ayarları değiştir ve yeniden üret</h3>
+                <p class="muted" style="font-size:13px">Bu aşama ve sonrasındaki her şey silinip yeni ayarlarla yeniden üretilecek.</p>
+                ${{fieldsHtml}}
+                <div style="display:flex;gap:8px;margin-top:20px">
+                    <button type="button" id="regenCancel" class="button secondary" style="flex:1">Vazgeç</button>
+                    <button type="button" id="regenSubmit" class="button" style="flex:1">Yeniden Üret</button>
+                </div>
+            `;
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            box.querySelector("#regenCancel").onclick = () => {{ overlay.remove(); resolve(null); }};
+            box.querySelector("#regenSubmit").onclick = () => {{
+                const overrides = {{}};
+                box.querySelectorAll("[data-field]").forEach(el => {{
+                    const field = el.dataset.field;
+                    if (el.type === "checkbox") overrides[field] = el.checked;
+                    else if (NUMERIC_FIELDS.has(field)) overrides[field] = parseFloat(el.value);
+                    else overrides[field] = el.value;
+                }});
+                overlay.remove();
+                resolve(overrides);
+            }};
+        }});
+    }}
+
     async function pollUntilDone(jobId) {{
         while (true) {{
             const r = await fetch(`/api/builds/${{jobId}}`);
@@ -774,10 +876,26 @@ def project_detail(slug: str) -> HTMLResponse:
     }}
 
     async function regenerateStep(slug, stepKey, btn) {{
-        if (!confirm(
-            "Bu aşamayı ve sonrasındaki tüm aşamaları yeniden üretmek " +
-            "istediğine emin misin? Sonraki aşamaların çıktıları silinecek."
-        )) return;
+        let overrides = {{}};
+
+        try {{
+            const optRes = await fetch(`/api/projects/${{slug}}/step-options/${{stepKey}}`);
+            const opts = await optRes.json();
+
+            if (opts.allowed_fields && opts.allowed_fields.length > 0) {{
+                const chosen = await showRegenerateForm(opts);
+                if (chosen === null) return;
+                overrides = chosen;
+            }} else {{
+                if (!confirm(
+                    "Bu aşamayı ve sonrasındaki tüm aşamaları yeniden üretmek " +
+                    "istediğine emin misin? Sonraki aşamaların çıktıları silinecek."
+                )) return;
+            }}
+        }} catch (e) {{
+            alert("Ayarlar alınamadı: " + e.message);
+            return;
+        }}
 
         btn.disabled = true;
         const original = btn.textContent;
@@ -788,7 +906,11 @@ def project_detail(slug: str) -> HTMLResponse:
         try {{
             const r = await fetch(
                 `/api/projects/${{slug}}/regenerate/${{stepKey}}`,
-                {{method: "POST"}}
+                {{
+                    method: "POST",
+                    headers: {{"Content-Type": "application/json"}},
+                    body: JSON.stringify({{overrides}}),
+                }}
             );
             const res = await r.json();
             if (!r.ok) throw new Error(res.detail || "Başlatılamadı.");

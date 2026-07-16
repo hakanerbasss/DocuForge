@@ -238,6 +238,9 @@ class RenderService:
             self._write_srt(srt_path, subtitle_segments)
             print(f"  ✅ Subtitles written ({srt_path})")
 
+            if project_data.get("subtitles_burn_in"):
+                self._burn_in_subtitles(output_path, srt_path)
+
         return output_path
 
     def _apply_background_music(
@@ -405,6 +408,65 @@ class RenderService:
         secs, ms = divmod(remainder_ms, 1000)
 
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
+
+    def _burn_in_subtitles(
+        self,
+        video_path: Path,
+        srt_path: Path,
+    ) -> None:
+        """Re-encode the video with the SRT burned in via ffmpeg's subtitles filter.
+
+        No FontName is forced in force_style -- libass resolves a
+        default via fontconfig, which is more robust across servers
+        than guessing a font file's internal family name (untested
+        against real ffmpeg/libass in this dev environment; verify on
+        a real render before relying on it).
+        """
+
+        escaped_srt_path = (
+            str(srt_path)
+            .replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "’")
+        )
+
+        force_style = (
+            "FontSize=20,PrimaryColour=&H00FFFFFF,"
+            "OutlineColour=&H00000000,BorderStyle=1,"
+            "Outline=1.5,Shadow=0.5"
+        )
+
+        burned_path = video_path.with_name(
+            "final_video_subtitled.mp4"
+        )
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-vf",
+            f"subtitles='{escaped_srt_path}':force_style='{force_style}'",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(burned_path),
+        ]
+
+        self._run(command)
+
+        if (
+            not burned_path.exists()
+            or burned_path.stat().st_size == 0
+        ):
+            raise RuntimeError(
+                f"Subtitle burn-in failed: {burned_path}"
+            )
+
+        burned_path.replace(video_path)
+
+        print("  ✅ Subtitles burned into video")
 
     def _video_to_clip(
         self,

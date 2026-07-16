@@ -35,17 +35,17 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
   - `resolution` (720p / 1080p / vertical / 4k) and `fps` are read by RenderService and used in the real FFmpeg filters — nothing is hardcoded
 - ✅ Voice: eSpeak, Piper (Turkish Fahrettin model), Supertonic (M1–M5 / F1–F5), **XTTS voice clone** — provider, voice name and speed are all honored
 - ✅ Background music: if `background_music_enabled` is set and an audio file exists in `projects/<slug>/music/` (or an explicit `music_track` path), it's looped/trimmed to the video length, mixed in below narration volume, and faded out
-- ✅ Subtitles: if `subtitles_enabled` is set, a scene-timed `subtitles.srt` is written next to the final video (sidecar only — not burned into the video yet)
+- ✅ Subtitles: if `subtitles_enabled` is set, a scene-timed `subtitles.srt` is written next to the final video; if `subtitles_burn_in` is also set, a second FFmpeg pass burns it into the video itself (`subtitles` filter, libass) instead of leaving it as a sidecar file
 - ✅ Thumbnail: if `thumbnail_enabled` is set, a 1280x720 YouTube thumbnail is generated from a scene frame with a title overlay (plus a 1080x1920 cover for shorts/vertical projects) — pure FFmpeg, no extra dependency
 - ✅ SEO Metadata: `seo.json` with 3 title suggestions, a full description, and 10-20 tags, generated from the finished script and shown on the project detail page
-- ✅ FastAPI web panel (not Flask): project list (with a "+ Yeni Proje" link), project detail with a video player, thumbnail preview, subtitle download, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
-- ✅ Per-stage regenerate from the web UI: each stage has its own "Yeniden Üret" button that invalidates that stage plus everything downstream of it and regenerates just that stage immediately, so you can review it before continuing with "▶ Devam Et"
-- ✅ Job state survives a web service restart: builds *and* per-stage regenerations are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing
+- ✅ FastAPI web panel (not Flask): project list (with a "+ Yeni Proje" link and a live "⏳ Devam eden üretimler" section), project detail with a video player, thumbnail preview, subtitle download, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
+- ✅ Per-stage regenerate from the web UI: each stage has its own "Yeniden Üret" button that invalidates that stage plus everything downstream of it and regenerates just that stage immediately, so you can review it before continuing with "▶ Devam Et". Steps with settings worth changing (voice, media, render, research) show an editable form first — pick a different voice, a different image/video provider, a different resolution, etc. — instead of blindly rerunning with the same values
+- ✅ Job state survives a web service restart: builds *and* per-stage regenerations are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing. In-progress jobs are visible from `/` and `/new` regardless of which page started them, polling `/api/jobs/active` every few seconds — so navigating away and back no longer looks like the build vanished
 - ✅ Creating a project with a title that collides with an existing one gets a `_2`, `_3`, ... suffix instead of silently overwriting it
+- ✅ `/settings` page for API keys (DeepSeek, Pexels, Pixabay, Unsplash, OpenAI, Google, fal.ai, XTTS reference audio) — no `.env` editing or restart needed
 
 ## Not implemented yet
 
-- ❌ Subtitle burn-in (currently sidecar `.srt` only)
 - ❌ Piper crackle/audio-quality cleanup (loudnorm, crossfade, DC offset)
 - ❌ None of the new AI generation providers (DALL-E, Imagen, Veo, fal.ai) have been exercised against live traffic in this codebase — verified against documented API shapes with mocked HTTP only. Try each with a real key before depending on it.
 - ❌ YouTube upload (SEO metadata is generated but nothing pushes it or the video to YouTube)
@@ -185,8 +185,14 @@ Routes:
   back to `/` no longer looks like the build vanished, since it was never actually tied
   to that page in the first place (it's a background thread; only the *visibility* was
   missing before)
-- `POST /api/projects/{slug}/regenerate/{step_key}` — invalidate one stage and everything
-  downstream of it, then regenerate just that stage
+- `GET /api/projects/{slug}/step-options/{step_key}` — which project.json fields can be
+  changed before regenerating this step (per `STEP_ALLOWED_OVERRIDES`), their current
+  values, and — for provider fields — the choices actually registered right now. Drives
+  the "Yeniden Üret" form on the project page
+- `POST /api/projects/{slug}/regenerate/{step_key}` — body `{"overrides": {...}}`
+  (optional, defaults to `{}`); invalidates one stage and everything downstream of it,
+  applies any overrides to project.json first, then regenerates just that stage.
+  Unknown override keys for the given step are rejected with 400
 - `POST /api/projects/{slug}/resume` — continue an existing project from its first
   incomplete stage
 - `GET /settings` — API key management (DeepSeek, Pexels, Pixabay, Unsplash, OpenAI,
