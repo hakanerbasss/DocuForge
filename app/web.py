@@ -780,7 +780,7 @@ def project_detail(slug: str) -> HTMLResponse:
     step_rows: list[str] = []
     escaped_slug_js = quote(project_dir.name)
 
-    for key, label in active_step_defs:
+    for index, (key, label) in enumerate(active_step_defs):
         info = steps.get(key) if isinstance(steps, dict) else None
         status = (
             str(info.get("status", "pending"))
@@ -800,15 +800,16 @@ def project_detail(slug: str) -> HTMLResponse:
             if status == "failed"
             else "⏳"
         )
+        escaped_label = html.escape(label, quote=True)
 
         step_rows.append(
             f"""
-            <div class="status-row">
-                <strong>
+            <div class="status-row" data-step-index="{index}" data-step-key="{key}">
+                <strong class="step-icon-label" data-base-label="{escaped_label}">
                     {icon} {html.escape(label)}
                 </strong>
                 <span style="display:flex;align-items:center;gap:10px">
-                    <span class="muted">
+                    <span class="muted step-status-text">
                         {html.escape(status)}
                         · {html.escape(str(duration))} sn
                     </span>
@@ -876,6 +877,7 @@ def project_detail(slug: str) -> HTMLResponse:
 
         <div class="buttons">
             <button
+                id="resumeButton"
                 class="button"
                 onclick="resumeProject('{escaped_slug_js}',this)"
             >
@@ -1057,10 +1059,41 @@ def project_detail(slug: str) -> HTMLResponse:
         }}
     }}
 
+    function applyStepProgress(progress) {{
+        document.querySelectorAll("[data-step-index]").forEach(row => {{
+            const index = parseInt(row.getAttribute("data-step-index"), 10);
+            const key = row.getAttribute("data-step-key");
+            const labelEl = row.querySelector(".step-icon-label");
+            const statusEl = row.querySelector(".step-status-text");
+            const baseLabel = labelEl ? labelEl.getAttribute("data-base-label") : "";
+
+            row.style.transition = "background .2s";
+
+            if (progress.failed_step_key && key === progress.failed_step_key) {{
+                row.style.background = "#fef2f2";
+                if (labelEl) labelEl.textContent = `❌ ${{baseLabel}}`;
+                if (statusEl) statusEl.textContent = "başarısız";
+            }} else if (index < progress.completed_steps) {{
+                row.style.background = "";
+                if (labelEl) labelEl.textContent = `✅ ${{baseLabel}}`;
+                if (statusEl) statusEl.textContent = "completed";
+            }} else if (key === progress.current_step_key) {{
+                row.style.background = "#eff6ff";
+                if (labelEl) labelEl.textContent = `⏳ ${{baseLabel}}`;
+                if (statusEl) statusEl.textContent = "şu an çalışıyor...";
+            }} else {{
+                row.style.background = "";
+                if (labelEl) labelEl.textContent = `⏳ ${{baseLabel}}`;
+                if (statusEl) statusEl.textContent = "pending";
+            }}
+        }});
+    }}
+
     async function pollUntilDone(jobId) {{
         while (true) {{
             const r = await fetch(`/api/builds/${{jobId}}`);
             const job = await r.json();
+            applyStepProgress(job);
             if (job.status === "completed") return;
             if (job.status === "failed") {{
                 throw new Error(job.error || "İşlem başarısız oldu.");
@@ -1068,6 +1101,30 @@ def project_detail(slug: str) -> HTMLResponse:
             await new Promise(resolve => setTimeout(resolve, 2000));
         }}
     }}
+
+    async function checkForActiveJob() {{
+        const slug = "{escaped_slug_js}";
+
+        try {{
+            const r = await fetch("/api/jobs/active");
+            const data = await r.json();
+            const job = (data.jobs || []).find(j => j.project_slug === slug);
+            if (!job) return;
+
+            applyStepProgress(job);
+            document.getElementById("actionStatus").textContent =
+                "Bu proje için arka planda bir üretim devam ediyor...";
+            const resumeBtn = document.getElementById("resumeButton");
+            if (resumeBtn) resumeBtn.disabled = true;
+
+            await pollUntilDone(job.job_id);
+            location.reload();
+        }} catch (e) {{
+            // sessizce yut -- sayfanın geri kalanı çalışmaya devam etsin
+        }}
+    }}
+
+    checkForActiveJob();
 
     async function regenerateStep(slug, stepKey, btn) {{
         let overrides = {{}};

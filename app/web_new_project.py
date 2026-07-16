@@ -734,6 +734,8 @@ def compute_pipeline_progress(
 
     completed_steps = 0
     current_step = "İş sırası bekleniyor"
+    current_step_key: str | None = None
+    failed_step_key: str | None = None
 
     if isinstance(steps, dict):
         for key, _label in active_steps:
@@ -748,7 +750,9 @@ def compute_pipeline_progress(
         if failed_step:
             failed_label = dict(active_steps).get(failed_step, failed_step)
             current_step = f"Hata: {failed_label}"
+            failed_step_key = str(failed_step)
         elif completed_steps < total_steps:
+            current_step_key = active_steps[completed_steps][0]
             current_step = f"{active_steps[completed_steps][1]} çalışıyor"
         else:
             current_step = "Tamamlandı"
@@ -756,11 +760,14 @@ def compute_pipeline_progress(
     if job_status == "completed":
         completed_steps = total_steps
         current_step = "Tamamlandı"
+        current_step_key = None
 
     return {
         "completed_steps": completed_steps,
         "total_steps": total_steps,
         "current_step": current_step,
+        "current_step_key": current_step_key,
+        "failed_step_key": failed_step_key,
         "progress_percent": (
             round(min(completed_steps, total_steps) / total_steps * 100)
             if total_steps
