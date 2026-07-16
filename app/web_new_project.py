@@ -257,6 +257,13 @@ button:disabled{opacity:.6;cursor:wait}
 <label for="voice_speed">Konu\u015fma H\u0131z\u0131: <span id="speedLabel">1.0x</span></label>
 <input id="voice_speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('speedLabel').textContent=parseFloat(this.value).toFixed(1)+'x'">
 
+<h3>\u2728 Ek \u00d6zellikler</h3>
+<label style="display:flex;align-items:center;gap:8px;font-weight:400">
+<input type="checkbox" id="background_music_enabled" style="width:auto;min-height:auto">
+Arka plan m\u00fczi\u011fi ekle
+</label>
+<div class="hint">\u00dcretim s\u0131ras\u0131nda <code>projects/&lt;proje&gt;/music/</code> klas\u00f6r\u00fcne bir mp3/wav dosyas\u0131 koy (render a\u015famas\u0131na kadar vaktin var); yoksa m\u00fczik olmadan devam eder.</div>
+
 <button id="startButton" onclick="startBuild()">\u00dcretimi Ba\u015flat</button>
 
 <div id="statusBox" class="status">
@@ -330,7 +337,7 @@ async function startBuild(){
     voice_speed:parseFloat(document.getElementById("voice_speed").value),
     resolution:document.getElementById("resolution").value,
     fps:parseInt(document.getElementById("fps").value),
-    background_music_enabled:false,
+    background_music_enabled:document.getElementById("background_music_enabled").checked,
     subtitles_enabled:false,
     thumbnail_enabled:false,
   };

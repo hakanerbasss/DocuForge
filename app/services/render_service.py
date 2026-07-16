@@ -219,7 +219,117 @@ class RenderService:
                 f"Final video was not created: {output_path}"
             )
 
+        if project_data.get("background_music_enabled"):
+            self._apply_background_music(
+                project_dir,
+                output_path,
+                project_data,
+            )
+
         return output_path
+
+    def _apply_background_music(
+        self,
+        project_dir: Path,
+        video_path: Path,
+        project_data: dict[str, Any],
+    ) -> None:
+        music_path = self._resolve_music_track(
+            project_dir,
+            project_data,
+        )
+
+        if music_path is None:
+            print(
+                "  ⚠ background_music_enabled=true fakat müzik "
+                "dosyası bulunamadı; atlanıyor."
+            )
+            return
+
+        duration = self._probe_duration(video_path)
+        fade_duration = min(3.0, duration)
+        fade_start = max(0.0, duration - fade_duration)
+
+        mixed_path = video_path.with_name(
+            "final_video_music.mp4"
+        )
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(music_path),
+            "-filter_complex",
+            (
+                f"[1:a]volume=0.18,"
+                f"afade=t=out:st={fade_start:.2f}:d={fade_duration:.2f}"
+                f"[music];"
+                f"[0:a][music]amix=inputs=2:duration=first:"
+                f"dropout_transition=0[aout]"
+            ),
+            "-map",
+            "0:v",
+            "-map",
+            "[aout]",
+            "-c:v",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(mixed_path),
+        ]
+
+        self._run(command)
+
+        if not mixed_path.exists() or mixed_path.stat().st_size == 0:
+            raise RuntimeError(
+                f"Background music mix failed: {mixed_path}"
+            )
+
+        mixed_path.replace(video_path)
+
+        print(
+            f"  ✅ Background music mixed ({music_path.name})"
+        )
+
+    def _resolve_music_track(
+        self,
+        project_dir: Path,
+        project_data: dict[str, Any],
+    ) -> Path | None:
+        explicit = str(
+            project_data.get("music_track", "")
+        ).strip()
+
+        if explicit:
+            candidate = Path(explicit)
+
+            if not candidate.is_absolute():
+                candidate = project_dir / candidate
+
+            if candidate.exists():
+                return candidate
+
+            print(
+                f"  ⚠ music_track belirtilmiş ama bulunamadı: "
+                f"{candidate}"
+            )
+            return None
+
+        music_dir = project_dir / "music"
+
+        if not music_dir.exists():
+            return None
+
+        for pattern in ("*.mp3", "*.wav", "*.m4a", "*.aac", "*.ogg"):
+            matches = sorted(music_dir.glob(pattern))
+            if matches:
+                return matches[0]
+
+        return None
 
     def _video_to_clip(
         self,

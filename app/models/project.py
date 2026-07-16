@@ -53,6 +53,7 @@ class DocumentaryProject:
     fps: int = 30
 
     background_music_enabled: bool = False
+    music_track: str = ""
     subtitles_enabled: bool = False
     thumbnail_enabled: bool = False
 
@@ -73,6 +74,7 @@ class DocumentaryProject:
         self.voice_name = str(self.voice_name).strip().upper()
 
         self.resolution = str(self.resolution).strip().lower()
+        self.music_track = str(self.music_track).strip()
         self.status = str(self.status).strip().lower()
 
         self.target_duration_seconds = int(
@@ -235,6 +237,9 @@ class DocumentaryProject:
                     "background_music_enabled",
                     False,
                 )
+            ),
+            music_track=str(
+                data.get("music_track", "")
             ),
             subtitles_enabled=bool(
                 data.get("subtitles_enabled", False)
