@@ -270,6 +270,12 @@ Altyaz\u0131 (.srt) olu\u015ftur
 </label>
 <div class="hint">Sahne bazl\u0131 zamanlamal\u0131 .srt dosyas\u0131 render klas\u00f6r\u00fcne yaz\u0131l\u0131r (hen\u00fcz videoya g\u00f6m\u00fclm\u00fcyor).</div>
 
+<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
+<input type="checkbox" id="thumbnail_enabled" style="width:auto;min-height:auto">
+Kapak g\u00f6rseli (thumbnail) olu\u015ftur
+</label>
+<div class="hint">1280x720 YouTube kapak g\u00f6rseli \u00fcretilir; dikey projelerde ayr\u0131ca 1080x1920 kapak da eklenir.</div>
+
 <button id="startButton" onclick="startBuild()">\u00dcretimi Ba\u015flat</button>
 
 <div id="statusBox" class="status">
@@ -345,7 +351,7 @@ async function startBuild(){
     fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:document.getElementById("background_music_enabled").checked,
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
-    thumbnail_enabled:false,
+    thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
   };
 
   try{

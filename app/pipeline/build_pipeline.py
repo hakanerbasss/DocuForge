@@ -16,6 +16,7 @@ from app.services.media_builder import MediaBuilder
 from app.services.narration_builder import NarrationBuilder
 from app.services.project_service import ProjectService, load_project
 from app.services.render_service import RenderService
+from app.services.thumbnail_service import ThumbnailService
 from app.services.voice_service import VoiceService
 
 
@@ -189,6 +190,20 @@ class BuildPipeline:
                 ),
             },
         ]
+
+        if project_data.get("thumbnail_enabled"):
+            service_steps.append({
+                "key": "thumbnail",
+                "icon": "🖼",
+                "name": "Thumbnail",
+                "output": project_dir / "thumbnail.jpg",
+                "action": lambda: ThumbnailService().generate(
+                    str(project_dir)
+                ),
+                "validator": lambda: (
+                    project_dir / "thumbnail.jpg"
+                ).exists(),
+            })
 
         total_steps = len(agent_steps) + len(service_steps)
 
