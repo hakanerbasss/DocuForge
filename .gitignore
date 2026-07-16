@@ -44,3 +44,5 @@ projects/
 jobs/
 __pycache__/
 *.pyc
+
+models/
