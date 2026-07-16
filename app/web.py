@@ -378,6 +378,9 @@ def dashboard() -> HTMLResponse:
             Üretilen videoları izle, proje aşamalarını ve
             dosyaları tek ekrandan kontrol et.
         </p>
+        <div class="buttons">
+            <a class="button" href="/new">+ Yeni Proje</a>
+        </div>
     </section>
 
     {content}
@@ -444,6 +447,73 @@ def project_detail(slug: str) -> HTMLResponse:
                     download
                 >
                     Videoyu İndir
+                </a>
+            </div>
+        </section>
+        """
+
+    thumbnail_path = project_dir / "thumbnail.jpg"
+    thumbnail_vertical_path = project_dir / "thumbnail_vertical.jpg"
+
+    thumbnail_section = ""
+
+    if thumbnail_path.exists() or thumbnail_vertical_path.exists():
+        thumbnail_images = ""
+
+        if thumbnail_path.exists():
+            thumbnail_images += f"""
+            <a
+                href="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                download
+            >
+                <img
+                    src="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                    alt="Thumbnail"
+                    style="max-width:320px;width:100%;border-radius:12px"
+                >
+            </a>
+            """
+
+        if thumbnail_vertical_path.exists():
+            thumbnail_images += f"""
+            <a
+                href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                download
+            >
+                <img
+                    src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                    alt="Dikey kapak"
+                    style="max-width:180px;width:100%;border-radius:12px"
+                >
+            </a>
+            """
+
+        thumbnail_section = f"""
+        <section class="card">
+            <h2>Kapak görseli</h2>
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+                {thumbnail_images}
+            </div>
+        </section>
+        """
+
+    subtitles_path = project_dir / "render" / "subtitles.srt"
+    subtitles_section = ""
+
+    if subtitles_path.exists():
+        subtitles_section = f"""
+        <section class="card">
+            <h2>Altyazı</h2>
+            <p class="muted">
+                Sahne bazlı zamanlamalı .srt dosyası (henüz videoya gömülmüyor).
+            </p>
+            <div class="buttons">
+                <a
+                    class="button secondary"
+                    href="/files/{quote(project_dir.name)}/render/subtitles.srt"
+                    download
+                >
+                    subtitles.srt İndir
                 </a>
             </div>
         </section>
@@ -539,6 +609,8 @@ def project_detail(slug: str) -> HTMLResponse:
     </section>
 
     {video_section}
+    {thumbnail_section}
+    {subtitles_section}
 
     <section
         class="grid"

@@ -14,6 +14,20 @@ from app.services.project_service import ProjectService
 
 router = APIRouter()
 
+PIPELINE_STEP_ORDER: list[tuple[str, str]] = [
+    ("research", "📚 Araştırma"),
+    ("script", "📝 Senaryo"),
+    ("storyboard", "🎬 Storyboard"),
+    ("images", "🖼 Görsel Prompt'ları"),
+    ("videos", "🎥 Video Prompt'ları"),
+    ("narration", "🎙 Anlatım Metni"),
+    ("media", "📦 Medya İndirme"),
+    ("narration_scenes", "📝 Sahne Metinleri"),
+    ("voice", "🎙 Seslendirme"),
+    ("render", "🎬 Video Render"),
+    ("thumbnail", "🖼 Kapak Görseli"),
+]
+
 PROJECTS_ROOT = Path("projects")
 JOBS_DIR = Path("jobs")
 JOBS: dict[str, dict[str, Any]] = {}
@@ -372,7 +386,7 @@ async function pollJob(jobId){
     if(!r.ok)throw new Error(job.detail||"\u0130\u015f durumu al\u0131namad\u0131.");
     const pct=Math.max(4,Math.min(100,Number(job.progress_percent||4)));
     document.getElementById("progressBar").style.width=`${pct}%`;
-    if(job.current_step)document.getElementById("statusText").textContent=`${job.completed_steps}/10 \u00b7 ${job.current_step}`;
+    if(job.current_step)document.getElementById("statusText").textContent=`${job.completed_steps}/${job.total_steps||"?"} \u00b7 ${job.current_step}`;
     if(job.status==="completed"){
       const sb=document.getElementById("statusBox");
       sb.className="status success";
@@ -447,27 +461,49 @@ def build_status(job_id: str) -> dict[str, Any]:
         result = dict(job)
 
     project_dir = Path(result["project_path"])
+    project_data = load_json(project_dir / "project.json")
     pipeline_state = load_json(project_dir / "pipeline_state.json")
     steps = pipeline_state.get("steps", {})
+
+    thumbnail_enabled = bool(project_data.get("thumbnail_enabled"))
+    active_steps = [
+        (key, label)
+        for key, label in PIPELINE_STEP_ORDER
+        if key != "thumbnail" or thumbnail_enabled
+    ]
+    total_steps = len(active_steps)
+
     completed_steps = 0
     current_step = "İş sırası bekleniyor"
 
     if isinstance(steps, dict):
-        completed_steps = sum(
-            isinstance(v, dict) and v.get("status") == "completed"
-            for v in steps.values()
-        )
+        for key, _label in active_steps:
+            step_info = steps.get(key)
+            if isinstance(step_info, dict) and step_info.get("status") == "completed":
+                completed_steps += 1
+            else:
+                break
+
         failed_step = pipeline_state.get("failed_step")
+
         if failed_step:
-            current_step = f"Hata: {failed_step}"
-        elif completed_steps:
-            current_step = f"{completed_steps + 1}. aşama hazırlanıyor"
+            failed_label = dict(active_steps).get(failed_step, failed_step)
+            current_step = f"Hata: {failed_label}"
+        elif completed_steps < total_steps:
+            current_step = f"{active_steps[completed_steps][1]} çalışıyor"
+        else:
+            current_step = "Tamamlandı"
 
     if result["status"] == "completed":
-        completed_steps = 10
+        completed_steps = total_steps
         current_step = "Tamamlandı"
 
     result["completed_steps"] = completed_steps
+    result["total_steps"] = total_steps
     result["current_step"] = current_step
-    result["progress_percent"] = round(min(completed_steps, 10) / 10 * 100)
+    result["progress_percent"] = (
+        round(min(completed_steps, total_steps) / total_steps * 100)
+        if total_steps
+        else 0
+    )
     return result
