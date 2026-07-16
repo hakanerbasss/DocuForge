@@ -91,17 +91,42 @@ deterministic production logic. Do not model them as `*Agent` classes.
 | Category | Registered keys |
 |---|---|
 | `text` | `deepseek` |
-| `image` | `pexels` |
-| `video` | `pexels` |
+| `image` | `pexels`, `pixabay`, `unsplash`, `dalle`, `google_imagen`, `fal` |
+| `video` | `pexels`, `pixabay`, `google_veo`, `fal` |
 | `voice` | `espeak`, `local_tts` (alias for eSpeak), `piper`, `supertonic`, `xtts` |
 
-`image_provider`/`video_provider` are already threaded through the project model and
-`BuildPipeline`, but since only Pexels exists for each category today, there is
-nothing else to select yet — this becomes meaningful once a second provider is added.
+`image_provider`/`video_provider` are threaded through the project model,
+`BuildPipeline`, and `MediaBuilder` (which resolves them from the registry by key —
+adding a provider only requires registering it, no MediaBuilder changes). The web
+wizard's `/new` page exposes both as real dropdowns.
+
+Split into two families:
+
+- **Free stock** (query-based, same shape as Pexels): `pixabay` (image + video),
+  `unsplash` (image only — no video API).
+- **AI generation** (prompt-based — `query` becomes the generation prompt, not a
+  search term): `dalle` (OpenAI's `gpt-image-1` via the `openai` package already
+  required for DeepSeek), `google_imagen`/`google_veo` (Gemini API plain REST, no new
+  SDK — Veo is a `predictLongRunning` operation: submit, poll `operations.get`, then
+  download), `fal` (fal.ai's queue REST API — one integration exposes hundreds of
+  hosted models; which specific model runs is an options kwarg, defaulting to
+  `fal-ai/flux/schnell` for images and `fal-ai/kling-video/v1.6/standard/
+  text-to-video` for video).
+
+Each needs its own API key (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `FAL_KEY`,
+`PIXABAY_API_KEY`, `UNSPLASH_ACCESS_KEY`) and none of them have been exercised against
+live traffic in this codebase — every provider was built and verified against the
+*documented* request/response shapes with mocked HTTP, not a real account. Veo's
+response field path in particular
+(`response.generateVideoResponse.generatedSamples[0].video.uri`) is flagged in its
+docstring as the least certain of the bunch — validate before relying on it.
+
 Note also that `ImagePromptAgent`/`VideoPromptAgent` produce `image_prompts.json` /
-`video_prompts.json` specifically so an AI image/video *generator* could use them, but
-`MediaBuilder` never reads either file — it only ever searches Pexels using the
-storyboard's scene description text. Those prompt files are currently dead output.
+`video_prompts.json` specifically for an AI image/video *generator* to consume, but
+`MediaBuilder` still only ever searches/generates using the storyboard's scene
+description text — it never reads either prompt file. Wiring the new generation
+providers to those richer prompts (rather than the shorter storyboard visual field)
+is still open.
 
 `VoiceProvider.synthesize()` takes `text`, `output_path`, and `**options` (language,
 voice_name, speed, ...); each provider reads whichever options it understands.

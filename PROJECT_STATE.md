@@ -174,12 +174,24 @@ stub/mock provider'larla izole test edildi:
 - XTTS referans ses yükleme arayüzü
 - Thumbnail düzenleme (arayüzden başlık değiştirme vb.)
 - ~~Başlık, açıklama ve etiket (SEO) üretimi~~ ✅ tamamlandı — `SEOAgent`, `seo.json`, proje detay sayfasında gösteriliyor
-- `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hiç okumuyor, sadece storyboard metniyle Pexels'te arıyor. Bu prompt'lar şu an tamamen kullanılmıyor — bir AI görsel/video üretim aracı eklenirse buraya bağlanmalı (bkz. aşağıdaki "Ek görsel/video üretim araçları" bölümü).
+- `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hâlâ hiç okumuyor — yeni AI üretim sağlayıcıları (DALL-E, Imagen, Veo, fal.ai) bile eklendikten sonra hâlâ storyboard'un kısa `visual` alanını kullanıyor, bu daha zengin prompt'lara bağlanmadı.
 - YouTube yükleme
 - Instagram/Reels sürümü
 - Kalıcı iş kuyruğu (şu an per-request thread + disk üzerinde JSON; gerçek bir queue değil)
 - Kullanıcı hesabı ve güvenlik
-- İkinci bir image/video provider (şu an sadece Pexels var, `image_provider`/`video_provider` seçiminin pratikte etkisi yok)
+
+## Ek görsel/video üretim araçları
+
+**Tamamlandı** — Pexels artık tek seçenek değil. Temmuz 2026 itibariyle piyasa araştırması yapıldı (fiyat/kalite karşılaştırması), kullanıcı 4 kategoriden hepsini seçti, hepsi eklendi:
+
+- **Ücretsiz stok:** Pixabay (görsel+video), Unsplash (sadece görsel) — Pexels ile aynı arama tabanlı yaklaşım
+- **DALL-E / OpenAI Images** (`gpt-image-1`) — `openai` paketi zaten bağımlılık (DeepSeek için), en kolay entegrasyon
+- **Google Imagen (görsel) + Veo (video)** — Gemini API düz REST, yeni SDK yok. Veo async: submit → `operations.get` ile poll → indir
+- **fal.ai aggregator** (görsel+video) — queue REST API, tek entegrasyonla Flux/Kling/yüzlerce model. Hangi model kullanılacağı `options["model"]` ile seçiliyor (varsayılan: `fal-ai/flux/schnell` görsel, `fal-ai/kling-video/v1.6/standard/text-to-video` video)
+
+**Doğrulanmadı:** Bu container'da hiçbirinin gerçek API anahtarı yok, gerçek trafiğe karşı test edilemedi — sadece dokümante edilmiş request/response şekillerine göre mock HTTP ile test edildi. Özellikle Veo'nun `response.generateVideoResponse.generatedSamples[0].video.uri` alanının gerçekten indirilebilir bir URL mi yoksa Files API mi gerektirdiği belirsiz — gerçek anahtarla doğrulanmalı.
+
+**Bonus bug fix:** Bu işi test ederken `/new` sayfasının (yeni proje sihirbazı) TAMAMEN bozuk olduğunu keşfettim — kodda üç yerde gerçek emoji yerine bozuk `📝` gibi lone-surrogate escape'ler vardı (JS/JSON'da geçerli ama Python'da astral karaktere birleşmiyor), bu yüzden `GET /new` her istekte `UnicodeEncodeError` ile 500 veriyordu. Muhtemelen daha önce kimse sayfayı gerçekten render edip test etmemiş. Düzeltildi.
 
 ---
 

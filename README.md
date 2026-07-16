@@ -24,7 +24,8 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 ## Working
 
-- ✅ DeepSeek text generation, Pexels image/video search — via a Provider Registry
+- ✅ DeepSeek text generation — via a Provider Registry
+- ✅ Image/video: Pexels, Pixabay, Unsplash (free stock) plus DALL-E, Google Imagen/Veo, and fal.ai (Flux/Kling/hundreds more) for AI generation — selectable in the web wizard, `MediaBuilder` resolves whichever is configured with no code changes needed
 - ✅ Modular Agent Architecture + Build Pipeline with resume (`pipeline_state.json`)
 - ✅ Content settings that actually change agent/pipeline behavior, not just metadata:
   - `content_type` (documentary / news / shorts / informational) shapes the research, script, storyboard and narration prompts differently per type
@@ -45,7 +46,8 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 - ❌ Subtitle burn-in (currently sidecar `.srt` only)
 - ❌ Piper crackle/audio-quality cleanup (loudnorm, crossfade, DC offset)
-- ❌ A second image/video provider (only Pexels exists today, so `image_provider`/`video_provider` have nothing else to select) — and `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) are generated but **never consumed** by MediaBuilder, which only ever searches Pexels using the storyboard's scene descriptions. Wiring an AI image/video generator to those prompts is still open.
+- ❌ `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) are generated but **never consumed** by `MediaBuilder`, which still only uses the storyboard's shorter scene description text — even with generation providers now available, they aren't fed the richer prompt output yet.
+- ❌ None of the new AI generation providers (DALL-E, Imagen, Veo, fal.ai) have been exercised against live traffic in this codebase — verified against documented API shapes with mocked HTTP only. Try each with a real key before depending on it.
 - ❌ YouTube upload (SEO metadata is generated but nothing pushes it or the video to YouTube)
 
 ---
@@ -97,12 +99,24 @@ MODEL=deepseek-chat
 
 # Only needed for voice_provider: xtts
 XTTS_REFERENCE_AUDIO=/path/to/your/reference_voice.wav
+
+# Only needed for the image/video providers you actually select
+PIXABAY_API_KEY=YOUR_KEY          # image_provider/video_provider: pixabay
+UNSPLASH_ACCESS_KEY=YOUR_KEY      # image_provider: unsplash
+OPENAI_API_KEY=YOUR_KEY           # image_provider: dalle (separate from DEEPSEEK_API_KEY)
+GOOGLE_API_KEY=YOUR_KEY           # image_provider: google_imagen, video_provider: google_veo
+FAL_KEY=YOUR_KEY                  # image_provider/video_provider: fal
 ```
 
 If `XTTS_REFERENCE_AUDIO` isn't set, the XTTS provider falls back to
 `models/xtts/reference.wav` relative to the working directory. Either way, you
 need a 20–30s clean recording of the voice to clone (same approach as the
 `ses-klonu` reference audio in the Instagram bot project).
+
+Pixabay and Unsplash are free (rate-limited); DALL-E, Google Imagen/Veo, and fal.ai
+charge per generation — check current pricing before turning one on for a real
+project. None of the five have been tested against a live account in this codebase;
+see [ARCHITECTURE.md](ARCHITECTURE.md) for what was and wasn't verified.
 
 ---
 
