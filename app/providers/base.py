@@ -86,3 +86,17 @@ class RenderProvider(BaseProvider):
     ) -> Path:
         """Render the project and return the final video path."""
         raise NotImplementedError
+
+
+class MusicProvider(BaseProvider):
+    """Search for or generate a royalty-free background music track."""
+
+    @abstractmethod
+    def get_music(
+        self,
+        query: str,
+        output_dir: Path,
+        **options: Any,
+    ) -> Path:
+        """Return a local path to an acquired or generated music track."""
+        raise NotImplementedError

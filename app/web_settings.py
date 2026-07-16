@@ -1,9 +1,14 @@
 import html
+import subprocess
+from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from app.core.config import settings
+
+XTTS_REFERENCE_DIR = Path("models/xtts")
+XTTS_REFERENCE_PATH = XTTS_REFERENCE_DIR / "reference.wav"
 
 
 router = APIRouter()
@@ -66,10 +71,86 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "text",
         "/root/projects/DocuForge/models/xtts/reference.wav",
     ),
+    "jamendo_client_id": (
+        "Jamendo Client ID",
+        "JAMENDO_CLIENT_ID",
+        "Telifsiz arka plan müziği araması için (jamendo.com/developer üzerinden ücretsiz alınır).",
+        "password",
+        "...",
+    ),
+    "mubert_company_id": (
+        "Mubert Company ID",
+        "MUBERT_COMPANY_ID",
+        "Yapay zeka ile müzik üretimi için (mubert.com API erişimi gerekir).",
+        "password",
+        "...",
+    ),
+    "mubert_license_token": (
+        "Mubert License Token",
+        "MUBERT_LICENSE_TOKEN",
+        "Mubert hesabıyla birlikte verilen lisans anahtarı.",
+        "password",
+        "...",
+    ),
 }
 
 
+def _render_xtts_field() -> str:
+    label, env_name, description, _input_type, _placeholder = FIELD_LABELS[
+        "xtts_reference_audio"
+    ]
+    configured = settings.is_configured("xtts_reference_audio")
+    current_path = Path(settings.xtts_reference_audio) if configured else None
+
+    if configured and current_path is not None and current_path.exists():
+        body = f"""
+        <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
+            <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
+            <audio controls preload="metadata" style="width:100%;margin-bottom:10px">
+                <source src="/settings/xtts_reference_audio/file" type="audio/wav">
+            </audio>
+            <form method="post" action="/settings/xtts_reference_audio/clear" style="margin:0">
+                <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
+            </form>
+        </div>
+        """
+    else:
+        body = f"""
+        <div style="display:flex;flex-direction:column;gap:14px">
+            <div>
+                <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Dosya yükle</label>
+                <div style="display:flex;gap:8px">
+                    <input type="file" id="xttsFileInput" accept="audio/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
+                    <button type="button" class="button" onclick="uploadXttsFile()" style="white-space:nowrap">Yükle</button>
+                </div>
+            </div>
+            <div>
+                <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Veya mikrofonla kaydet (20-30 sn, sessiz ortamda doğal konuş)</label>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <button type="button" id="xttsStartRecord" class="button" onclick="startXttsRecording()">🎙 Kaydı Başlat</button>
+                    <button type="button" id="xttsStopRecord" class="button secondary" style="display:none" onclick="stopXttsRecording()">⏹ Durdur ve Yükle</button>
+                    <span id="xttsRecordStatus" class="muted" style="font-size:13px"></span>
+                </div>
+            </div>
+        </div>
+        """
+
+    return f"""
+    <div style="padding:16px 0;border-bottom:1px solid #edf1f6">
+        <div style="font-weight:700;margin-bottom:2px">{html.escape(label)}</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">
+            {html.escape(description)}
+            (<code>{env_name}</code> ortam değişkeni ayarlıysa her zaman öncelikli olur ve buradan değiştirilemez.)
+        </div>
+        {body}
+    </div>
+    """
+
+
 def _render_field(field_key: str) -> str:
+    if field_key == "xtts_reference_audio":
+        return _render_xtts_field()
+
     label, env_name, description, input_type, placeholder = FIELD_LABELS[
         field_key
     ]
@@ -144,6 +225,67 @@ code{{background:#eef3fb;padding:1px 5px;border-radius:5px;font-size:12px}}
 {fields_html}
 </section>
 </main>
+<script>
+let xttsRecorder = null;
+let xttsChunks = [];
+
+async function uploadXttsFile() {{
+    const input = document.getElementById("xttsFileInput");
+    if (!input.files || !input.files.length) {{ alert("Bir ses dosyası seç."); return; }}
+    const fd = new FormData();
+    fd.append("file", input.files[0]);
+    await submitXttsUpload(fd);
+}}
+
+async function startXttsRecording() {{
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
+        alert("Tarayıcı mikrofon erişimine izin vermiyor. Bu genellikle sitenin HTTPS olmamasından kaynaklanır (mikrofon sadece güvenli bağlantıda çalışır) — bunun yerine dosya yükleme kullan.");
+        return;
+    }}
+    try {{
+        const stream = await navigator.mediaDevices.getUserMedia({{audio: true}});
+        xttsChunks = [];
+        xttsRecorder = new MediaRecorder(stream);
+        xttsRecorder.ondataavailable = e => {{ if (e.data.size > 0) xttsChunks.push(e.data); }};
+        xttsRecorder.start();
+        document.getElementById("xttsStartRecord").style.display = "none";
+        document.getElementById("xttsStopRecord").style.display = "inline-flex";
+        document.getElementById("xttsRecordStatus").textContent = "🔴 Kayıt yapılıyor...";
+    }} catch (e) {{
+        alert("Mikrofona erişilemedi: " + e.message);
+    }}
+}}
+
+async function stopXttsRecording() {{
+    document.getElementById("xttsRecordStatus").textContent = "⏳ Yükleniyor...";
+    document.getElementById("xttsStopRecord").style.display = "none";
+
+    const blob = await new Promise(resolve => {{
+        xttsRecorder.onstop = () => resolve(new Blob(xttsChunks, {{type: "audio/webm"}}));
+        xttsRecorder.stop();
+        xttsRecorder.stream.getTracks().forEach(t => t.stop());
+    }});
+
+    const fd = new FormData();
+    fd.append("file", blob, "recorded_reference.webm");
+    await submitXttsUpload(fd);
+}}
+
+async function submitXttsUpload(formData) {{
+    try {{
+        const r = await fetch("/settings/xtts_reference_audio/upload", {{method: "POST", body: formData}});
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Yükleme başarısız.");
+        }}
+        location.href = "/settings";
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+        document.getElementById("xttsRecordStatus").textContent = "";
+        document.getElementById("xttsStartRecord").style.display = "inline-flex";
+    }}
+}}
+</script>
 </body>
 </html>""")
 
@@ -172,5 +314,72 @@ def clear_setting(field_key: str) -> RedirectResponse:
         raise HTTPException(status_code=404, detail="Bilinmeyen ayar.")
 
     settings.save_secret(field_key, "")
+
+    return RedirectResponse(url="/settings", status_code=303)
+
+
+@router.get("/settings/xtts_reference_audio/file")
+def get_xtts_reference_audio() -> FileResponse:
+    if not settings.is_configured("xtts_reference_audio"):
+        raise HTTPException(status_code=404, detail="Referans ses ayarlı değil.")
+
+    path = Path(settings.xtts_reference_audio)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Referans ses dosyası bulunamadı.")
+
+    return FileResponse(path)
+
+
+@router.post("/settings/xtts_reference_audio/upload")
+async def upload_xtts_reference_audio(
+    file: UploadFile = File(...),
+) -> RedirectResponse:
+    XTTS_REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename or "upload").suffix or ".webm"
+    temp_path = XTTS_REFERENCE_DIR / f"_upload{suffix}"
+
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Dosya boş.")
+
+    temp_path.write_bytes(content)
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(temp_path),
+                "-ar",
+                "24000",
+                "-ac",
+                "1",
+                str(XTTS_REFERENCE_PATH),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(
+            status_code=500,
+            detail="FFmpeg sunucuda bulunamadı.",
+        ) from error
+    except subprocess.CalledProcessError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ses dosyası işlenemedi: {error.stderr}",
+        ) from error
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    settings.save_secret(
+        "xtts_reference_audio",
+        str(XTTS_REFERENCE_PATH.resolve()),
+    )
 
     return RedirectResponse(url="/settings", status_code=303)

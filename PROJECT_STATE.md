@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (2. güncelleme aynı gün — XTTS, per-stage regenerate, web panel navigasyon düzeltmeleri)
+Son güncelleme: 16 Temmuz 2026 (3. güncelleme aynı gün — thumbnail indirme, SEO kopyalama, XTTS ses yükleme/kayıt, müzik sağlayıcıları)
 
 ## Ana hedef
 
@@ -162,8 +162,8 @@ stub/mock provider'larla izole test edildi:
 - İptal butonu (çalışan bir işi durdurma)
 - Sesleri arayüzden dinleme
 - Sahne ve medya düzenleme
-- Müzik dosyası yükleme arayüzü (şu an SSH ile `music/` klasörüne manuel kopyalama gerekiyor)
-- XTTS referans ses dosyasının kendisini yükleme arayüzü (yolu artık `/settings`'ten girilebiliyor ama dosyanın kendisini upload etme yok — sunucuya SSH ile konması gerekiyor)
+- ~~Müzik dosyası yükleme arayüzü~~ — kısmen: dosyayı hâlâ SSH ile `music/` klasörüne koymak gerekiyor, ama artık alternatif olarak Jamendo/Mubert sağlayıcılarından otomatik müzik çekilebiliyor (bkz. "Thumbnail indirme, SEO kopyalama, XTTS ses yükleme/kayıt, müzik sağlayıcıları")
+- ~~XTTS referans ses dosyasının kendisini yükleme arayüzü~~ ✅ tamamlandı — `/settings`'ten dosya yükleme ve mikrofon kaydı
 - **Yeniden Üret'te ayar değiştirme eklendi** — kullanıcı "sesi/görseli/dili beğenmezsem değiştirebilmeliyim" dedi. Artık `research` (dil/içerik türü/süre), `voice` (sağlayıcı/isim/hız), `media` (görsel/video sağlayıcı), `render` (çözünürlük/fps/müzik/altyazı/burn-in) aşamalarını yeniden üretirken ayarları değiştirebiliyorsun — "Yeniden Üret" butonu artık önce ilgili ayarları gösteren bir form açıyor. `GET /api/projects/{slug}/step-options/{step_key}` hangi alanların değişebileceğini ve mevcut değerleri dönüyor.
 - **Altyazı burn-in eklendi** — `subtitles_burn_in` ayarı, ffmpeg'in `subtitles` filtresiyle (libass) videoya gerçekten gömüyor. **Test edilmedi** — bu container'da gerçek ffmpeg/libass yok, sadece komut kurulumu doğrulandı. VPS'de gerçek bir video ile denenmeli.
 - **`/new` ve ana sayfa artık aktif işleri gösteriyor** — kullanıcı "üretim başlatıp sayfa değiştirince kayboluyor" diye bildirdi. `journalctl` logu incelendi: üretim ASLA durmamış, sadece hiçbir yerde görünmüyordu. `GET /api/jobs/active` artık her iki sayfada da 4 saniyede bir poll ediliyor.
@@ -174,8 +174,8 @@ stub/mock provider'larla izole test edildi:
 
 - Otomatik ducking (şu an sabit düşük seviye, sidechain compress değil)
 - Piper ses temizleme / normalizasyon / mastering
-- XTTS referans ses yükleme arayüzü
-- Thumbnail düzenleme (arayüzden başlık değiştirme vb.)
+- ~~XTTS referans ses yükleme arayüzü~~ ✅ tamamlandı
+- Thumbnail düzenleme (arayüzden başlık değiştirme vb.) — kapak üzerine çarpıcı/trend başlık yazısı ve birden fazla dönüşümlü şablon henüz yok (bkz. açık işler)
 - ~~Başlık, açıklama ve etiket (SEO) üretimi~~ ✅ tamamlandı — `SEOAgent`, `seo.json`, proje detay sayfasında gösteriliyor
 - ~~`image_prompts.json`/`video_prompts.json`'ın AI üretim sağlayıcılarına bağlanması~~ ✅ tamamlandı — `MediaBuilder` artık provider tipine göre ayrım yapıyor (`_is_generation_provider`: stock sağlayıcılarda `.search()` var, üretim sağlayıcılarında yok). Üretim sağlayıcısı seçiliyse sahnenin zengin prompt'u kullanılıyor (video prompt'larında `camera_motion` da ekleniyor), stock sağlayıcılarda eskisi gibi kısa storyboard `visual` metni kullanılıyor. Bonus: bu düzeltmeden önce `MediaBuilder` doğrudan `provider.search()` çağırıyordu — üretim sağlayıcılarında bu metod hiç yok, yani prompt'u görmezden gelmenin ötesinde, seçilse muhtemelen `AttributeError` ile çökerdi.
 - YouTube yükleme
@@ -195,6 +195,19 @@ stub/mock provider'larla izole test edildi:
 **Doğrulanmadı:** Bu container'da hiçbirinin gerçek API anahtarı yok, gerçek trafiğe karşı test edilemedi — sadece dokümante edilmiş request/response şekillerine göre mock HTTP ile test edildi. Özellikle Veo'nun `response.generateVideoResponse.generatedSamples[0].video.uri` alanının gerçekten indirilebilir bir URL mi yoksa Files API mi gerektirdiği belirsiz — gerçek anahtarla doğrulanmalı.
 
 **Bonus bug fix:** Bu işi test ederken `/new` sayfasının (yeni proje sihirbazı) TAMAMEN bozuk olduğunu keşfettim — kodda üç yerde gerçek emoji yerine bozuk `📝` gibi lone-surrogate escape'ler vardı (JS/JSON'da geçerli ama Python'da astral karaktere birleşmiyor), bu yüzden `GET /new` her istekte `UnicodeEncodeError` ile 500 veriyordu. Muhtemelen daha önce kimse sayfayı gerçekten render edip test etmemiş. Düzeltildi.
+
+---
+
+## Thumbnail indirme, SEO kopyalama, XTTS ses yükleme/kayıt, müzik sağlayıcıları
+
+Kullanıcının "thumbnail indirme özelliği, başlık/etiket/açıklama için ayrı kopyalama butonları, klon ses için referans ses yükleme+kayıt, müzik için telifsiz/AI sağlayıcı seçimi" talebi üzerine eklendi:
+
+- **Thumbnail indirme** — proje detay sayfasında her kapak görselinin altında görünür "⬇ İndir (16:9)" / "⬇ İndir (9:16)" butonu var (önceden sadece görsele tıklayınca yeni sekmede açılıyordu).
+- **SEO kopyalama butonları** — her başlık önerisi, açıklama ve etiketler (virgülle birleştirilmiş) için ayrı "📋 Kopyala" butonu (`copyToClipboard`, tarayıcı Clipboard API).
+- **XTTS referans ses yükleme + kayıt** — `/settings` sayfasında XTTS alanı artık sadece dosya yolu yazmakla kalmıyor: dosya yükleme (`POST /settings/xtts_reference_audio/upload`, ffmpeg ile `-ar 24000 -ac 1` mono WAV'a çeviriyor) ve tarayıcıdan doğrudan mikrofonla kayıt (`MediaRecorder`/`getUserMedia`) destekleniyor. **Önemli kısıtlama:** mikrofon kaydı sadece güvenli bağlamda (HTTPS veya localhost) çalışır — site şu an düz HTTP olduğu için kullanıcı tarayıcıda mikrofon izni alamayabilir; JS bunu algılayıp uyarı veriyor, dosya yükleme her durumda çalışır.
+- **Müzik sağlayıcıları** — `background_music_enabled` açıkken artık bir "Müzik Sağlayıcı" seçimi var: `local` (mevcut `music/` klasörü davranışı, varsayılan), `jamendo` (Jamendo — telifsiz müzik API'si, `client_id` ile arama/indirme), `mubert` (Mubert — yapay zeka ile prompt'tan müzik üretimi). Sağlayıcı seçiliyse `RenderService` render aşamasında `content_type`'a göre bir mood sorgusu oluşturup (`documentary`→"cinematic documentary ambient" vb.) o sağlayıcıdan müzik indiriyor; `music/` klasöründe zaten dosya varsa veya `local` seçiliyse eskisi gibi davranıyor. API anahtarları (`JAMENDO_CLIENT_ID`, `MUBERT_COMPANY_ID`, `MUBERT_LICENSE_TOKEN`) `/settings` sayfasından girilebiliyor. `render` adımını "Yeniden Üret" ile de değiştirilebiliyor.
+  - **Test edilmedi:** Jamendo ve Mubert'in gerçek API çağrıları bu container'da denenmedi (API key yok) — sadece dokümante edilmiş request/response şekline göre mock HTTP testleriyle doğrulandı.
+  - **Mubert özellikle belirsiz:** API şeması (2 adımlı auth: `/customers` → `/public/tracks`) resmi dokümantasyon yerine genel bilgiye dayanarak yazıldı, gerçek bir Mubert hesabıyla doğrulanmadı. Gerçek kullanımdan önce mutlaka kontrol edilmeli.
 
 ---
 

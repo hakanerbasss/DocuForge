@@ -336,15 +336,78 @@ class RenderService:
 
         music_dir = project_dir / "music"
 
-        if not music_dir.exists():
-            return None
+        if music_dir.exists():
+            for pattern in ("*.mp3", "*.wav", "*.m4a", "*.aac", "*.ogg"):
+                matches = sorted(music_dir.glob(pattern))
+                if matches:
+                    return matches[0]
 
-        for pattern in ("*.mp3", "*.wav", "*.m4a", "*.aac", "*.ogg"):
-            matches = sorted(music_dir.glob(pattern))
-            if matches:
-                return matches[0]
+        music_provider_key = str(
+            project_data.get("music_provider", "")
+        ).strip().lower()
+
+        if music_provider_key and music_provider_key != "local":
+            return self._fetch_music_from_provider(
+                music_dir,
+                project_data,
+                music_provider_key,
+            )
 
         return None
+
+    def _fetch_music_from_provider(
+        self,
+        music_dir: Path,
+        project_data: dict[str, Any],
+        provider_key: str,
+    ) -> Path | None:
+        from app.providers.defaults import register_default_providers
+        from app.providers.registry import ProviderRegistry
+
+        register_default_providers()
+
+        try:
+            provider = ProviderRegistry.create(
+                category="music",
+                key=provider_key,
+            )
+        except Exception as error:
+            print(
+                f"  ⚠ Müzik sağlayıcı kullanılamadı "
+                f"({provider_key}): {error}"
+            )
+            return None
+
+        query = self._build_music_query(project_data)
+
+        try:
+            return provider.get_music(
+                query,
+                music_dir,
+                duration_seconds=180,
+            )
+        except Exception as error:
+            print(
+                f"  ⚠ Müzik alınamadı ({provider_key}): {error}"
+            )
+            return None
+
+    def _build_music_query(
+        self,
+        project_data: dict[str, Any],
+    ) -> str:
+        content_type = str(
+            project_data.get("content_type", "documentary")
+        ).strip().lower()
+
+        moods = {
+            "documentary": "cinematic documentary ambient",
+            "news": "corporate news background",
+            "shorts": "upbeat energetic short",
+            "informational": "calm educational background",
+        }
+
+        return moods.get(content_type, "cinematic background music")
 
     def _read_scene_subtitle_text(
         self,

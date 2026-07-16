@@ -21,6 +21,9 @@ SECRET_FIELDS: dict[str, str] = {
     "GOOGLE_API_KEY": "google_api_key",
     "FAL_KEY": "fal_api_key",
     "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
+    "JAMENDO_CLIENT_ID": "jamendo_client_id",
+    "MUBERT_COMPANY_ID": "mubert_company_id",
+    "MUBERT_LICENSE_TOKEN": "mubert_license_token",
 }
 
 
@@ -114,6 +117,18 @@ class Settings:
 
     xtts_reference_audio: str = _resolve_secret(
         "XTTS_REFERENCE_AUDIO", "xtts_reference_audio", _secrets
+    )
+
+    jamendo_client_id: str = _resolve_secret(
+        "JAMENDO_CLIENT_ID", "jamendo_client_id", _secrets
+    )
+
+    mubert_company_id: str = _resolve_secret(
+        "MUBERT_COMPANY_ID", "mubert_company_id", _secrets
+    )
+
+    mubert_license_token: str = _resolve_secret(
+        "MUBERT_LICENSE_TOKEN", "mubert_license_token", _secrets
     )
 
     def save_secret(self, secrets_key: str, value: str) -> None:

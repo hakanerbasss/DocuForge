@@ -511,30 +511,44 @@ def project_detail(slug: str) -> HTMLResponse:
 
         if thumbnail_path.exists():
             thumbnail_images += f"""
-            <a
-                href="/files/{quote(project_dir.name)}/thumbnail.jpg"
-                download
-            >
-                <img
-                    src="/files/{quote(project_dir.name)}/thumbnail.jpg"
-                    alt="Thumbnail"
-                    style="max-width:320px;width:100%;border-radius:12px"
+            <div>
+                <a href="/files/{quote(project_dir.name)}/thumbnail.jpg" download>
+                    <img
+                        src="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                        alt="Thumbnail"
+                        style="max-width:320px;width:100%;border-radius:12px;display:block"
+                    >
+                </a>
+                <a
+                    class="button secondary"
+                    href="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                    download
+                    style="margin-top:8px;display:inline-flex"
                 >
-            </a>
+                    ⬇ İndir (16:9)
+                </a>
+            </div>
             """
 
         if thumbnail_vertical_path.exists():
             thumbnail_images += f"""
-            <a
-                href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
-                download
-            >
-                <img
-                    src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
-                    alt="Dikey kapak"
-                    style="max-width:180px;width:100%;border-radius:12px"
+            <div>
+                <a href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg" download>
+                    <img
+                        src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                        alt="Dikey kapak"
+                        style="max-width:180px;width:100%;border-radius:12px;display:block"
+                    >
+                </a>
+                <a
+                    class="button secondary"
+                    href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                    download
+                    style="margin-top:8px;display:inline-flex"
                 >
-            </a>
+                    ⬇ İndir (9:16)
+                </a>
+            </div>
             """
 
         thumbnail_section = f"""
@@ -584,8 +598,22 @@ def project_detail(slug: str) -> HTMLResponse:
         description = str(seo_data.get("description", ""))
         tags = seo_data.get("tags")
 
-        title_items = "".join(
-            f"<li>{html.escape(str(title))}</li>"
+        def copy_button(text: str) -> str:
+            return (
+                '<button type="button" class="button secondary" '
+                'style="min-height:34px;padding:0 12px;font-size:13px;'
+                'white-space:nowrap" '
+                f'data-copy="{html.escape(text, quote=True)}" '
+                'onclick="copyToClipboard(this)">📋 Kopyala</button>'
+            )
+
+        title_rows = "".join(
+            f"""
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #edf1f6">
+                <span>{html.escape(str(title))}</span>
+                {copy_button(str(title))}
+            </div>
+            """
             for title in titles
         ) if isinstance(titles, list) else ""
 
@@ -594,18 +622,26 @@ def project_detail(slug: str) -> HTMLResponse:
             for tag in tags
         ) if isinstance(tags, list) else ""
 
+        tags_csv = ", ".join(str(tag) for tag in tags) if isinstance(tags, list) else ""
+
         seo_section = f"""
         <section class="card">
             <h2>SEO Metadata</h2>
 
             <h3 style="font-size:15px;margin-bottom:6px">Başlık önerileri</h3>
-            <ul style="margin-top:0">{title_items}</ul>
+            <div style="margin-bottom:14px">{title_rows}</div>
 
             <h3 style="font-size:15px;margin-bottom:6px">Açıklama</h3>
-            <p>{html.escape(description)}</p>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px">
+                <p style="margin:0;flex:1">{html.escape(description)}</p>
+                {copy_button(description)}
+            </div>
 
             <h3 style="font-size:15px;margin-bottom:6px">Etiketler</h3>
-            <div class="badges">{tag_badges}</div>
+            <div class="badges" style="margin-bottom:10px">{tag_badges}</div>
+            <div class="buttons" style="margin-bottom:0">
+                {copy_button(tags_csv)}
+            </div>
 
             <div class="buttons">
                 <a
@@ -781,6 +817,7 @@ def project_detail(slug: str) -> HTMLResponse:
         resolution: "Çözünürlük",
         fps: "FPS",
         background_music_enabled: "Arka Plan Müziği",
+        music_provider: "Müzik Sağlayıcı",
         subtitles_enabled: "Altyazı (.srt) Üret",
         subtitles_burn_in: "Altyazıyı Videoya Göm",
     }};
@@ -861,6 +898,15 @@ def project_detail(slug: str) -> HTMLResponse:
                 resolve(overrides);
             }};
         }});
+    }}
+
+    function copyToClipboard(btn) {{
+        const text = btn.getAttribute("data-copy") || "";
+        navigator.clipboard.writeText(text).then(() => {{
+            const original = btn.textContent;
+            btn.textContent = "✓ Kopyalandı";
+            setTimeout(() => {{ btn.textContent = original; }}, 1500);
+        }}).catch(() => alert("Kopyalanamadı — panoya erişim engellendi olabilir."));
     }}
 
     async function pollUntilDone(jobId) {{

@@ -49,6 +49,7 @@ class BuildRequest(BaseModel):
     resolution: str = Field(default="720p")
     fps: int = Field(default=30)
     background_music_enabled: bool = Field(default=False)
+    music_provider: str = Field(default="local")
     subtitles_enabled: bool = Field(default=False)
     subtitles_burn_in: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
@@ -101,6 +102,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 resolution=req["resolution"],
                 fps=req["fps"],
                 background_music_enabled=req["background_music_enabled"],
+                music_provider=req.get("music_provider", "local"),
                 subtitles_enabled=req["subtitles_enabled"],
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
@@ -353,10 +355,20 @@ button:disabled{opacity:.6;cursor:wait}
 
 <h3>\u2728 Ek \u00d6zellikler</h3>
 <label style="display:flex;align-items:center;gap:8px;font-weight:400">
-<input type="checkbox" id="background_music_enabled" style="width:auto;min-height:auto">
+<input type="checkbox" id="background_music_enabled" style="width:auto;min-height:auto" onchange="onMusicToggle()">
 Arka plan m\u00fczi\u011fi ekle
 </label>
-<div class="hint">\u00dcretim s\u0131ras\u0131nda <code>projects/&lt;proje&gt;/music/</code> klas\u00f6r\u00fcne bir mp3/wav dosyas\u0131 koy (render a\u015famas\u0131na kadar vaktin var); yoksa m\u00fczik olmadan devam eder.</div>
+<div class="hint">\u00dcretim s\u0131ras\u0131nda <code>projects/&lt;proje&gt;/music/</code> klas\u00f6r\u00fcne bir mp3/wav dosyas\u0131 koy (render a\u015famas\u0131na kadar vaktin var) ya da a\u015fa\u011f\u0131dan bir sa\u011flay\u0131c\u0131 se\u00e7; hi\u00e7biri yoksa m\u00fczik olmadan devam eder.</div>
+
+<div id="musicProviderRow" style="display:none;margin-top:10px;margin-left:22px">
+<label for="music_provider">M\u00fczik Sa\u011flay\u0131c\u0131</label>
+<select id="music_provider">
+<option value="local" selected>Yerel (music/ klas\u00f6r\u00fc)</option>
+<option value="jamendo">Jamendo (telifsiz)</option>
+<option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
+</select>
+<div class="hint">Jamendo/Mubert i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
+</div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
 <input type="checkbox" id="subtitles_enabled" style="width:auto;min-height:auto" onchange="onSubtitlesToggle()">
@@ -437,6 +449,11 @@ function updateHint(){
     m>0?(sec>0?`~${m} dk ${sec} sn`:`~${m} dakika`):`${s} saniye`;
 }
 
+function onMusicToggle(){
+  const on=document.getElementById("background_music_enabled").checked;
+  document.getElementById("musicProviderRow").style.display=on?"block":"none";
+}
+
 function onSubtitlesToggle(){
   const on=document.getElementById("subtitles_enabled").checked;
   const label=document.getElementById("burnInLabel");
@@ -490,6 +507,7 @@ async function startBuild(){
     resolution:document.getElementById("resolution").value,
     fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:document.getElementById("background_music_enabled").checked,
+    music_provider:document.getElementById("music_provider").value,
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
@@ -761,6 +779,7 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
         "voice_provider": "voice",
         "image_provider": "image",
         "video_provider": "video",
+        "music_provider": "music",
     }
 
     for field, category in provider_categories.items():
@@ -769,6 +788,12 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
                 {"key": definition.key, "name": definition.name}
                 for definition in ProviderRegistry.all(category=category)
             ]
+
+    if "music_provider" in choices:
+        choices["music_provider"].insert(
+            0,
+            {"key": "local", "name": "Yerel (music/ klasörü)"},
+        )
 
     return {
         "step_key": step_key,

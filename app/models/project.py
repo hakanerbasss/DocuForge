@@ -54,6 +54,7 @@ class DocumentaryProject:
 
     background_music_enabled: bool = False
     music_track: str = ""
+    music_provider: str = "local"
     subtitles_enabled: bool = False
     subtitles_burn_in: bool = False
     thumbnail_enabled: bool = False
@@ -241,6 +242,9 @@ class DocumentaryProject:
             ),
             music_track=str(
                 data.get("music_track", "")
+            ),
+            music_provider=str(
+                data.get("music_provider", "local")
             ),
             subtitles_enabled=bool(
                 data.get("subtitles_enabled", False)

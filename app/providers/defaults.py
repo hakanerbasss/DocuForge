@@ -16,6 +16,8 @@ from app.providers.video.pixabay import PixabayVideoProvider
 from app.providers.video.google_veo import GoogleVeoProvider
 from app.providers.video.fal import FalVideoProvider
 from app.providers.voice.espeak import EspeakVoiceProvider
+from app.providers.music.jamendo import JamendoMusicProvider
+from app.providers.music.mubert import MubertMusicProvider
 
 
 def register_default_providers() -> None:
@@ -153,4 +155,20 @@ def register_default_providers() -> None:
             key="xtts",
             name="XTTS Voice Clone",
             factory=XTTSVoiceProvider,
+        )
+
+    if ("music", "jamendo") not in registered:
+        ProviderRegistry.register(
+            category="music",
+            key="jamendo",
+            name="Jamendo (royalty-free)",
+            factory=JamendoMusicProvider,
+        )
+
+    if ("music", "mubert") not in registered:
+        ProviderRegistry.register(
+            category="music",
+            key="mubert",
+            name="Mubert (AI music)",
+            factory=MubertMusicProvider,
         )
