@@ -1115,7 +1115,20 @@ def project_detail(slug: str) -> HTMLResponse:
 
     async function pollUntilDone(jobId) {{
         while (true) {{
-            const r = await fetch(`/api/builds/${{jobId}}`);
+            let r;
+            try {{
+                r = await fetch(`/api/builds/${{jobId}}`);
+            }} catch (networkError) {{
+                // Sekme arka plana atıldığında ya da bağlantı geçici
+                // kesildiğinde fetch() burada atar -- işin durduğu
+                // anlamına gelmez, sunucuda arka planda çalışmaya devam
+                // ediyor olabilir. Sessizce yeniden dene.
+                document.getElementById("actionStatus").textContent =
+                    "Bağlantı kontrol ediliyor…";
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                continue;
+            }}
+
             const job = await r.json();
             applyStepProgress(job);
             if (job.status === "completed") return;

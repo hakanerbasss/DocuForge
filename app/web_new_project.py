@@ -551,8 +551,21 @@ async function startBuild(){
 
 async function pollJob(jobId){
   clearTimeout(pollTimer);
+
+  let r;
   try{
-    const r=await fetch(`/api/builds/${jobId}`);
+    r=await fetch(`/api/builds/${jobId}`);
+  }catch(networkError){
+    // Sekme arka plana at\u0131ld\u0131\u011f\u0131nda ya da ba\u011flant\u0131 ge\u00e7ici
+    // kesildi\u011finde fetch() burada atar -- \u00fcretimin durdu\u011fu anlam\u0131na
+    // gelmez, sunucuda arka planda \u00e7al\u0131\u015fmaya devam ediyor olabilir.
+    // Sessizce yeniden dene, hemen ba\u015far\u0131s\u0131z say\u0131p durma.
+    document.getElementById("statusText").textContent="Ba\u011flant\u0131 kontrol ediliyor\u2026";
+    pollTimer=setTimeout(()=>pollJob(jobId),3000);
+    return;
+  }
+
+  try{
     const job=await r.json();
     if(!r.ok)throw new Error(job.detail||"\u0130\u015f durumu al\u0131namad\u0131.");
     const pct=Math.max(4,Math.min(100,Number(job.progress_percent||4)));
