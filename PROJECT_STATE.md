@@ -138,7 +138,7 @@ stub/mock provider'larla izole test edildi:
 - Instagram bot'taki çalışan koddan birebir port edildi (chunking, speaker_wav cloning, sample rate 24000)
 - Web wizard'da ses sağlayıcısı olarak seçilebiliyor
 - **Test edilmedi** — bu container'da torch/coqui-tts/gerçek referans ses yok; sadece saf Python mantığı (chunking, referans ses çözümleme, hız normalizasyonu) izole test edildi. VPS'de gerçek bir referans ses dosyasıyla ilk kullanımda doğrulanmalı.
-- RAM notu: Instagram bot'un kendi `ses-klonu/README.md`'si CX23'ü 4GB varsayıp XTTS-v2 için yetersiz olabileceğini söylüyordu, ama kullanıcı sunucusunun gerçekte **8GB RAM** olduğunu doğruladı — bu, XTTS-v2'nin CPU üzerinde çalışması için genelde yeterli (model + inference tipik olarak 4-6GB civarı kullanıyor). Yine de web paneli + diğer servisler (varsa Instagram/haber botları) aynı anda çalışıyorsa dikkatli olunmalı; ilk kullanımda gerçek bir referans sesle denenip RAM sorunu çıkıp çıkmadığı kontrol edilmeli.
+- RAM notu: Instagram bot'un kendi `ses-klonu/README.md`'si eski/farklı bir sunucu planını (CX23, 4GB) varsayıp XTTS-v2 için yetersiz olabileceğini söylüyordu, ama kullanıcı gerçek sunucusunun **Hetzner CX33 (8GB RAM)** olduğunu doğruladı — bu, XTTS-v2'nin CPU üzerinde çalışması için genelde yeterli (model + inference tipik olarak 4-6GB civarı kullanıyor). Yine de web paneli + diğer servisler (varsa Instagram/haber botları) aynı anda çalışıyorsa dikkatli olunmalı; ilk kullanımda gerçek bir referans sesle denenip RAM sorunu çıkıp çıkmadığı kontrol edilmeli.
 
 ---
 
