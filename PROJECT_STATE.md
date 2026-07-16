@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (3. güncelleme aynı gün — thumbnail indirme, SEO kopyalama, XTTS ses yükleme/kayıt, müzik sağlayıcıları)
+Son güncelleme: 16 Temmuz 2026 (4. güncelleme aynı gün — thumbnail şablonları + çarpıcı başlık tasarımı)
 
 ## Ana hedef
 
@@ -175,7 +175,8 @@ stub/mock provider'larla izole test edildi:
 - Otomatik ducking (şu an sabit düşük seviye, sidechain compress değil)
 - Piper ses temizleme / normalizasyon / mastering
 - ~~XTTS referans ses yükleme arayüzü~~ ✅ tamamlandı
-- Thumbnail düzenleme (arayüzden başlık değiştirme vb.) — kapak üzerine çarpıcı/trend başlık yazısı ve birden fazla dönüşümlü şablon henüz yok (bkz. açık işler)
+- ~~Kapak üzerine çarpıcı/trend başlık yazısı + birden fazla dönüşümlü şablon~~ ✅ tamamlandı — bkz. "Thumbnail şablonları + çarpıcı başlık tasarımı"
+- Thumbnail düzenleme (arayüzden başlığı/şablonu manuel değiştirme) — şu an tamamen otomatik, kullanıcı müdahale edemiyor
 - ~~Başlık, açıklama ve etiket (SEO) üretimi~~ ✅ tamamlandı — `SEOAgent`, `seo.json`, proje detay sayfasında gösteriliyor
 - ~~`image_prompts.json`/`video_prompts.json`'ın AI üretim sağlayıcılarına bağlanması~~ ✅ tamamlandı — `MediaBuilder` artık provider tipine göre ayrım yapıyor (`_is_generation_provider`: stock sağlayıcılarda `.search()` var, üretim sağlayıcılarında yok). Üretim sağlayıcısı seçiliyse sahnenin zengin prompt'u kullanılıyor (video prompt'larında `camera_motion` da ekleniyor), stock sağlayıcılarda eskisi gibi kısa storyboard `visual` metni kullanılıyor. Bonus: bu düzeltmeden önce `MediaBuilder` doğrudan `provider.search()` çağırıyordu — üretim sağlayıcılarında bu metod hiç yok, yani prompt'u görmezden gelmenin ötesinde, seçilse muhtemelen `AttributeError` ile çökerdi.
 - YouTube yükleme
@@ -208,6 +209,22 @@ Kullanıcının "thumbnail indirme özelliği, başlık/etiket/açıklama için 
 - **Müzik sağlayıcıları** — `background_music_enabled` açıkken artık bir "Müzik Sağlayıcı" seçimi var: `local` (mevcut `music/` klasörü davranışı, varsayılan), `jamendo` (Jamendo — telifsiz müzik API'si, `client_id` ile arama/indirme), `mubert` (Mubert — yapay zeka ile prompt'tan müzik üretimi). Sağlayıcı seçiliyse `RenderService` render aşamasında `content_type`'a göre bir mood sorgusu oluşturup (`documentary`→"cinematic documentary ambient" vb.) o sağlayıcıdan müzik indiriyor; `music/` klasöründe zaten dosya varsa veya `local` seçiliyse eskisi gibi davranıyor. API anahtarları (`JAMENDO_CLIENT_ID`, `MUBERT_COMPANY_ID`, `MUBERT_LICENSE_TOKEN`) `/settings` sayfasından girilebiliyor. `render` adımını "Yeniden Üret" ile de değiştirilebiliyor.
   - **Test edilmedi:** Jamendo ve Mubert'in gerçek API çağrıları bu container'da denenmedi (API key yok) — sadece dokümante edilmiş request/response şekline göre mock HTTP testleriyle doğrulandı.
   - **Mubert özellikle belirsiz:** API şeması (2 adımlı auth: `/customers` → `/public/tracks`) resmi dokümantasyon yerine genel bilgiye dayanarak yazıldı, gerçek bir Mubert hesabıyla doğrulanmadı. Gerçek kullanımdan önce mutlaka kontrol edilmeli.
+
+---
+
+## Thumbnail şablonları + çarpıcı başlık tasarımı
+
+Kullanıcının "kapak görsellerinde sadece görsel var, çarpıcı/trend çeken/vizyoner başlık yazıları yok, kapak templateleri yapmamız lazım ki YouTube banlamasın, her seferinde farklı template kullanmalı" talebi üzerine `ThumbnailService` (`app/services/thumbnail_service.py`) yeniden yazıldı:
+
+- **Çarpıcı başlık:** Kapak artık ham proje başlığı yerine `seo.json`'daki ilk SEO başlık önerisini kullanıyor (SEO prompt'u zaten "merak uyandıran"/"dikkat çekici" başlık istiyor — bkz. `app/prompts/seo.txt`). `seo.json` yoksa veya boşsa ham proje başlığına düşüyor.
+- **4 farklı şablon, dönüşümlü kullanım:**
+  - `banner_bottom` — alt kısımda yarı saydam siyah bant, ortalanmış beyaz metin (eski/tek tasarım buydu)
+  - `banner_top` — üstte lacivert (`0x0b1f3d`) bant, aynı yerleşim
+  - `side_stripe` — solda %38 genişlikte kırmızı (`0xd7263d`) dikey şerit, metin şeridin içinde dar sütun halinde
+  - `bold_outline` — kutu yok, sadece büyük, kalın, siyah dış çizgili (ffmpeg `drawtext`'in `borderw`/`bordercolor`'ı) sarı (`0xffce00`) metin, üst kısımda ortalanmış — "şok edici" başlık tarzı
+  - Şablon seçimi round-robin: `projects/.thumbnail_template_rotation.json` dosyasında son kullanılan şablon tutuluyor, her yeni üretim bir sonrakine geçiyor (4'ü de sırayla kullanılıyor, art arda iki üretim asla aynı şablonu kullanmıyor). Bu dosya proje bazlı değil, `projects/` kökünde tek — yani rotasyon tüm kanal genelinde tutarlı.
+- **Test edildi:** başlık seçme mantığı (seo.json var/yok), rotasyon sırası (6 ardışık proje ile 4 şablonun doğru sırayla döndüğü doğrulandı), ve her 4 şablonun ürettiği ffmpeg `-vf` filtre zincirinin (drawbox/drawtext parametreleri, escaping) sözdizimsel olarak doğru olduğu — mock `subprocess.run` ile. **Bu container'da gerçek ffmpeg/gerçek görsel olmadığı için** çıktı görsel olarak (gerçek bir JPEG render edilip göze nasıl göründüğü) doğrulanmadı; VPS'de gerçek bir üretimle kontrol edilmeli.
+- Kapak `thumbnail_enabled` ile üretilen her projede otomatik çalışıyor, ekstra bir ayar/toggle eklenmedi (şablon seçimi kullanıcıya bırakılmadı, otomatik dönüşümlü) — bu tasarım tercihi: kullanıcı "her seferinde farklı template kullanmalı" dedi, manuel seçim değil otomatik çeşitlilik istedi.
 
 ---
 

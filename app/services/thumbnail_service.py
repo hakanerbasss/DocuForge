@@ -5,7 +5,14 @@ from typing import Any
 
 
 class ThumbnailService:
-    """Generate a YouTube-style thumbnail from project media via FFmpeg."""
+    """Generate a YouTube-style thumbnail from project media via FFmpeg.
+
+    Rotates between a handful of visually distinct templates (banner,
+    side stripe, bold outline) so a channel doesn't publish the same
+    cookie-cutter cover design every time, and prefers the SEO agent's
+    attention-grabbing title suggestion over the raw project title
+    when one is available.
+    """
 
     WIDTH = 1280
     HEIGHT = 720
@@ -19,15 +26,37 @@ class ThumbnailService:
         Path("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
     )
 
+    # Rotation order. Each build picks the template after the last one
+    # used (round robin), so consecutive thumbnails always look different.
+    TEMPLATES: tuple[dict[str, Any], ...] = (
+        {
+            "key": "banner_bottom",
+            "max_chars": 28,
+        },
+        {
+            "key": "banner_top",
+            "max_chars": 28,
+        },
+        {
+            "key": "side_stripe",
+            "max_chars": 13,
+        },
+        {
+            "key": "bold_outline",
+            "max_chars": 18,
+        },
+    )
+
+    ROTATION_FILE = ".thumbnail_template_rotation.json"
+
     def generate(self, project_path: str) -> Path:
         project_dir = Path(project_path)
         project_data = self._load_json(
             project_dir / "project.json"
         )
 
-        title = str(
-            project_data.get("title", "")
-        ).strip() or "DocuForge"
+        title = self._select_title(project_dir, project_data)
+        template = self._select_template(project_dir)
 
         source_image = self._extract_source_frame(project_dir)
 
@@ -35,6 +64,7 @@ class ThumbnailService:
         self._render_thumbnail(
             source_image,
             title,
+            template,
             output_path,
             self.WIDTH,
             self.HEIGHT,
@@ -52,12 +82,63 @@ class ThumbnailService:
             self._render_thumbnail(
                 source_image,
                 title,
+                template,
                 project_dir / "thumbnail_vertical.jpg",
                 self.VERTICAL_WIDTH,
                 self.VERTICAL_HEIGHT,
             )
 
         return output_path
+
+    def _select_title(
+        self,
+        project_dir: Path,
+        project_data: dict[str, Any],
+    ) -> str:
+        """Prefer the SEO agent's curiosity-driven title over the raw topic."""
+
+        seo_data = self._load_json(project_dir / "seo.json")
+        titles = seo_data.get("titles")
+
+        if isinstance(titles, list):
+            for candidate in titles:
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+
+        return str(
+            project_data.get("title", "")
+        ).strip() or "DocuForge"
+
+    def _select_template(self, project_dir: Path) -> dict[str, Any]:
+        """Round-robin across TEMPLATES using a rotation file shared by
+        every project directory (project_dir.parent == the projects root),
+        so template variety holds across a whole channel, not just one
+        project.
+        """
+
+        rotation_path = project_dir.parent / self.ROTATION_FILE
+        keys = [entry["key"] for entry in self.TEMPLATES]
+
+        state = self._load_json(rotation_path)
+        last_key = state.get("last_key")
+
+        if last_key in keys:
+            next_index = (keys.index(last_key) + 1) % len(keys)
+        else:
+            next_index = 0
+
+        template = self.TEMPLATES[next_index]
+
+        try:
+            rotation_path.parent.mkdir(parents=True, exist_ok=True)
+            rotation_path.write_text(
+                json.dumps({"last_key": template["key"]}),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+        return template
 
     def _extract_source_frame(self, project_dir: Path) -> Path:
         media_dir = project_dir / "media"
@@ -110,6 +191,7 @@ class ThumbnailService:
         self,
         source: Path,
         title: str,
+        template: dict[str, Any],
         output_path: Path,
         width: int,
         height: int,
@@ -123,23 +205,18 @@ class ThumbnailService:
         ]
 
         if font_path is not None:
-            wrapped_title = self._wrap_text(title, max_chars=28)
-            escaped_text = self._escape_drawtext(wrapped_title)
-            box_height = int(height * 0.22)
-
-            vf_parts.append(
-                f"drawbox=x=0:y={height - box_height}:"
-                f"w={width}:h={box_height}:color=black@0.55:t=fill"
+            builder = getattr(
+                self,
+                f"_build_{template['key']}",
             )
-            vf_parts.append(
-                "drawtext="
-                f"fontfile='{font_path}':"
-                f"text='{escaped_text}':"
-                "fontcolor=white:"
-                f"fontsize={int(height * 0.055)}:"
-                "x=(w-text_w)/2:"
-                f"y=h-{box_height}+({box_height}-text_h)/2:"
-                "line_spacing=6"
+            vf_parts.extend(
+                builder(
+                    font_path,
+                    title,
+                    template["max_chars"],
+                    width,
+                    height,
+                )
             )
 
         command = [
@@ -164,6 +241,105 @@ class ThumbnailService:
             )
 
         return output_path
+
+    def _build_banner_bottom(
+        self,
+        font_path: Path,
+        title: str,
+        max_chars: int,
+        width: int,
+        height: int,
+    ) -> list[str]:
+        wrapped_title = self._wrap_text(title, max_chars=max_chars)
+        escaped_text = self._escape_drawtext(wrapped_title)
+        box_height = int(height * 0.22)
+
+        return [
+            f"drawbox=x=0:y={height - box_height}:"
+            f"w={width}:h={box_height}:color=black@0.55:t=fill",
+            "drawtext="
+            f"fontfile='{font_path}':"
+            f"text='{escaped_text}':"
+            "fontcolor=white:"
+            f"fontsize={int(height * 0.055)}:"
+            "x=(w-text_w)/2:"
+            f"y=h-{box_height}+({box_height}-text_h)/2:"
+            "line_spacing=6",
+        ]
+
+    def _build_banner_top(
+        self,
+        font_path: Path,
+        title: str,
+        max_chars: int,
+        width: int,
+        height: int,
+    ) -> list[str]:
+        wrapped_title = self._wrap_text(title, max_chars=max_chars)
+        escaped_text = self._escape_drawtext(wrapped_title)
+        box_height = int(height * 0.24)
+
+        return [
+            f"drawbox=x=0:y=0:"
+            f"w={width}:h={box_height}:color=0x0b1f3d@0.8:t=fill",
+            "drawtext="
+            f"fontfile='{font_path}':"
+            f"text='{escaped_text}':"
+            "fontcolor=white:"
+            f"fontsize={int(height * 0.055)}:"
+            "x=(w-text_w)/2:"
+            f"y=({box_height}-text_h)/2:"
+            "line_spacing=6",
+        ]
+
+    def _build_side_stripe(
+        self,
+        font_path: Path,
+        title: str,
+        max_chars: int,
+        width: int,
+        height: int,
+    ) -> list[str]:
+        wrapped_title = self._wrap_text(title, max_chars=max_chars)
+        escaped_text = self._escape_drawtext(wrapped_title)
+        stripe_width = int(width * 0.38)
+
+        return [
+            f"drawbox=x=0:y=0:"
+            f"w={stripe_width}:h={height}:color=0xd7263d@0.88:t=fill",
+            "drawtext="
+            f"fontfile='{font_path}':"
+            f"text='{escaped_text}':"
+            "fontcolor=white:"
+            f"fontsize={int(height * 0.06)}:"
+            f"x=({stripe_width}-text_w)/2:"
+            "y=(h-text_h)/2:"
+            "line_spacing=8",
+        ]
+
+    def _build_bold_outline(
+        self,
+        font_path: Path,
+        title: str,
+        max_chars: int,
+        width: int,
+        height: int,
+    ) -> list[str]:
+        wrapped_title = self._wrap_text(title, max_chars=max_chars)
+        escaped_text = self._escape_drawtext(wrapped_title)
+
+        return [
+            "drawtext="
+            f"fontfile='{font_path}':"
+            f"text='{escaped_text}':"
+            "fontcolor=0xffce00:"
+            f"fontsize={int(height * 0.09)}:"
+            f"borderw={max(4, int(height * 0.01))}:"
+            "bordercolor=black:"
+            "x=(w-text_w)/2:"
+            f"y={int(height * 0.1)}:"
+            "line_spacing=4",
+        ]
 
     def _find_font(self) -> Path | None:
         for candidate in self.FONT_CANDIDATES:

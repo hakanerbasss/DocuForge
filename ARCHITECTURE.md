@@ -77,8 +77,8 @@ deterministic production logic. Do not model them as `*Agent` classes.
 | `MediaBuilder` | Downloads scene images/videos via the image/video provider registry. Reads `media_mode` and only calls the providers that mode implies (`image` → images only, `video` → videos only with no image fallback, `mixed` → video-first with image fallback). Writes `media/manifest.json`. |
 | `NarrationBuilder` | Splits narration into per-scene text files under `narration/`. |
 | `VoiceService` | Synthesizes each scene's narration audio via the voice provider registry (eSpeak / Piper / Supertonic), using `voice_provider`, `voice_name`, `voice_speed` from `project.json`. Writes `audio/manifest.json` with per-scene duration. |
-| `RenderService` | Builds one FFmpeg clip per scene (video loop+audio mux, or image+pad), sized/timed from `resolution`/`fps`/scene durations, concatenates them into `render/final_video.mp4`, then optionally mixes in background music and/or writes `render/subtitles.srt`. |
-| `ThumbnailService` | Optional. Extracts a frame from the first usable scene (existing image, or a grabbed video frame), overlays the project title via FFmpeg `drawtext`, and writes `thumbnail.jpg` (+ `thumbnail_vertical.jpg` for shorts/vertical). |
+| `RenderService` | Builds one FFmpeg clip per scene (video loop+audio mux, or image+pad), sized/timed from `resolution`/`fps`/scene durations, concatenates them into `render/final_video.mp4`, then optionally mixes in background music and/or writes `render/subtitles.srt`. Music comes from a local file if one exists, otherwise from the `music` provider registry (`jamendo`/`mubert`) if `music_provider` is set to one, using a mood query built from `content_type`. |
+| `ThumbnailService` | Optional. Extracts a frame from the first usable scene (existing image, or a grabbed video frame), picks the SEO agent's first title suggestion (`seo.json`) over the raw project title when available, and overlays it via FFmpeg `drawtext`/`drawbox` using one of 4 templates (`banner_bottom`, `banner_top`, `side_stripe`, `bold_outline`). Templates rotate round-robin via a `.thumbnail_template_rotation.json` file at the projects root, so consecutive thumbnails never reuse the previous project's layout. Writes `thumbnail.jpg` (+ `thumbnail_vertical.jpg` for shorts/vertical). |
 | `ProjectService` | Creates/loads/saves `project.json`. Resolves a collision-free slug (`_2`, `_3`, ...) so a repeated title never silently overwrites an existing project. |
 
 ---
@@ -262,8 +262,8 @@ title, language, content_type, target_duration_seconds, media_mode,
 text_provider, image_provider, video_provider,
 voice_provider, voice_name, voice_speed,
 resolution, fps,
-background_music_enabled, music_track,
-subtitles_enabled, thumbnail_enabled,
+background_music_enabled, music_track, music_provider,
+subtitles_enabled, subtitles_burn_in, thumbnail_enabled,
 status, created_at
 ```
 
