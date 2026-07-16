@@ -9,7 +9,7 @@ from app.providers.shared.models import MediaAsset
 
 
 class MediaBuilder:
-    """Download suitable media for every storyboard scene."""
+    """Download or generate suitable media for every storyboard scene."""
 
     def build(self, project_path: str) -> Path:
         project_dir = Path(project_path)
@@ -52,6 +52,13 @@ class MediaBuilder:
             key=image_provider_key,
         ) if media_mode != "video" else None
 
+        image_prompts_by_scene = self._load_image_prompts_by_scene(
+            project_dir
+        )
+        video_prompts_by_scene = self._load_video_prompts_by_scene(
+            project_dir
+        )
+
         manifest_items: list[dict[str, Any]] = []
 
         for index, scene in enumerate(
@@ -62,11 +69,11 @@ class MediaBuilder:
             scene_dir = media_dir / f"scene_{scene_number:03d}"
             scene_dir.mkdir(parents=True, exist_ok=True)
 
-            query = self._build_query(scene)
+            search_query = self._build_query(scene)
 
             print(
                 f"[{index}/{len(storyboard['scenes'])}] "
-                f"Scene {scene_number}: {query} [{media_mode}]"
+                f"Scene {scene_number}: {search_query} [{media_mode}]"
             )
 
             result = None
@@ -75,36 +82,44 @@ class MediaBuilder:
                 # Only images
                 result = self._acquire_image(
                     provider=image_provider,
-                    query=query,
+                    scene_number=scene_number,
                     scene_dir=scene_dir,
+                    search_query=search_query,
+                    image_prompts_by_scene=image_prompts_by_scene,
                 )
             elif media_mode == "video":
                 # Only videos, no image fallback
                 result = self._acquire_video(
                     provider=video_provider,
-                    query=query,
+                    scene_number=scene_number,
                     scene_dir=scene_dir,
+                    search_query=search_query,
+                    video_prompts_by_scene=video_prompts_by_scene,
                 )
             else:
                 # mixed: try video first, fall back to image
                 result = self._acquire_video(
                     provider=video_provider,
-                    query=query,
+                    scene_number=scene_number,
                     scene_dir=scene_dir,
+                    search_query=search_query,
+                    video_prompts_by_scene=video_prompts_by_scene,
                 )
                 if result is None:
                     result = self._acquire_image(
                         provider=image_provider,
-                        query=query,
+                        scene_number=scene_number,
                         scene_dir=scene_dir,
+                        search_query=search_query,
+                        image_prompts_by_scene=image_prompts_by_scene,
                     )
 
             if result is None:
                 manifest_item = {
                     "scene": scene_number,
                     "status": "failed",
-                    "query": query,
-                    "error": "No suitable Pexels video or image found.",
+                    "query": search_query,
+                    "error": "No suitable media found or generated.",
                 }
 
                 self._write_scene_asset(
@@ -120,7 +135,7 @@ class MediaBuilder:
             manifest_item = {
                 "scene": scene_number,
                 "status": "completed",
-                "query": query,
+                "query": search_query,
                 "media_type": asset.media_type,
                 "provider": asset.provider,
                 "asset_id": asset.asset_id,
@@ -168,15 +183,40 @@ class MediaBuilder:
 
         return manifest_path
 
+    def _is_generation_provider(self, provider: Any) -> bool:
+        """Distinguish AI generation providers from search-based stock providers.
+
+        Stock providers (Pexels/Pixabay/Unsplash) expose .search() in
+        addition to the ImageProvider/VideoProvider interface; generation
+        providers (DALL-E/Imagen/Veo/fal) only implement get_images()/
+        get_videos(), treating the query as a generation prompt.
+        """
+
+        return not hasattr(provider, "search")
+
     def _acquire_video(
         self,
         provider: Any,
-        query: str,
+        scene_number: int,
         scene_dir: Path,
+        search_query: str,
+        video_prompts_by_scene: dict[int, str],
     ) -> tuple[MediaAsset, Path] | None:
+        if provider is None:
+            return None
+
+        if self._is_generation_provider(provider):
+            return self._generate_video(
+                provider,
+                scene_number,
+                scene_dir,
+                search_query,
+                video_prompts_by_scene,
+            )
+
         try:
             assets = provider.search(
-                query,
+                search_query,
                 limit=5,
                 orientation="landscape",
                 min_width=1280,
@@ -205,15 +245,72 @@ class MediaBuilder:
 
         return asset, destination
 
+    def _generate_video(
+        self,
+        provider: Any,
+        scene_number: int,
+        scene_dir: Path,
+        search_query: str,
+        video_prompts_by_scene: dict[int, str],
+    ) -> tuple[MediaAsset, Path] | None:
+        prompt = video_prompts_by_scene.get(scene_number, search_query)
+
+        try:
+            paths = provider.get_videos(
+                prompt,
+                scene_dir,
+                limit=1,
+                orientation="landscape",
+            )
+        except Exception as error:
+            print(
+                f"  ⚠ Video generation failed "
+                f"({provider.provider_key}): {error}"
+            )
+            return None
+
+        if not paths:
+            print("  ⚠ No video generated.")
+            return None
+
+        destination = paths[0]
+
+        asset = MediaAsset(
+            asset_id=destination.stem,
+            provider=provider.provider_key,
+            media_type="video",
+            download_url=str(destination),
+            query=prompt,
+            metadata={"generated": True, "prompt": prompt},
+        )
+
+        print(f"  ✅ Video generated: {destination}")
+
+        return asset, destination
+
     def _acquire_image(
         self,
         provider: Any,
-        query: str,
+        scene_number: int,
         scene_dir: Path,
+        search_query: str,
+        image_prompts_by_scene: dict[int, str],
     ) -> tuple[MediaAsset, Path] | None:
+        if provider is None:
+            return None
+
+        if self._is_generation_provider(provider):
+            return self._generate_image(
+                provider,
+                scene_number,
+                scene_dir,
+                search_query,
+                image_prompts_by_scene,
+            )
+
         try:
             assets = provider.search(
-                query,
+                search_query,
                 limit=5,
                 orientation="landscape",
             )
@@ -238,6 +335,49 @@ class MediaBuilder:
             return None
 
         print(f"  ✅ Image downloaded: {destination}")
+
+        return asset, destination
+
+    def _generate_image(
+        self,
+        provider: Any,
+        scene_number: int,
+        scene_dir: Path,
+        search_query: str,
+        image_prompts_by_scene: dict[int, str],
+    ) -> tuple[MediaAsset, Path] | None:
+        prompt = image_prompts_by_scene.get(scene_number, search_query)
+
+        try:
+            paths = provider.get_images(
+                prompt,
+                scene_dir,
+                limit=1,
+                orientation="landscape",
+            )
+        except Exception as error:
+            print(
+                f"  ❌ Image generation failed "
+                f"({provider.provider_key}): {error}"
+            )
+            return None
+
+        if not paths:
+            print("  ❌ No image generated.")
+            return None
+
+        destination = paths[0]
+
+        asset = MediaAsset(
+            asset_id=destination.stem,
+            provider=provider.provider_key,
+            media_type="image",
+            download_url=str(destination),
+            query=prompt,
+            metadata={"generated": True, "prompt": prompt},
+        )
+
+        print(f"  ✅ Image generated: {destination}")
 
         return asset, destination
 
@@ -270,6 +410,99 @@ class MediaBuilder:
 
         return data
 
+    def _load_image_prompts_by_scene(
+        self,
+        project_dir: Path,
+    ) -> dict[int, str]:
+        """Load ImagePromptAgent's richer per-scene prompts, if present."""
+
+        path = project_dir / "image_prompts.json"
+
+        if not path.exists():
+            return {}
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        images = data.get("images")
+
+        if not isinstance(images, list):
+            return {}
+
+        result: dict[int, str] = {}
+
+        for item in images:
+            if not isinstance(item, dict):
+                continue
+
+            scene = item.get("scene")
+            prompt = item.get("prompt")
+
+            if (
+                isinstance(scene, int)
+                and isinstance(prompt, str)
+                and prompt.strip()
+            ):
+                result[scene] = prompt.strip()
+
+        return result
+
+    def _load_video_prompts_by_scene(
+        self,
+        project_dir: Path,
+    ) -> dict[int, str]:
+        """Load VideoPromptAgent's richer per-scene prompts, if present.
+
+        Combines "prompt" with "camera_motion" since both are meaningful
+        generation guidance that a stock search query never carried.
+        """
+
+        path = project_dir / "video_prompts.json"
+
+        if not path.exists():
+            return {}
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        videos = data.get("videos")
+
+        if not isinstance(videos, list):
+            return {}
+
+        result: dict[int, str] = {}
+
+        for item in videos:
+            if not isinstance(item, dict):
+                continue
+
+            scene = item.get("scene")
+            prompt = item.get("prompt")
+            camera_motion = item.get("camera_motion")
+
+            if not (
+                isinstance(scene, int)
+                and isinstance(prompt, str)
+                and prompt.strip()
+            ):
+                continue
+
+            combined = prompt.strip()
+
+            if isinstance(camera_motion, str) and camera_motion.strip():
+                combined = (
+                    f"{combined}. Camera motion: "
+                    f"{camera_motion.strip()}."
+                )
+
+            result[scene] = combined
+
+        return result
+
     def _build_query(self, scene: dict[str, Any]) -> str:
         visual = scene.get("visual")
         title = scene.get("title")
@@ -281,7 +514,7 @@ class MediaBuilder:
         else:
             query = "documentary cinematic scene"
 
-        # Pexels aramasında çok uzun yapay zekâ promptları verimsiz olabilir.
+        # Stock search APIs are less effective with long AI-style prompts.
         words = query.replace("\n", " ").split()
 
         return " ".join(words[:12])

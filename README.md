@@ -26,6 +26,7 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 - ✅ DeepSeek text generation — via a Provider Registry
 - ✅ Image/video: Pexels, Pixabay, Unsplash (free stock) plus DALL-E, Google Imagen/Veo, and fal.ai (Flux/Kling/hundreds more) for AI generation — selectable in the web wizard, `MediaBuilder` resolves whichever is configured with no code changes needed
+- ✅ Generation providers get fed the *right* prompt: `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) were being generated but silently discarded — `MediaBuilder` now uses each scene's richer AI-crafted prompt (video prompts also fold in `camera_motion`) when the configured provider is a generator, falling back to the storyboard's short `visual` text otherwise. Stock providers (pexels/pixabay/unsplash) still get that short search-style query unchanged, since a full generation prompt makes a poor keyword search.
 - ✅ Modular Agent Architecture + Build Pipeline with resume (`pipeline_state.json`)
 - ✅ Content settings that actually change agent/pipeline behavior, not just metadata:
   - `content_type` (documentary / news / shorts / informational) shapes the research, script, storyboard and narration prompts differently per type
@@ -46,7 +47,6 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 - ❌ Subtitle burn-in (currently sidecar `.srt` only)
 - ❌ Piper crackle/audio-quality cleanup (loudnorm, crossfade, DC offset)
-- ❌ `image_prompts.json`/`video_prompts.json` (from ImagePromptAgent/VideoPromptAgent) are generated but **never consumed** by `MediaBuilder`, which still only uses the storyboard's shorter scene description text — even with generation providers now available, they aren't fed the richer prompt output yet.
 - ❌ None of the new AI generation providers (DALL-E, Imagen, Veo, fal.ai) have been exercised against live traffic in this codebase — verified against documented API shapes with mocked HTTP only. Try each with a real key before depending on it.
 - ❌ YouTube upload (SEO metadata is generated but nothing pushes it or the video to YouTube)
 

@@ -174,7 +174,7 @@ stub/mock provider'larla izole test edildi:
 - XTTS referans ses yükleme arayüzü
 - Thumbnail düzenleme (arayüzden başlık değiştirme vb.)
 - ~~Başlık, açıklama ve etiket (SEO) üretimi~~ ✅ tamamlandı — `SEOAgent`, `seo.json`, proje detay sayfasında gösteriliyor
-- `ImagePromptAgent`/`VideoPromptAgent` zaten `image_prompts.json`/`video_prompts.json` üretiyor ama `MediaBuilder` bunları hâlâ hiç okumuyor — yeni AI üretim sağlayıcıları (DALL-E, Imagen, Veo, fal.ai) bile eklendikten sonra hâlâ storyboard'un kısa `visual` alanını kullanıyor, bu daha zengin prompt'lara bağlanmadı.
+- ~~`image_prompts.json`/`video_prompts.json`'ın AI üretim sağlayıcılarına bağlanması~~ ✅ tamamlandı — `MediaBuilder` artık provider tipine göre ayrım yapıyor (`_is_generation_provider`: stock sağlayıcılarda `.search()` var, üretim sağlayıcılarında yok). Üretim sağlayıcısı seçiliyse sahnenin zengin prompt'u kullanılıyor (video prompt'larında `camera_motion` da ekleniyor), stock sağlayıcılarda eskisi gibi kısa storyboard `visual` metni kullanılıyor. Bonus: bu düzeltmeden önce `MediaBuilder` doğrudan `provider.search()` çağırıyordu — üretim sağlayıcılarında bu metod hiç yok, yani prompt'u görmezden gelmenin ötesinde, seçilse muhtemelen `AttributeError` ile çökerdi.
 - YouTube yükleme
 - Instagram/Reels sürümü
 - Kalıcı iş kuyruğu (şu an per-request thread + disk üzerinde JSON; gerçek bir queue değil)

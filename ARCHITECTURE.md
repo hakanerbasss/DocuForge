@@ -121,12 +121,20 @@ response field path in particular
 (`response.generateVideoResponse.generatedSamples[0].video.uri`) is flagged in its
 docstring as the least certain of the bunch — validate before relying on it.
 
-Note also that `ImagePromptAgent`/`VideoPromptAgent` produce `image_prompts.json` /
-`video_prompts.json` specifically for an AI image/video *generator* to consume, but
-`MediaBuilder` still only ever searches/generates using the storyboard's scene
-description text — it never reads either prompt file. Wiring the new generation
-providers to those richer prompts (rather than the shorter storyboard visual field)
-is still open.
+`MediaBuilder` now branches on provider type via `_is_generation_provider()` — a plain
+`hasattr(provider, "search")` check, since stock providers (Pexels/Pixabay/Unsplash)
+expose `.search()` in addition to the `ImageProvider`/`VideoProvider` interface, and
+generation providers only implement `get_images()`/`get_videos()`. For generation
+providers, it looks up the current scene's prompt from `image_prompts.json`/
+`video_prompts.json` (loaded once per `build()` call via `_load_image_prompts_by_scene`/
+`_load_video_prompts_by_scene`; video prompts fold in `camera_motion` since that's
+meaningful generation guidance a stock query never carried), falling back to the
+storyboard's short `visual` text if the scene is missing from the prompts file. Stock
+providers are untouched — they still call `.search()` with the short query and a real
+`MediaAsset` (author/license/page_url) exactly as before. This also fixed a bug beyond
+just "prompts unused": `MediaBuilder` previously called `provider.search()` directly,
+which no generation provider implements at all — a generation provider selected before
+this change would have crashed with `AttributeError`, not just ignored its prompt file.
 
 `VoiceProvider.synthesize()` takes `text`, `output_path`, and `**options` (language,
 voice_name, speed, ...); each provider reads whichever options it understands.
