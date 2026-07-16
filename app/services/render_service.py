@@ -87,6 +87,7 @@ class RenderService:
             raise ValueError("No scene directories found.")
 
         clip_files: list[Path] = []
+        subtitle_segments: list[tuple[int, float, str | None]] = []
 
         for index, scene_dir in enumerate(scene_dirs, start=1):
             scene_number = self._scene_number_from_dir(
@@ -128,6 +129,12 @@ class RenderService:
                 )
             else:
                 scene_duration = storyboard_duration
+
+            subtitle_segments.append((
+                scene_number,
+                scene_duration,
+                self._read_scene_subtitle_text(audio_info),
+            ))
 
             video_files = sorted(scene_dir.glob("*.mp4"))
 
@@ -225,6 +232,11 @@ class RenderService:
                 output_path,
                 project_data,
             )
+
+        if project_data.get("subtitles_enabled"):
+            srt_path = render_dir / "subtitles.srt"
+            self._write_srt(srt_path, subtitle_segments)
+            print(f"  ✅ Subtitles written ({srt_path})")
 
         return output_path
 
@@ -330,6 +342,69 @@ class RenderService:
                 return matches[0]
 
         return None
+
+    def _read_scene_subtitle_text(
+        self,
+        audio_info: dict[str, Any] | None,
+    ) -> str | None:
+        if audio_info is None:
+            return None
+
+        raw_text_path = audio_info.get("text_file")
+
+        if not isinstance(raw_text_path, str):
+            return None
+
+        text_path = Path(raw_text_path)
+
+        if not text_path.exists():
+            return None
+
+        text = text_path.read_text(encoding="utf-8").strip()
+
+        return text or None
+
+    def _write_srt(
+        self,
+        srt_path: Path,
+        segments: list[tuple[int, float, str | None]],
+    ) -> None:
+        blocks: list[str] = []
+        cursor = 0.0
+        subtitle_index = 0
+
+        for _scene_number, duration, text in segments:
+            start = cursor
+            end = cursor + duration
+            cursor = end
+
+            if not text:
+                continue
+
+            subtitle_index += 1
+            blocks.append(
+                f"{subtitle_index}\n"
+                f"{self._format_srt_timestamp(start)} --> "
+                f"{self._format_srt_timestamp(end)}\n"
+                f"{text}\n"
+            )
+
+        srt_path.parent.mkdir(parents=True, exist_ok=True)
+        srt_path.write_text(
+            "\n".join(blocks),
+            encoding="utf-8",
+        )
+
+    def _format_srt_timestamp(
+        self,
+        seconds: float,
+    ) -> str:
+        total_ms = max(0, round(seconds * 1000))
+        hours, remainder_ms = divmod(total_ms, 3_600_000)
+        minutes, remainder_ms = divmod(remainder_ms, 60_000)
+        secs, ms = divmod(remainder_ms, 1000)
+
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
     def _video_to_clip(
         self,

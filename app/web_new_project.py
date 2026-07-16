@@ -264,6 +264,12 @@ Arka plan m\u00fczi\u011fi ekle
 </label>
 <div class="hint">\u00dcretim s\u0131ras\u0131nda <code>projects/&lt;proje&gt;/music/</code> klas\u00f6r\u00fcne bir mp3/wav dosyas\u0131 koy (render a\u015famas\u0131na kadar vaktin var); yoksa m\u00fczik olmadan devam eder.</div>
 
+<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
+<input type="checkbox" id="subtitles_enabled" style="width:auto;min-height:auto">
+Altyaz\u0131 (.srt) olu\u015ftur
+</label>
+<div class="hint">Sahne bazl\u0131 zamanlamal\u0131 .srt dosyas\u0131 render klas\u00f6r\u00fcne yaz\u0131l\u0131r (hen\u00fcz videoya g\u00f6m\u00fclm\u00fcyor).</div>
+
 <button id="startButton" onclick="startBuild()">\u00dcretimi Ba\u015flat</button>
 
 <div id="statusBox" class="status">
@@ -338,7 +344,7 @@ async function startBuild(){
     resolution:document.getElementById("resolution").value,
     fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:document.getElementById("background_music_enabled").checked,
-    subtitles_enabled:false,
+    subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     thumbnail_enabled:false,
   };
 
