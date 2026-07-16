@@ -2,30 +2,19 @@
 
 ## Overview
 
-DocuForge is an AI-powered documentary production platform built around a modular pipeline architecture.
-
-Every stage is implemented as an independent AI Agent.
+DocuForge is an AI-powered video production platform. A project moves through two
+kinds of stages: **AI agent stages** (text generation, one prompt per stage) and
+**production service stages** (media download, TTS, FFmpeg render). Both are
+orchestrated by `BuildPipeline` and both use the same resume mechanism.
 
 ```
 Topic
-   │
-   ▼
-Research
-   │
-   ▼
-Script
-   │
-   ▼
-Storyboard
-   │
-   ▼
-Image Prompts
-   │
-   ▼
-Video Prompts
-   │
-   ▼
-Narration
+  │
+  ▼
+Research → Script → Storyboard → Image Prompts → Video Prompts → Narration   (agents)
+  │
+  ▼
+Media Builder → Scene Narrations → Voice Generation → FFmpeg Render → [Thumbnail]  (services)
 ```
 
 ---
@@ -34,198 +23,166 @@ Narration
 
 ```
 app/
-
-agents/
-ai/
-cli/
-core/
-models/
-pipeline/
-prompts/
-services/
-utils/
+├── agents/       # BaseAgent + one class per AI-generation stage
+├── ai/           # AI provider clients (DeepSeek) and factory
+├── cli/          # (currently unused; CLI lives in main.py)
+├── core/         # Settings (env vars)
+├── models/       # DocumentaryProject dataclass
+├── pipeline/     # BuildPipeline, step definitions, agent registry wiring
+├── prompts/      # Jinja2 prompt templates, one per agent
+├── providers/    # ProviderRegistry + text/image/video/voice provider implementations
+├── services/     # Non-agent production stages (see below)
+├── utils/        # Shared helpers (prompt loading, etc.)
+├── main.py       # Typer CLI
+├── web.py        # FastAPI app: project list/detail/file serving
+└── web_new_project.py  # FastAPI router: new-project wizard + build job API
 ```
 
 ---
 
-# Agent Architecture
+# Agent Layer
 
-All agents inherit from BaseAgent.
+All agents inherit from `BaseAgent`, which provides AI provider access, retry logic,
+and response validation.
 
 ```
 BaseAgent
-
 ├── ResearchAgent
-
 ├── ScriptAgent
-
 ├── StoryboardAgent
-
 ├── ImagePromptAgent
-
 ├── VideoPromptAgent
-
 └── NarrationAgent
 ```
 
-Responsibilities of BaseAgent:
+`AgentRegistry` is the catalog: each agent is registered with a key, name, icon,
+output filename and factory. `app/pipeline/definitions.py` defines the fixed agent
+order and how each stage's input is loaded from the previous stage's output file.
 
-- AI Provider access
-- Retry logic
-- Response validation
-- Common utilities
-
----
-
-# Agent Registry
-
-AgentRegistry is the central catalog for all agents.
-
-Each agent defines:
-
-- key
-- name
-- icon
-- output file
-- factory
-
-Example:
-
-Research
-
-↓
-
-research.md
-
-↓
-
-ResearchAgent
+Prompts live in `app/prompts/*.txt` as Jinja2 templates. `content_type` and
+`target_duration_seconds` are passed into the research/script/storyboard/narration
+templates and produce genuinely different prompt text per content type and duration
+bucket (see `research.txt`, `script.txt`, `storyboard.txt`) — this is prompt-level
+steering, not a hard-coded scene-count validator in code.
 
 ---
 
-# Pipeline
+# Service Layer
 
-BuildPipeline executes agents sequentially.
+These are **services**, not agents — they don't call an AI text provider, they run
+deterministic production logic. Do not model them as `*Agent` classes.
 
-```
-Build
-
-↓
-
-Research
-
-↓
-
-Script
-
-↓
-
-Storyboard
-
-↓
-
-Images
-
-↓
-
-Videos
-
-↓
-
-Narration
-```
-
-ResumePipeline skips completed steps using:
-
-```
-pipeline_state.json
-```
+| Service | Responsibility |
+|---|---|
+| `MediaBuilder` | Downloads scene images/videos via the image/video provider registry. Reads `media_mode` and only calls the providers that mode implies (`image` → images only, `video` → videos only with no image fallback, `mixed` → video-first with image fallback). Writes `media/manifest.json`. |
+| `NarrationBuilder` | Splits narration into per-scene text files under `narration/`. |
+| `VoiceService` | Synthesizes each scene's narration audio via the voice provider registry (eSpeak / Piper / Supertonic), using `voice_provider`, `voice_name`, `voice_speed` from `project.json`. Writes `audio/manifest.json` with per-scene duration. |
+| `RenderService` | Builds one FFmpeg clip per scene (video loop+audio mux, or image+pad), sized/timed from `resolution`/`fps`/scene durations, concatenates them into `render/final_video.mp4`, then optionally mixes in background music and/or writes `render/subtitles.srt`. |
+| `ThumbnailService` | Optional. Extracts a frame from the first usable scene (existing image, or a grabbed video frame), overlays the project title via FFmpeg `drawtext`, and writes `thumbnail.jpg` (+ `thumbnail_vertical.jpg` for shorts/vertical). |
+| `ProjectService` | Creates/loads/saves `project.json`. Resolves a collision-free slug (`_2`, `_3`, ...) so a repeated title never silently overwrites an existing project. |
 
 ---
 
-# AI Layer
+# Provider Registry
 
-Current Provider
+`ProviderRegistry` is a plain category→key→factory map (`app/providers/registry.py`).
+`register_default_providers()` in `app/providers/defaults.py` registers the built-ins:
 
-- DeepSeek
+| Category | Registered keys |
+|---|---|
+| `text` | `deepseek` |
+| `image` | `pexels` |
+| `video` | `pexels` |
+| `voice` | `espeak`, `local_tts` (alias for eSpeak), `piper`, `supertonic` |
 
-Future Providers
+`image_provider`/`video_provider` are already threaded through the project model and
+`BuildPipeline`, but since only Pexels exists for each category today, there is
+nothing else to select yet — this becomes meaningful once a second provider is added.
 
-- OpenAI GPT-5
-- Claude
-- Gemini
-- Qwen
-
-Provider selection will be controlled by:
-
-```
-.env
-```
-
----
-
-# Prompt System
-
-Prompt templates use Jinja2.
-
-```
-app/prompts/
-```
-
-Current prompts
-
-- research.txt
-- script.txt
-- storyboard.txt
-- image.txt
-- video.txt
+`VoiceProvider.synthesize()` takes `text`, `output_path`, and `**options` (language,
+voice_name, speed, ...); each provider reads whichever options it understands.
 
 ---
 
-# Output
+# Pipeline Orchestration
 
-Each project contains
+`BuildPipeline.run()` creates a new `DocumentaryProject` (via `ProjectService`) and
+calls `_run_pipeline()`. `BuildPipeline.resume(project_path)` calls the same
+`_run_pipeline()` on an existing project directory.
+
+`_run_pipeline()`:
+
+1. Loads `project.json` and `pipeline_state.json`.
+2. Runs the fixed agent stages in order, skipping any whose output file already exists
+   (registering it as complete in the state file if it wasn't already).
+3. Builds the service-stage list (`media`, `narration_scenes`, `voice`, `render`, and
+   conditionally `thumbnail` if `thumbnail_enabled` is set), running each the same way.
+4. Writes `pipeline_state.json` with per-step status/timing and a final `completed`
+   status.
+
+This is why a fully-completed project resumes in a fraction of a second — every step's
+validator short-circuits once its output file is confirmed present.
+
+---
+
+# Web Layer
+
+FastAPI, not Flask. `app/web.py` owns project list/detail/file-serving; the new-project
+wizard and build API live in `app/web_new_project.py` (`APIRouter`, mounted via
+`app.include_router(...)`).
+
+Build jobs run in a background `threading.Thread` per request (no task queue). Job
+records are kept in an in-memory `JOBS` dict for fast polling, but are also persisted to
+`jobs/<job_id>.json` on every status change. On process startup,
+`_recover_jobs_from_disk()` reloads those records and restarts any job still
+`queued`/`running` — via `BuildPipeline.resume()` if `project.json` already exists, or a
+fresh `.run()` (using the saved request payload) if the process crashed before the
+project was even created. This means a systemd restart mid-build no longer silently
+loses the job.
+
+---
+
+# project.json Schema
+
+Backed by `app.models.project.DocumentaryProject` (a dataclass). Key fields:
 
 ```
-project.json
+title, language, content_type, target_duration_seconds, media_mode,
+text_provider, image_provider, video_provider,
+voice_provider, voice_name, voice_speed,
+resolution, fps,
+background_music_enabled, music_track,
+subtitles_enabled, thumbnail_enabled,
+status, created_at
+```
 
-research.md
+`content_type` is the single source of truth; `template` is kept as a read-only alias
+for backward compatibility with older `project.json` files. `width`/`height` are
+computed properties derived from `resolution`. `from_dict()` also accepts the legacy
+`template`/`duration` keys from pre-existing projects.
 
-script.md
+---
 
-storyboard.json
+# Deployment
 
-image_prompts.json
+Typically run as a systemd service:
 
-video_prompts.json
+```bash
+uvicorn app.web:app --host 0.0.0.0 --port 8090
+```
 
-narration.txt
-
-pipeline_state.json
+```
+systemctl restart docuforge-web
 ```
 
 ---
 
-# Future Architecture
+# Known Gaps
 
-Provider Registry
-
-↓
-
-Plugin System
-
-↓
-
-FastAPI Backend
-
-↓
-
-Web Studio
-
-↓
-
-Cloud Workers
-
-↓
-
-Distributed Rendering
+- Subtitles are sidecar `.srt` only — not burned into the video.
+- No XTTS voice cloning provider yet.
+- Piper output has known crackle between sentences; no audio-cleanup pass
+  (loudnorm/highpass/crossfade) has been added yet — needs validation against real
+  audio before changing.
+- Only one image/video provider (Pexels) exists, so provider selection is currently a
+  no-op in practice.
