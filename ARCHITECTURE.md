@@ -234,6 +234,16 @@ crashed before the project was even created), `kind: "regenerate"` via
 `BuildPipeline.regenerate_step()`. This means a systemd restart mid-build (or
 mid-regeneration) no longer silently loses the job.
 
+`CANCEL_EVENTS: dict[job_id, threading.Event]` (in-memory only, mirrors `JOBS` but
+never persisted) backs cancellation for `"build"` jobs: `POST /api/builds/{job_id}/cancel`
+sets the event, `BuildPipeline._run_pipeline` checks it (`_check_cancelled`) between
+every step and raises `PipelineCancelled`, which `_execute_build` catches to mark the
+job `"cancelled"` (distinct from `"failed"`). Cancellation is cooperative, not
+preemptive -- an in-flight AI call or ffmpeg render can't be interrupted mid-call, so it
+takes effect before the *next* step starts. Not offered for `"regenerate"` jobs (a
+single step has no between-step point to check at). `_recover_jobs_from_disk()` creates
+a fresh event for any `"build"` job it restarts after a crash.
+
 Two more endpoints besides `/api/builds`: `POST /api/projects/{slug}/regenerate/{step_key}`
 (calls `regenerate_step`) and `POST /api/projects/{slug}/resume` (calls `resume`, reusing
 `_execute_build` — its "does project.json already exist" check naturally takes the

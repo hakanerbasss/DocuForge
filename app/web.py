@@ -461,6 +461,26 @@ def dashboard() -> HTMLResponse:
         }}
     }}
 
+    async function cancelActiveJob(jobId, btn) {{
+        if (!confirm(
+            "Üretimi iptal etmek istediğine emin misin? Mevcut adım " +
+            "bitene kadar durmaz, sonrasında duracak."
+        )) return;
+
+        btn.disabled = true;
+        btn.textContent = "İptal ediliyor…";
+
+        try {{
+            const r = await fetch(`/api/builds/${{jobId}}/cancel`, {{method: "POST"}});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "İptal edilemedi.");
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = "⏹ İptal";
+        }}
+    }}
+
     async function refreshActiveJobs() {{
         try {{
             const r = await fetch("/api/jobs/active");
@@ -482,7 +502,14 @@ def dashboard() -> HTMLResponse:
                 <div style="padding:12px 0;border-bottom:1px solid #edf1f6">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
                         <strong>${{job.topic || job.project_slug || "Proje"}}</strong>
-                        ${{slugLink}}
+                        <span style="display:flex;gap:8px">
+                            ${{slugLink}}
+                            <button
+                                class="button secondary"
+                                style="min-height:34px;padding:0 12px;font-size:13px;color:#b91c1c"
+                                onclick="cancelActiveJob('${{job.job_id}}',this)"
+                            >⏹ İptal</button>
+                        </span>
                     </div>
                     <div class="progress"><div style="width:${{pct}}%"></div></div>
                     <div class="muted" style="font-size:13px;margin-top:4px">${{job.completed_steps}}/${{job.total_steps}} · ${{label}}</div>
@@ -914,6 +941,14 @@ def project_detail(slug: str) -> HTMLResponse:
                 ▶ Devam Et
             </button>
             <button
+                id="cancelProjectBuildButton"
+                class="button secondary"
+                style="display:none;color:#b91c1c"
+                onclick="cancelProjectBuild()"
+            >
+                ⏹ İptal Et
+            </button>
+            <button
                 class="button secondary"
                 style="color:#b91c1c"
                 onclick="deleteProject('{escaped_slug_js}',this)"
@@ -1145,6 +1180,8 @@ def project_detail(slug: str) -> HTMLResponse:
         }}
     }}
 
+    let activeBuildJobId = null;
+
     async function checkForActiveJob() {{
         const slug = "{escaped_slug_js}";
 
@@ -1154,16 +1191,47 @@ def project_detail(slug: str) -> HTMLResponse:
             const job = (data.jobs || []).find(j => j.project_slug === slug);
             if (!job) return;
 
+            activeBuildJobId = job.job_id;
             applyStepProgress(job);
             document.getElementById("actionStatus").textContent =
                 "Bu proje için arka planda bir üretim devam ediyor...";
             const resumeBtn = document.getElementById("resumeButton");
             if (resumeBtn) resumeBtn.disabled = true;
+            const cancelBtn = document.getElementById("cancelProjectBuildButton");
+            if (cancelBtn) {{
+                cancelBtn.style.display = "inline-flex";
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = "⏹ İptal Et";
+            }}
 
             await pollUntilDone(job.job_id);
             location.reload();
         }} catch (e) {{
             // sessizce yut -- sayfanın geri kalanı çalışmaya devam etsin
+        }}
+    }}
+
+    async function cancelProjectBuild() {{
+        if (!activeBuildJobId) return;
+        if (!confirm(
+            "Üretimi iptal etmek istediğine emin misin? Mevcut adım " +
+            "bitene kadar durmaz, sonrasında duracak."
+        )) return;
+
+        const btn = document.getElementById("cancelProjectBuildButton");
+        btn.disabled = true;
+        btn.textContent = "İptal ediliyor…";
+
+        try {{
+            const r = await fetch(`/api/builds/${{activeBuildJobId}}/cancel`, {{method: "POST"}});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "İptal edilemedi.");
+            document.getElementById("actionStatus").textContent =
+                "İptal ediliyor… mevcut adım bitince duracak.";
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = "⏹ İptal Et";
         }}
     }}
 

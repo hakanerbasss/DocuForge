@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (8. güncelleme aynı gün — canlı üretim ilerlemesi + PWA desteği + docuforge.wizaicorp.com)
+Son güncelleme: 16 Temmuz 2026 (9. güncelleme aynı gün — üretim iptal özelliği + stale "başarısız" gösterge hatası düzeltmesi)
 
 ## Ana hedef
 
@@ -276,6 +276,21 @@ Kullanıcı DocuForge web panelini telefonda ana ekrana eklenebilir, tam ekran a
   - `sw.js` — **kasıtlı olarak minimal**: sadece `/static/*` (manifest, ikonlar) cache-first; her sayfa render'ı ve `/api/`/`/files/` istekleri HER ZAMAN doğrudan ağa gidiyor. Çünkü DocuForge'un HTML'i statik bir "app shell" değil, sunucu tarafında canlı üretilen durumun kendisi (iş ilerlemesi, proje listesi) — önbelleğe alınsa offline'da (hatta online'da) eski/yanlış bir durum gösterebilirdi. Service worker esasen "yüklenebilirlik" şartını karşılamak için var, gerçek offline işlevsellik sağlamıyor.
   - Üç bağımsız `<head>` bloğuna (`web.py`'nin `page()`'i, `/new`, `/settings`) manifest link + `apple-mobile-web-app-*` meta etiketleri + service worker kayıt script'i eklendi (paylaşılan tek bir template olmadığı için üçüne de ayrı ayrı, "⚙ Ayarlar" linkiyle aynı sebepten).
 - **Test edildi:** `/static/manifest.json`/`sw.js`/ikonların doğru content-type ile servis edildiği, dört sayfanın da (`/`, `/new`, `/settings`, proje detay) manifest link + SW kayıt script'i içerdiği, tüm JS'in sözdizimsel geçerliliği. **Doğrulanamadı:** gerçek bir telefonda "Ana Ekrana Ekle" akışının uçtan uca denenmesi — kullanıcı `https://docuforge.wizaicorp.com`'u telefonunda ziyaret edip denemeli.
+
+---
+
+## Üretim iptal özelliği + stale "başarısız" gösterge hatası
+
+Kullanıcı canlı bir üretimde şunu yaşadı: sunucuyu güncelleyip restart ederken render aşaması ortasında kesildi, "Devam Et" ile yeniden denedi, ama proje sayfası render'ı hâlâ kırmızı "başarısız" gösteriyordu ve ilerleme görünmüyordu — oysa `journalctl` render'ın gerçekten sahne sahne ilerlediğini gösteriyordu.
+
+- **Kök neden bulundu:** `pipeline_state.json`'daki `failed_step` alanı sadece bir adım BAŞARILI olunca temizleniyordu (`_record_success`), bir adım yeniden denenmeye BAŞLARKEN temizlenmiyordu. Yani "Devam Et" ile render'ı yeniden denerken, o adım gerçekten çalışıyor olsa bile, canlı ilerleme sorgusu hâlâ önceki denemeden kalma "Hata: Video Render" bilgisini okuyup gösteriyordu — proje gerçekten takılı değildi, sadece eski hata bilgisi silinmemişti.
+- **Düzeltme:** `_run_agent_step` ve `_run_service_step`, bir adımı gerçekten (yeniden) çalıştırmaya başlar başlamaz `state["failed_step"] = None` yazıp diske kaydediyor — artık canlı bir sorgu, adım gerçekten sürerken asla eski "başarısız" bilgisini görmüyor. Adım gerçekten yine başarısız olursa `_record_failure_and_raise` zaten doğru şekilde tekrar işaretliyor.
+- **Üretim iptal özelliği** ("devredışı olduğunda iptal et seçeneği olabilir" isteği üzerine): Python thread'leri güvenle zorla durdurulamadığı için iptal **cooperative** (işbirlikçi) — sadece adımlar ARASINDA kontrol ediliyor, çalışan bir AI çağrısı veya ffmpeg render'ı anında kesilmiyor, mevcut adım bitince duruyor.
+  - `BuildPipeline.PipelineCancelled` exception'ı + `run()`/`resume()`'a eklenen opsiyonel `cancel_event: threading.Event` parametresi, `_run_pipeline`'da her adımdan önce kontrol ediliyor (`_check_cancelled`).
+  - `regenerate_step`'e eklenmedi — tek adımlık bir işlem olduğu için adımlar arası doğal bir durma noktası yok.
+  - Backend: `CANCEL_EVENTS: dict[job_id, threading.Event]` (bellekte, JOBS gibi diske kalıcı değil — restart zaten eski thread'i öldürüyor, `_recover_jobs_from_disk` yeniden başlattığı işler için taze bir event oluşturuyor). Yeni `POST /api/builds/{job_id}/cancel` endpoint'i event'i set ediyor. İş `PipelineCancelled` ile biterse job durumu `"cancelled"` oluyor (`"failed"`'dan ayrı).
+  - Frontend: `/new` sihirbazının durum kutusunda, hem `/new` hem ana sayfadaki "Devam eden üretim(ler)" kartlarında, proje detay sayfasında "Devam Et" yanında — hepsinde "⏹ İptal Et" butonu, onay diyaloglu, "mevcut adım bitince duracak" uyarısıyla.
+- **Test edildi:** stale-failed-step düzeltmesi (mock bir action'ın ÇALIŞMA SIRASINDA diskteki `failed_step`'in zaten `None` olduğu doğrulandı), tam pipeline'ın cancel_event set edilince doğru adımdan sonra durduğu (adımlar arası, adım ortasında değil), `/api/builds/{job_id}/cancel` endpoint'i (normal iptal, olmayan iş, zaten bitmiş iş), `_execute_build`'in `PipelineCancelled`'ı yakalayıp `"cancelled"` olarak işaretlediği ve `CANCEL_EVENTS`'ten temizlediği, tüm sayfaların JS sözdizimi.
 
 ---
 

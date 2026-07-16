@@ -9,7 +9,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from app.pipeline.build_pipeline import STEP_ALLOWED_OVERRIDES, BuildPipeline
+from app.pipeline.build_pipeline import (
+    STEP_ALLOWED_OVERRIDES,
+    BuildPipeline,
+    PipelineCancelled,
+)
 from app.services.project_service import ProjectService
 
 
@@ -34,6 +38,14 @@ PROJECTS_ROOT = Path("projects")
 JOBS_DIR = Path("jobs")
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
+
+# Cancellation is cooperative (checked between pipeline steps, see
+# BuildPipeline._check_cancelled) so only "build" jobs (run/resume, which
+# loop over many steps) get an event -- a single-step "regenerate" job has
+# no natural in-between point to check at. Not persisted to disk: a
+# process restart already kills the old thread, and _recover_jobs_from_disk
+# creates a fresh event for whatever it restarts.
+CANCEL_EVENTS: dict[str, threading.Event] = {}
 
 
 class BuildRequest(BaseModel):
@@ -82,13 +94,20 @@ def _persist_job(job_id: str) -> None:
 
 
 def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
+    # The event is created by the caller (the endpoint, or job recovery)
+    # before this thread starts, so a cancel request arriving the instant
+    # after the job is queued can never race past a missing entry.
+    cancel_event = CANCEL_EVENTS.get(job_id) or threading.Event()
+
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
         _persist_job(job_id)
     try:
         if (project_dir / "project.json").exists():
             # Project already created by a previous (possibly crashed) run.
-            result_dir = BuildPipeline().resume(str(project_dir))
+            result_dir = BuildPipeline().resume(
+                str(project_dir), cancel_event=cancel_event
+            )
         else:
             result_dir = BuildPipeline().run(
                 topic=req["topic"],
@@ -109,12 +128,19 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
                 thumbnail_source=req.get("thumbnail_source", "auto"),
+                cancel_event=cancel_event,
             )
         with JOBS_LOCK:
             JOBS[job_id].update({
                 "status": "completed",
                 "project_path": str(result_dir),
                 "error": None,
+            })
+    except PipelineCancelled as error:
+        with JOBS_LOCK:
+            JOBS[job_id].update({
+                "status": "cancelled",
+                "error": str(error),
             })
     except Exception as error:
         with JOBS_LOCK:
@@ -123,6 +149,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 "error": str(error),
             })
     finally:
+        CANCEL_EVENTS.pop(job_id, None)
         with JOBS_LOCK:
             _persist_job(job_id)
 
@@ -193,6 +220,7 @@ def _recover_jobs_from_disk() -> None:
             )
         else:
             req = job.get("request") or {}
+            CANCEL_EVENTS[job_id] = threading.Event()
 
             thread = threading.Thread(
                 target=_execute_build,
@@ -415,11 +443,17 @@ Kapak g\u00f6rseli (thumbnail) olu\u015ftur
 <div class="progress"><div id="progressBar"></div></div>
 <div id="statusText" class="muted">\u0130\u015f ba\u015flat\u0131l\u0131yor.</div>
 <a id="openProject" class="open-project" href="#">Projeyi A\u00e7 \u2192</a>
+<button
+  id="cancelBuildButton"
+  style="display:none;width:auto;margin-top:12px;padding:0 16px;min-height:40px;background:#fee2e2;color:#b91c1c;font-size:14px;font-weight:700"
+  onclick="cancelBuild()"
+>\u23f9 \u0130ptal Et</button>
 </div>
 </section></main>
 
 <script>
 let pollTimer=null;
+let currentJobId=null;
 
 async function checkActiveJobs(){
   try{
@@ -433,7 +467,14 @@ async function checkActiveJobs(){
       const link=job.project_slug?`<a class="button secondary" href="/projects/${job.project_slug}">Projeyi Aç</a>`:"";
       return `<div style="padding:10px 0;border-bottom:1px solid #edf1f6">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
-          <strong>${job.topic||job.project_slug||"Proje"}</strong>${link}
+          <strong>${job.topic||job.project_slug||"Proje"}</strong>
+          <span style="display:flex;gap:8px;align-items:center">
+            ${link}
+            <button
+              style="width:auto;min-height:36px;margin-top:0;padding:0 12px;font-size:13px;background:#fee2e2;color:#b91c1c"
+              onclick="cancelActiveJob('${job.job_id}',this)"
+            >⏹ İptal</button>
+          </span>
         </div>
         <div class="progress"><div style="width:${pct}%"></div></div>
         <div class="muted" style="font-size:13px;margin-top:4px">${job.completed_steps}/${job.total_steps} · ${label}</div>
@@ -445,6 +486,21 @@ async function checkActiveJobs(){
       ${rows}
     </section>`;
   }catch(e){/* sessizce yut */}
+}
+
+async function cancelActiveJob(jobId,btn){
+  if(!confirm("Üretimi iptal etmek istediğine emin misin? Mevcut adım bitene kadar durmaz, sonrasında duracak."))return;
+  btn.disabled=true;
+  btn.textContent="İptal ediliyor…";
+  try{
+    const r=await fetch(`/api/builds/${jobId}/cancel`,{method:"POST"});
+    const res=await r.json();
+    if(!r.ok)throw new Error(res.detail||"İptal edilemedi.");
+  }catch(e){
+    alert("Hata: "+e.message);
+    btn.disabled=false;
+    btn.textContent="⏹ İptal";
+  }
 }
 
 checkActiveJobs();
@@ -545,8 +601,32 @@ async function startBuild(){
     if(!r.ok)throw new Error(res.detail||"\u00dcretim ba\u015flat\u0131lamad\u0131.");
     document.getElementById("statusTitle").textContent="\u00dcretim devam ediyor";
     document.getElementById("statusText").textContent="Ara\u015ft\u0131rma, senaryo, medya, ses ve video haz\u0131rlan\u0131yor.";
+    currentJobId=res.job_id;
+    document.getElementById("cancelBuildButton").style.display="inline-block";
+    document.getElementById("cancelBuildButton").disabled=false;
+    document.getElementById("cancelBuildButton").textContent="\u23f9 \u0130ptal Et";
     pollJob(res.job_id);
   }catch(e){showError(e.message);}
+}
+
+async function cancelBuild(){
+  if(!currentJobId)return;
+  if(!confirm("\u00dcretimi iptal etmek istedi\u011fine emin misin? Mevcut ad\u0131m bitene kadar durmaz, sonras\u0131nda duracak."))return;
+
+  const btn=document.getElementById("cancelBuildButton");
+  btn.disabled=true;
+  btn.textContent="\u0130ptal ediliyor\u2026";
+
+  try{
+    const r=await fetch(`/api/builds/${currentJobId}/cancel`,{method:"POST"});
+    const res=await r.json();
+    if(!r.ok)throw new Error(res.detail||"\u0130ptal edilemedi.");
+    document.getElementById("statusText").textContent="\u0130ptal ediliyor\u2026 mevcut ad\u0131m bitince duracak.";
+  }catch(e){
+    alert("Hata: "+e.message);
+    btn.disabled=false;
+    btn.textContent="\u23f9 \u0130ptal Et";
+  }
 }
 
 async function pollJob(jobId){
@@ -632,6 +712,8 @@ def create_build(request: BuildRequest) -> dict[str, Any]:
         }
         _persist_job(job_id)
 
+    CANCEL_EVENTS[job_id] = threading.Event()
+
     thread = threading.Thread(
         target=_execute_build,
         args=(job_id, req, project_dir),
@@ -663,6 +745,8 @@ def resume_project(slug: str) -> dict[str, Any]:
             "request": {},
         }
         _persist_job(job_id)
+
+    CANCEL_EVENTS[job_id] = threading.Event()
 
     thread = threading.Thread(
         target=_execute_build,
@@ -771,7 +855,9 @@ def compute_pipeline_progress(
 
         failed_step = pipeline_state.get("failed_step")
 
-        if failed_step:
+        if pipeline_state.get("status") == "cancelled":
+            current_step = "İptal edildi"
+        elif failed_step:
             failed_label = dict(active_steps).get(failed_step, failed_step)
             current_step = f"Hata: {failed_label}"
             failed_step_key = str(failed_step)
@@ -784,6 +870,9 @@ def compute_pipeline_progress(
     if job_status == "completed":
         completed_steps = total_steps
         current_step = "Tamamlandı"
+        current_step_key = None
+    elif job_status == "cancelled":
+        current_step = "İptal edildi"
         current_step_key = None
 
     return {
@@ -951,6 +1040,36 @@ def build_status(job_id: str) -> dict[str, Any]:
         compute_pipeline_progress(project_dir, result.get("status"))
     )
     return result
+
+
+@router.post("/api/builds/{job_id}/cancel")
+def cancel_build(job_id: str) -> dict[str, Any]:
+    """Request cancellation of a running/queued build.
+
+    Cooperative: the pipeline only checks between steps, so this stops
+    it before the *next* step starts, not instantly -- an in-flight AI
+    call or ffmpeg render always finishes first.
+    """
+
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Üretim işi bulunamadı.")
+
+        if job.get("status") not in ("queued", "running"):
+            return {"job_id": job_id, "status": job.get("status"), "cancelling": False}
+
+    event = CANCEL_EVENTS.get(job_id)
+
+    if event is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Bu iş için iptal edilebilecek aktif bir işlem bulunamadı.",
+        )
+
+    event.set()
+
+    return {"job_id": job_id, "status": "running", "cancelling": True}
 
 
 @router.get("/api/jobs/active")

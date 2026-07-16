@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -41,6 +42,16 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
 }
 
 
+class PipelineCancelled(Exception):
+    """Raised between steps when the caller has requested cancellation.
+
+    Cancellation is cooperative, checked only between steps -- an
+    in-flight AI call or ffmpeg render can't be interrupted mid-call
+    without much more invasive work, so cancelling stops the pipeline
+    before the *next* step starts, not instantly.
+    """
+
+
 class BuildPipeline:
     """Run and resume the complete DocuForge production pipeline."""
 
@@ -68,6 +79,7 @@ class BuildPipeline:
         thumbnail_enabled: bool = False,
         thumbnail_source: str = "auto",
         template: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Create a configured project and run all pipeline stages."""
 
@@ -109,9 +121,13 @@ class BuildPipeline:
 
         console.print("[bold green]✅ Project created[/bold green]\n")
 
-        return self._run_pipeline(project_dir)
+        return self._run_pipeline(project_dir, cancel_event=cancel_event)
 
-    def resume(self, project_path: str) -> Path:
+    def resume(
+        self,
+        project_path: str,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """Resume an existing project from incomplete stages."""
 
         project_dir = Path(project_path)
@@ -131,7 +147,7 @@ class BuildPipeline:
             f"{project_dir}\n"
         )
 
-        return self._run_pipeline(project_dir)
+        return self._run_pipeline(project_dir, cancel_event=cancel_event)
 
     def regenerate_step(
         self,
@@ -436,7 +452,31 @@ class BuildPipeline:
 
         return service_steps
 
-    def _run_pipeline(self, project_dir: Path) -> Path:
+    def _check_cancelled(
+        self,
+        cancel_event: threading.Event | None,
+        project_dir: Path,
+        state: dict[str, Any],
+    ) -> None:
+        if cancel_event is None or not cancel_event.is_set():
+            return
+
+        state["status"] = "cancelled"
+        self._save_state(project_dir, state)
+
+        console.print(
+            "[bold yellow]⏹ Pipeline cancelled by request[/bold yellow]"
+        )
+
+        raise PipelineCancelled(
+            "Üretim kullanıcı tarafından iptal edildi."
+        )
+
+    def _run_pipeline(
+        self,
+        project_dir: Path,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """Run AI-agent and production-service stages in order."""
 
         project_data = load_project(str(project_dir))
@@ -452,6 +492,8 @@ class BuildPipeline:
         total_steps = len(agent_steps) + len(service_steps)
 
         for index, step in enumerate(agent_steps, start=1):
+            self._check_cancelled(cancel_event, project_dir, state)
+
             definition = get_agent_definition(step.key)
             output_path = project_dir / definition.output_file
 
@@ -504,6 +546,8 @@ class BuildPipeline:
             service_steps,
             start=service_start_index,
         ):
+            self._check_cancelled(cancel_event, project_dir, state)
+
             self._run_service_step(
                 index=index,
                 total_steps=total_steps,
@@ -549,6 +593,14 @@ class BuildPipeline:
             f"{definition.icon} Running "
             f"{definition.name} Agent...[/bold]"
         )
+
+        # Clear a stale failure marker from a previous attempt the
+        # instant this step actually starts (re)running -- otherwise a
+        # live progress poll during a resume/retry still reads the old
+        # "Hata: ..." from before, even though the step is genuinely in
+        # progress right now, not stuck.
+        state["failed_step"] = None
+        self._save_state(project_dir, state)
 
         step_start = time.perf_counter()
 
@@ -682,6 +734,14 @@ class BuildPipeline:
             f"[bold][{index}/{total_steps}] "
             f"{icon} Running {step_name}...[/bold]"
         )
+
+        # Clear a stale failure marker from a previous attempt the
+        # instant this step actually starts (re)running -- otherwise a
+        # live progress poll during a resume/retry still reads the old
+        # "Hata: ..." from before, even though the step is genuinely in
+        # progress right now, not stuck.
+        state["failed_step"] = None
+        self._save_state(project_dir, state)
 
         step_start = time.perf_counter()
 
