@@ -40,6 +40,7 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 - ✅ Project deletion: `DELETE /api/projects/{slug}` removes a project directory entirely (refuses while a build/regenerate job for it is still running); a confirm-guarded "🗑 Sil" button is available both on the dashboard project cards and the project detail page
 - ✅ SEO Metadata: `seo.json` with 3 title suggestions, a full description, 10-20 tags, and a thumbnail creative brief (`thumbnail_hook`, `main_subject`, `emotional_trigger`, `visual_contrast`, `text_overlay`, `avoid_elements`) — generated from the finished script and shown on the project detail page
 - ✅ FastAPI web panel (not Flask): project list (with a "+ Yeni Proje" link and a live "⏳ Devam eden üretimler" section), project detail with a video player, thumbnail preview, subtitle download, and a new-project wizard exposing content type, duration, media mode, resolution, fps, voice settings, and the music/subtitles/thumbnail toggles
+- ✅ Installable as a PWA on iOS/Android (`app/static/manifest.json` + `sw.js`, served via `/static`) — "Add to Home Screen" gives a standalone, full-screen icon. The service worker deliberately only cache-first's the static shell (manifest/icons); every page and `/api/`/`/files/` request always goes straight to the network, since DocuForge's HTML *is* live job/project state and must never be served stale. Requires HTTPS in front of the app (a plain reverse proxy over HTTP won't register a service worker, `localhost` excepted)
 - ✅ Per-stage regenerate from the web UI: each stage has its own "Yeniden Üret" button that invalidates that stage plus everything downstream of it and regenerates just that stage immediately, so you can review it before continuing with "▶ Devam Et". Steps with settings worth changing (voice, media, render, research) show an editable form first — pick a different voice, a different image/video provider, a different resolution, etc. — instead of blindly rerunning with the same values
 - ✅ Job state survives a web service restart: builds *and* per-stage regenerations are persisted to `jobs/<job_id>.json` and resumed automatically on startup instead of silently vanishing. In-progress jobs are visible from `/` and `/new` regardless of which page started them, polling `/api/jobs/active` every few seconds — so navigating away and back no longer looks like the build vanished
 - ✅ Creating a project with a title that collides with an existing one gets a `_2`, `_3`, ... suffix instead of silently overwriting it
@@ -166,6 +167,8 @@ uvicorn app.web:app --host 0.0.0.0 --port 8090
 ```
 
 In production this typically runs as a systemd service (e.g. `docuforge-web.service`).
+
+**PWA / HTTPS:** uvicorn itself serves plain HTTP. For the manifest+service-worker to actually register (a browser requirement, not something DocuForge can work around) put a reverse proxy in front with a real TLS certificate -- e.g. nginx + `certbot --nginx -d your.domain.com` proxying to `127.0.0.1:8090`, or a domain proxied through Cloudflare (any SSL/TLS mode works; "Full (strict)" additionally needs a valid cert on the origin, which is exactly what certbot provides). Without HTTPS in front, the site still works fine in a normal browser tab -- it just won't be installable as a home-screen app.
 
 Routes:
 

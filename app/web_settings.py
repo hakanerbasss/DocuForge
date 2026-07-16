@@ -195,8 +195,14 @@ def settings_page() -> HTMLResponse:
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ayarlar · DocuForge</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#2166f3">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="DocuForge">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 <style>
 *{{box-sizing:border-box}}
 body{{margin:0;min-height:100vh;background:#f4f7fb;color:#152033;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}}
@@ -284,6 +290,11 @@ async function submitXttsUpload(formData) {{
         document.getElementById("xttsRecordStatus").textContent = "";
         document.getElementById("xttsStartRecord").style.display = "inline-flex";
     }}
+}}
+</script>
+<script>
+if ("serviceWorker" in navigator) {{
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {{}});
 }}
 </script>
 </body>

@@ -251,6 +251,22 @@ built on `web.py`'s shared `page()` template — specifically to avoid a circula
 header of every page (`web.py`'s `page()` template and `web_new_project.py`'s `/new`
 page each define it separately, same reasoning) points here.
 
+## PWA
+
+`app.mount("/static", StaticFiles(directory=...))` in `web.py` serves `app/static/`:
+`manifest.json`, `sw.js`, `icons/` (SVG + 192/512/180 PNG, generated with Pillow to
+match the in-page blue "D" logo). Each of the three independent `<head>` blocks
+(`web.py`'s `page()`, `web_new_project.py`'s `/new`, `web_settings.py`'s `/settings`)
+links the manifest and registers the service worker separately, same reasoning as the
+"⚙ Ayarlar" link above (no shared template across all three). `sw.js` is deliberately
+conservative: it only cache-first's `/static/*`; every page render and every
+`/api/`/`/files/` request bypasses the cache entirely, because DocuForge's HTML is
+live server-rendered job/project state, not a static app shell — caching it would mean
+showing a stale build status offline or online. The service worker mainly exists to
+satisfy the "installable" requirement, not to provide real offline functionality.
+Requires HTTPS in front (reverse proxy + a real cert, e.g. certbot) — service workers
+refuse to register on plain HTTP outside `localhost`.
+
 ---
 
 # project.json Schema

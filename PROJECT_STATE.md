@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (6. güncelleme aynı gün — proje silme özelliği + maliyet-bilinçli thumbnail kaynağı seçimi)
+Son güncelleme: 16 Temmuz 2026 (8. güncelleme aynı gün — canlı üretim ilerlemesi + PWA desteği + docuforge.wizaicorp.com)
 
 ## Ana hedef
 
@@ -245,6 +245,37 @@ Kullanıcı sunucu disk alanının birikmesini sordu ("üretilen içerikler sunu
   - Her `generate()` çağrısı önce mevcut `thumbnail_1..4.png` dosyalarını temizliyor, böylece bir moddan diğerine geçince (örn. `pexels`'in 4 varyantından `ai`'ın 1 varyantına) eski/uyumsuz dosyalar proje sayfasında görünmeye devam etmiyor.
   - `/new` sihirbazında "Kapak Görseli Kaynağı" açılır kutusu eklendi (thumbnail_enabled açıkken görünüyor); `render` adımına benzer şekilde `thumbnail` adımı da artık "Yeniden Üret" formunda bu ayarı değiştirmeye izin veriyor (`STEP_ALLOWED_OVERRIDES["thumbnail"] = {"thumbnail_source"}`).
 - **Test edildi:** silme endpoint'i (normal silme, olmayan proje, path traversal, aktif iş varken engelleniyor, iş bitince tekrar denenince başarılı), her 3 kaynak modunun doğru varyant sayısını ürettiği (mock DALL-E/Pexels ile), `auto` çözümlemesinin doğru öncelik sırasını izlediği, mod değişince eski varyantların temizlendiği, `BuildPipeline.regenerate_step`'in `thumbnail_source` override'ını kabul edip diğer alanları reddettiği, tüm sayfaların (`/`, `/new`, `/settings`, proje detay) hâlâ hatasız render olduğu ve JS'in sözdizimsel olarak geçerli olduğu.
+
+---
+
+## Storyboard JSON kesilmesi düzeltmesi
+
+Kullanıcı gerçek üretimde `Storyboard failed: ... Unterminated string ...` hatası aldı. Kök neden: `app/ai/deepseek.py`'de tüm metin üretimleri için `max_tokens=4000` sabitti. Türkçe metin İngilizce'ye göre token başına daha az karakter sığdırıyor, bu yüzden uzun belgesellerde (20-35 sahneli storyboard JSON'u) 4000 token dolup DeepSeek'in yanıtı bir string'in ortasında kesiliyordu — 3 deneme de aynı noktada takılıyordu çünkü aynı prompt her seferinde benzer uzunlukta çıktı istiyor. **Düzeltme:** `max_tokens` `deepseek-chat`'in izin verdiği maksimuma (`8192`) çıkarıldı. Çok daha uzun belgesellerde (40+ dakika, 50+ sahne) bu bile yetersiz kalabilir — böyle bir durum bildirilirse storyboard'u parçalı (birden fazla API çağrısıyla) üretecek kalıcı bir çözüm gerekir.
+
+---
+
+## Canlı üretim ilerlemesi (proje sayfası)
+
+Kullanıcı "kalanları üret diyorum sıra hangisinde belli olmuyor hepsinde pending yazıyor" diye bildirdi. Kök neden: proje detay sayfasındaki aşama listesi `pipeline_state.json`'ın sayfa yüklenirken alınan statik bir görüntüsüydü — "Devam Et"/"Yeniden Üret" sırasında tamamlanmamış her aşama sadece "pending" gösteriyordu, hangisinin GERÇEKTEN çalıştığı belli olmuyordu, iş bitip sayfa yeniden yüklenene kadar donmuş gibi görünüyordu.
+
+- `compute_pipeline_progress()` (`app/web_new_project.py`) artık `current_step_key` ve `failed_step_key` de döndürüyor (sadece biçimlendirilmiş bir etiket string'i değil, ham adım anahtarı).
+- Proje sayfasındaki her aşama satırı `data-step-index`/`data-step-key` taşıyor. Yeni `applyStepProgress()` JS fonksiyonu, `current_step_key`'e denk gelen satırı vurguluyor ("şu an çalışıyor...", mavi arka plan), öncesindekileri ✅ tamamlandı yapıyor, `failed_step_key` varsa o satırı ❌ işaretliyor.
+- `resumeProject`/`regenerateStep`'in her poll turunda bu fonksiyon çağrılıyor. Ayrıca yeni `checkForActiveJob()` sayfa yüklenirken çalışıyor: bu proje için başka bir yerden başlamış (örn. ana sayfadan) devam eden bir iş varsa onu da otomatik algılayıp canlı ilerlemeyi hemen gösteriyor, "Devam Et" butonunu geçici olarak devre dışı bırakıyor (yanlışlıkla ikinci bir üretim başlatılmasın diye).
+- **Test edildi:** `current_step_key`/`failed_step_key` değerleri (çalışan ve başarısız durumlarda), yeni data attribute'ların ve JS fonksiyonlarının render edilen sayfada bulunduğu, tüm sayfaların hâlâ hatasız render olduğu.
+
+---
+
+## PWA desteği (iOS/Android'de "uygulama gibi" açılma)
+
+Kullanıcı DocuForge web panelini telefonda ana ekrana eklenebilir, tam ekran açılan bir PWA yapmak istedi. Önce altyapı adımları birlikte tamamlandı:
+
+- **Domain + HTTPS:** `docuforge.wizaicorp.com` (Cloudflare, Proxied) → `77.42.45.229` eklendi. Sunucuda nginx reverse proxy (`/etc/nginx/sites-available/docuforge`, `panel.wizaicorp.com` ile birebir aynı desen) `127.0.0.1:8090`'a yönlendiriyor; `certbot --nginx -d docuforge.wizaicorp.com` ile Let's Encrypt sertifikası kuruldu. Cloudflare SSL/TLS modu "Full (strict)" olduğu için sunucuda geçerli bir sertifika şarttı — certbot bunu sağlıyor.
+- **PWA dosyaları** (`app/static/`, `web.py`'de `StaticFiles` ile mount edildi):
+  - `manifest.json` — açık tema renkleri (`background_color: #f4f7fb`, `theme_color: #2166f3` — sitenin kendi renk şeması, karanlık tema YOK, kullanıcı özellikle istemedi), `display: standalone`.
+  - `icons/icon.svg` + `icon-192.png`/`icon-512.png`/`icon-180.png` — Pillow ile üretildi, sitenin header'ındaki mavi kare + beyaz "D" logosunun birebir aynısı.
+  - `sw.js` — **kasıtlı olarak minimal**: sadece `/static/*` (manifest, ikonlar) cache-first; her sayfa render'ı ve `/api/`/`/files/` istekleri HER ZAMAN doğrudan ağa gidiyor. Çünkü DocuForge'un HTML'i statik bir "app shell" değil, sunucu tarafında canlı üretilen durumun kendisi (iş ilerlemesi, proje listesi) — önbelleğe alınsa offline'da (hatta online'da) eski/yanlış bir durum gösterebilirdi. Service worker esasen "yüklenebilirlik" şartını karşılamak için var, gerçek offline işlevsellik sağlamıyor.
+  - Üç bağımsız `<head>` bloğuna (`web.py`'nin `page()`'i, `/new`, `/settings`) manifest link + `apple-mobile-web-app-*` meta etiketleri + service worker kayıt script'i eklendi (paylaşılan tek bir template olmadığı için üçüne de ayrı ayrı, "⚙ Ayarlar" linkiyle aynı sebepten).
+- **Test edildi:** `/static/manifest.json`/`sw.js`/ikonların doğru content-type ile servis edildiği, dört sayfanın da (`/`, `/new`, `/settings`, proje detay) manifest link + SW kayıt script'i içerdiği, tüm JS'in sözdizimsel geçerliliği. **Doğrulanamadı:** gerçek bir telefonda "Ana Ekrana Ekle" akışının uçtan uca denenmesi — kullanıcı `https://docuforge.wizaicorp.com`'u telefonunda ziyaret edip denemeli.
 
 ---
 

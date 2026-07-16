@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
@@ -19,6 +20,11 @@ app = FastAPI(
 
 app.include_router(new_project_router)
 app.include_router(settings_router)
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent / "static"),
+    name="static",
+)
 
 PROJECTS_ROOT = Path("projects").resolve()
 
@@ -69,9 +75,16 @@ def page(title: str, body: str) -> HTMLResponse:
     <meta charset="utf-8">
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1"
+        content="width=device-width, initial-scale=1, viewport-fit=cover"
     >
     <title>{html.escape(title)} · DocuForge</title>
+
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#2166f3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="DocuForge">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 
     <style>
         * {{
@@ -283,6 +296,12 @@ def page(title: str, body: str) -> HTMLResponse:
 <main>
     {body}
 </main>
+
+<script>
+if ("serviceWorker" in navigator) {{
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {{}});
+}}
+</script>
 </body>
 </html>
 """
