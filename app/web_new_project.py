@@ -803,6 +803,49 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
     }
 
 
+THUMBNAIL_VARIANTS = {"thumbnail_1.png", "thumbnail_2.png", "thumbnail_3.png", "thumbnail_4.png"}
+
+
+class ThumbnailSelectRequest(BaseModel):
+    variant: str
+
+
+@router.post("/api/projects/{slug}/thumbnail/select")
+def select_thumbnail(slug: str, req: ThumbnailSelectRequest) -> dict[str, Any]:
+    """Make one of the 4 generated thumbnail variants canonical
+    (thumbnail.jpg), for the "pick a cover" gallery on the project page.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    if req.variant not in THUMBNAIL_VARIANTS:
+        raise HTTPException(status_code=400, detail="Geçersiz kapak seçimi.")
+
+    variant_path = project_dir / req.variant
+
+    if not variant_path.is_file():
+        raise HTTPException(status_code=404, detail="Kapak dosyası bulunamadı.")
+
+    from PIL import Image
+
+    with Image.open(variant_path) as image:
+        image.convert("RGB").save(
+            project_dir / "thumbnail.jpg", format="JPEG", quality=92
+        )
+
+    project_data = load_json(project_dir / "project.json")
+    project_data["thumbnail_selected"] = req.variant
+    (project_dir / "project.json").write_text(
+        json.dumps(project_data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return {"selected": req.variant}
+
+
 @router.get("/api/builds/{job_id}")
 def build_status(job_id: str) -> dict[str, Any]:
     with JOBS_LOCK:

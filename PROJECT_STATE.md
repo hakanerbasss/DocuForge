@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (4. güncelleme aynı gün — thumbnail şablonları + çarpıcı başlık tasarımı)
+Son güncelleme: 16 Temmuz 2026 (5. güncelleme aynı gün — thumbnail sistemi Pillow + DALL-E ile sıfırdan yeniden yazıldı)
 
 ## Ana hedef
 
@@ -212,19 +212,24 @@ Kullanıcının "thumbnail indirme özelliği, başlık/etiket/açıklama için 
 
 ---
 
-## Thumbnail şablonları + çarpıcı başlık tasarımı
+## Thumbnail şablonları + çarpıcı başlık tasarımı (v2 — tam yeniden yazım)
 
-Kullanıcının "kapak görsellerinde sadece görsel var, çarpıcı/trend çeken/vizyoner başlık yazıları yok, kapak templateleri yapmamız lazım ki YouTube banlamasın, her seferinde farklı template kullanmalı" talebi üzerine `ThumbnailService` (`app/services/thumbnail_service.py`) yeniden yazıldı:
+İlk versiyon (ffmpeg `drawtext`/`drawbox` ile 4 basit rotasyonlu şablon, sadece metin konumu değişen) kullanıcının referans görselleriyle ("SON DAKİKA" tarzı Instagram haber botu tasarımları) karşılaştırıldığında yetersiz bulundu: "resim + altta siyah bant + küçük yazı kabul edilmeyecek" dendi. `ThumbnailService` sıfırdan, Pillow tabanlı olarak yeniden yazıldı:
 
-- **Çarpıcı başlık:** Kapak artık ham proje başlığı yerine `seo.json`'daki ilk SEO başlık önerisini kullanıyor (SEO prompt'u zaten "merak uyandıran"/"dikkat çekici" başlık istiyor — bkz. `app/prompts/seo.txt`). `seo.json` yoksa veya boşsa ham proje başlığına düşüyor.
-- **4 farklı şablon, dönüşümlü kullanım:**
-  - `banner_bottom` — alt kısımda yarı saydam siyah bant, ortalanmış beyaz metin (eski/tek tasarım buydu)
-  - `banner_top` — üstte lacivert (`0x0b1f3d`) bant, aynı yerleşim
-  - `side_stripe` — solda %38 genişlikte kırmızı (`0xd7263d`) dikey şerit, metin şeridin içinde dar sütun halinde
-  - `bold_outline` — kutu yok, sadece büyük, kalın, siyah dış çizgili (ffmpeg `drawtext`'in `borderw`/`bordercolor`'ı) sarı (`0xffce00`) metin, üst kısımda ortalanmış — "şok edici" başlık tarzı
-  - Şablon seçimi round-robin: `projects/.thumbnail_template_rotation.json` dosyasında son kullanılan şablon tutuluyor, her yeni üretim bir sonrakine geçiyor (4'ü de sırayla kullanılıyor, art arda iki üretim asla aynı şablonu kullanmıyor). Bu dosya proje bazlı değil, `projects/` kökünde tek — yani rotasyon tüm kanal genelinde tutarlı.
-- **Test edildi:** başlık seçme mantığı (seo.json var/yok), rotasyon sırası (6 ardışık proje ile 4 şablonun doğru sırayla döndüğü doğrulandı), ve her 4 şablonun ürettiği ffmpeg `-vf` filtre zincirinin (drawbox/drawtext parametreleri, escaping) sözdizimsel olarak doğru olduğu — mock `subprocess.run` ile. **Bu container'da gerçek ffmpeg/gerçek görsel olmadığı için** çıktı görsel olarak (gerçek bir JPEG render edilip göze nasıl göründüğü) doğrulanmadı; VPS'de gerçek bir üretimle kontrol edilmeli.
-- Kapak `thumbnail_enabled` ile üretilen her projede otomatik çalışıyor, ekstra bir ayar/toggle eklenmedi (şablon seçimi kullanıcıya bırakılmadı, otomatik dönüşümlü) — bu tasarım tercihi: kullanıcı "her seferinde farklı template kullanmalı" dedi, manuel seçim değil otomatik çeşitlilik istedi.
+- **SEO creative brief:** `SEOAgent` artık `titles`/`description`/`tags`'e ek olarak `thumbnail_hook` (3-6 kelime, video başlığının aynısı DEĞİL), `main_subject`, `emotional_trigger`, `visual_contrast`, `text_overlay`, `avoid_elements` üretiyor (`app/prompts/seo.txt`, `app/agents/seo.py`). Bu alanlar best-effort: eksik/bozuk gelirse boş string'e düşer, `titles`/`description`/`tags` üretimini asla bozmaz. `ThumbnailService._build_brief()` bunlardan bir "brief" oluşturuyor, eksik alanlar için mantıklı varsayılanlara (proje başlığından kısaltma vb.) düşüyor.
+- **En güçlü kare seçimi:** `_select_best_frame()` her sahneden bir aday görsel/video-karesi toplayıp (`_score_frame`) kenar yoğunluğu (Pillow `FIND_EDGES`) + kontrast (stddev) skoruna göre en güçlüsünü seçiyor — ayrı bir CV/ML bağımlılığı yok, salt Pillow.
+- **4 tamamen farklı kompozisyon** (`app/services/thumbnail_service.py`, sırasıyla `thumbnail_1..4.png`):
+  - **Split Contrast** — dikey ikiye bölünmüş kare (sol soğuk/gri tonlama, sağ sıcak/doygun), beyaz ayraç çizgisi, üstte ortalanmış sarı vurgu başlık.
+  - **Mystery Focus** — merkeze odaklı "tilt-shift" efekti (Pillow radial mask ile net merkez + bulanık/karanlık kenar), vignette, alt-sol köşede beyaz başlık.
+  - **Documentary Cinematic** — üstten aşağı doğru kararan gradient (alt bant YOK), üst-solda başlık, sinematik renk/kontrast ayarı.
+  - **Breaking Discovery** — hafif "dutch angle" döndürme (oversample + `expand=True` rotate + merkezi crop — döndürme köşelerinde siyah boşluk kalmaması için özenle hesaplandı), sağ-üstte kırmızı vurgu etiketi (`emotional_trigger` metni), başlıkta rakam varsa o kelime ayrıca çok büyük punto ile basılıyor ("Büyük Sayı" efekti).
+- **Arka plan görseli:** `OPENAI_API_KEY` ayarlıysa her şablon için ayrı, kompozisyona özel bir prompt ile (video başlığı DEĞİL, `main_subject`/`emotional_trigger`/`visual_contrast` temelli sahne tarifi — örn. "Split-screen photorealistic composition... leave clean negative space for a short title... No text, no watermark") `dalle` sağlayıcısından (provider registry üzerinden, `app/providers/image/dalle.py`) görsel üretiliyor. Görsel API'sinden **kesinlikle metin istenmiyor** (Türkçe yazım hatası riski) — başlık her zaman ayrıca Pillow ile ekleniyor. API yoksa veya herhangi bir şablon için üretim başarısız olursa (yakalanıp loglanıyor), o şablon otomatik olarak gerçek sahne karesine düşüyor — yani ücretsiz/API'siz kullanımda da 4 şablon çalışıyor, sadece arka plan AI yerine gerçek sahne oluyor.
+- **Başlık kuralları:** Metin her zaman kısa hook (3-6 kelime, `thumbnail_hook`), asla video başlığının tamamı değil. Kalın font + siyah stroke + gölge, Pillow `draw.text(..., stroke_width=, stroke_fill=)` ile. **Otomatik küçülterek sığdırma** (`_fit_text_lines`): metin verilen satır sayısına sığmıyorsa kelime KIRPILMIYOR, font küçültülüyor (min %45'e kadar) — önceki versiyonda uzun hook'ların son kelimesi sessizce siliniyordu, bu düzeltildi.
+- **Türkçe büyük harf düzeltmesi:** Python'un `str.upper()`'ı Türkçe 'i'yi 'I' yapıp noktalı 'İ'yi kaybediyor — `_turkish_upper()` bunu düzeltiyor.
+- **4 varyant + seçim:** Her üretimde `thumbnail_1.png`..`thumbnail_4.png` oluşuyor, `content_type`'a göre biri (news/shorts→Breaking Discovery, documentary→Documentary Cinematic, informational→Split Contrast) otomatik olarak `thumbnail.jpg` (kanonik) yapılıyor ve `project.json`'a `thumbnail_selected` yazılıyor. Proje sayfasında 4'ü de yan yana gösteriliyor, her birinin **İndir** butonu var, **Bunu Seç** butonuyla (`POST /api/projects/{slug}/thumbnail/select`) kullanıcı istediğini kanonik yapabiliyor. Dikey kapak (`thumbnail_vertical.jpg`, shorts/dikey projelerde) seçilen varyantın aynı arka planından yeniden komponse ediliyor — ek bir AI çağrısı gerekmiyor.
+- **Eski projelerle uyumluluk:** Sadece tek `thumbnail.jpg`'si olan (yeni varyant sistemi öncesi) projeler proje sayfasında hâlâ gösteriliyor — varyant kartları yoksa eski görsel + indir butonu tek başına render ediliyor.
+- **Test edildi (bu container'da gerçek OpenAI key/ffmpeg yok):** SEO brief fallback mantığı, en-güçlü-kare skorlama, 4 şablonun her biri (sahte oluşturulmuş PNG sahne görselleriyle) gerçekten farklı kompozisyon üretiyor mu (görsel olarak da kontrol edildi), döndürme köşelerinde siyah artefakt kalmadığı, uzun hook metninin kırpılmadan küçültüldüğü, AI-üretim yolu (mock `DalleImageProvider`, 4 farklı prompt çağrıldığı doğrulandı) ve AI-başarısız-olursa-gerçek-kareye-düşme yolu, seçim endpoint'i (path traversal / geçersiz varyant reddediliyor), `BuildPipeline`'ın thumbnail adımını hâlâ doğru çalıştırdığı, `_invalidate_step`'in artık 4 varyant + dikey dosyayı da temizlediği. **Doğrulanamadı:** gerçek bir OpenAI API anahtarıyla gerçek gpt-image-1 çağrısı (maliyet + bu ortamda anahtar yok) — VPS'de `OPENAI_API_KEY` girilip ilk üretimde kontrol edilmeli.
+- **Maliyet notu:** `OPENAI_API_KEY` ayarlıyken her thumbnail üretimi 4 ayrı gpt-image-1 çağrısı yapıyor (şablon başına 1). API anahtarı yoksa hiç ücret yok, sistem tamamen yerel (Pillow + gerçek sahne karesi) çalışıyor.
 
 ---
 

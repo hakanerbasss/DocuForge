@@ -6,6 +6,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
+from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
 from app.web_settings import router as settings_router
@@ -20,6 +21,16 @@ app.include_router(new_project_router)
 app.include_router(settings_router)
 
 PROJECTS_ROOT = Path("projects").resolve()
+
+# Turkish display names for the 4 rotating thumbnail templates -- keyed
+# off ThumbnailService.TEMPLATE_ORDER so thumbnail_1.png..thumbnail_4.png
+# always map to the right label even if that order ever changes.
+THUMBNAIL_TEMPLATE_LABELS: dict[str, str] = {
+    "split_contrast": "Split Contrast",
+    "mystery_focus": "Mystery Focus",
+    "documentary_cinematic": "Documentary Cinematic",
+    "breaking_discovery": "Breaking Discovery",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -503,59 +514,131 @@ def project_detail(slug: str) -> HTMLResponse:
 
     thumbnail_path = project_dir / "thumbnail.jpg"
     thumbnail_vertical_path = project_dir / "thumbnail_vertical.jpg"
+    selected_variant = str(project.get("thumbnail_selected", ""))
 
     thumbnail_section = ""
 
-    if thumbnail_path.exists() or thumbnail_vertical_path.exists():
-        thumbnail_images = ""
+    variant_cards = ""
+    for index, template_key in enumerate(ThumbnailService.TEMPLATE_ORDER, start=1):
+        variant_name = f"thumbnail_{index}.png"
+        variant_path = project_dir / variant_name
 
-        if thumbnail_path.exists():
-            thumbnail_images += f"""
-            <div>
-                <a href="/files/{quote(project_dir.name)}/thumbnail.jpg" download>
-                    <img
-                        src="/files/{quote(project_dir.name)}/thumbnail.jpg"
-                        alt="Thumbnail"
-                        style="max-width:320px;width:100%;border-radius:12px;display:block"
-                    >
-                </a>
+        if not variant_path.exists():
+            continue
+
+        label = THUMBNAIL_TEMPLATE_LABELS.get(template_key, template_key)
+        is_selected = variant_name == selected_variant
+        border = (
+            "3px solid #2563eb" if is_selected else "3px solid transparent"
+        )
+        badge = (
+            '<span style="background:#2563eb;color:#fff;font-size:12px;'
+            'padding:2px 8px;border-radius:999px">Seçili</span>'
+            if is_selected
+            else ""
+        )
+
+        variant_cards += f"""
+        <div style="width:280px">
+            <img
+                src="/files/{quote(project_dir.name)}/{variant_name}"
+                alt="{html.escape(label, quote=True)}"
+                style="width:100%;border-radius:12px;display:block;
+                border:{border}"
+            >
+            <div style="display:flex;align-items:center;justify-content:
+                space-between;margin-top:6px">
+                <strong style="font-size:14px">{html.escape(label)}</strong>
+                {badge}
+            </div>
+            <div class="buttons" style="margin-top:6px;gap:6px">
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                    href="/files/{quote(project_dir.name)}/{variant_name}"
                     download
-                    style="margin-top:8px;display:inline-flex"
+                    style="font-size:13px;padding:0 10px;min-height:32px"
                 >
-                    ⬇ İndir (16:9)
+                    ⬇ İndir
                 </a>
+                <button
+                    class="button secondary"
+                    style="font-size:13px;padding:0 10px;min-height:32px"
+                    onclick="selectThumbnail('{quote(project_dir.name)}','{variant_name}',this)"
+                    {"disabled" if is_selected else ""}
+                >
+                    {"✓ Kapak Bu" if is_selected else "Bunu Seç"}
+                </button>
             </div>
-            """
+        </div>
+        """
+
+    legacy_card = ""
+    if not variant_cards and thumbnail_path.exists():
+        # Older projects made before the multi-template rewrite only have
+        # a single thumbnail.jpg -- still show it, just without the
+        # variant-picker UI since there's nothing to pick between.
+        legacy_card = f"""
+        <div style="width:280px">
+            <img
+                src="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                alt="Kapak görseli"
+                style="width:100%;border-radius:12px;display:block"
+            >
+            <a
+                class="button secondary"
+                href="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                download
+                style="margin-top:6px;font-size:13px;padding:0 10px;
+                min-height:32px;display:inline-flex"
+            >
+                ⬇ İndir (16:9)
+            </a>
+        </div>
+        """
+
+    if variant_cards or legacy_card or thumbnail_vertical_path.exists():
+        vertical_card = ""
 
         if thumbnail_vertical_path.exists():
-            thumbnail_images += f"""
-            <div>
-                <a href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg" download>
-                    <img
-                        src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
-                        alt="Dikey kapak"
-                        style="max-width:180px;width:100%;border-radius:12px;display:block"
-                    >
-                </a>
+            vertical_card = f"""
+            <div style="width:160px">
+                <img
+                    src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                    alt="Dikey kapak"
+                    style="width:100%;border-radius:12px;display:block"
+                >
+                <div style="margin-top:6px">
+                    <strong style="font-size:14px">Dikey (9:16)</strong>
+                </div>
                 <a
                     class="button secondary"
                     href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
                     download
-                    style="margin-top:8px;display:inline-flex"
+                    style="margin-top:6px;font-size:13px;padding:0 10px;
+                    min-height:32px;display:inline-flex"
                 >
                     ⬇ İndir (9:16)
                 </a>
             </div>
             """
 
+        gallery_hint = (
+            """<p class="muted">
+                4 farklı tasarım otomatik üretildi -- birini seçip
+                kapak olarak kullan.
+            </p>"""
+            if variant_cards
+            else ""
+        )
+
         thumbnail_section = f"""
         <section class="card">
-            <h2>Kapak görseli</h2>
-            <div style="display:flex;gap:14px;flex-wrap:wrap">
-                {thumbnail_images}
+            <h2>Kapak görselleri</h2>
+            {gallery_hint}
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+                {variant_cards}
+                {legacy_card}
+                {vertical_card}
             </div>
         </section>
         """
@@ -907,6 +990,27 @@ def project_detail(slug: str) -> HTMLResponse:
             btn.textContent = "✓ Kopyalandı";
             setTimeout(() => {{ btn.textContent = original; }}, 1500);
         }}).catch(() => alert("Kopyalanamadı — panoya erişim engellendi olabilir."));
+    }}
+
+    async function selectThumbnail(slug, variant, btn) {{
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳...";
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/thumbnail/select`, {{
+                method: "POST",
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{variant}}),
+            }});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Seçilemedi.");
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
+        }}
     }}
 
     async function pollUntilDone(jobId) {{

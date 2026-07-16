@@ -107,7 +107,23 @@ Do not include explanations before or after the JSON.
             "titles": [title.strip() for title in titles],
             "description": description.strip(),
             "tags": [tag.strip() for tag in tags],
+            "thumbnail_hook": self._optional_str(data, "thumbnail_hook"),
+            "main_subject": self._optional_str(data, "main_subject"),
+            "emotional_trigger": self._optional_str(data, "emotional_trigger"),
+            "visual_contrast": self._optional_str(data, "visual_contrast"),
+            "text_overlay": self._optional_str(data, "text_overlay"),
+            "avoid_elements": self._optional_str(data, "avoid_elements"),
         }
+
+    def _optional_str(self, data: dict[str, Any], key: str) -> str:
+        """Thumbnail creative-brief fields are best-effort: a missing or
+        malformed value falls back to an empty string instead of failing
+        the whole SEO generation, since titles/description/tags remain
+        the only hard requirement.
+        """
+
+        value = data.get(key, "")
+        return value.strip() if isinstance(value, str) else ""
 
     def _remove_code_fences(
         self,

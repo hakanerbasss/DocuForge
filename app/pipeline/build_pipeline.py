@@ -292,7 +292,26 @@ class BuildPipeline:
             if output_path.exists():
                 output_path.unlink()
 
+            if step_key == "thumbnail":
+                # ThumbnailService writes its own 4 variants + a vertical
+                # cover alongside the canonical output file above --
+                # clear those too so a stale variant never outlives the
+                # step that made it.
+                self._clear_thumbnail_variants(project_dir)
+
         state.get("steps", {}).pop(step_key, None)
+
+    def _clear_thumbnail_variants(self, project_dir: Path) -> None:
+        for name in (
+            "thumbnail_1.png",
+            "thumbnail_2.png",
+            "thumbnail_3.png",
+            "thumbnail_4.png",
+            "thumbnail_vertical.jpg",
+        ):
+            path = project_dir / name
+            if path.exists():
+                path.unlink()
 
     def _reset_voice_manifest(self, project_dir: Path) -> None:
         """Mark every scene as needing new audio without losing scene text."""

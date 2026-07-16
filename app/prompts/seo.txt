@@ -19,7 +19,13 @@ Structure:
     "Alternative title 2"
   ],
   "description": "Full YouTube description in the target content language.",
-  "tags": ["tag1", "tag2", "tag3"]
+  "tags": ["tag1", "tag2", "tag3"],
+  "thumbnail_hook": "3-6 word punchy on-thumbnail text, NOT a copy of any title above",
+  "main_subject": "The single concrete visual subject the thumbnail should center on (a person, animal, object, place, or event named in the script) -- in English, for an image generation prompt",
+  "emotional_trigger": "One or two words naming the emotion the thumbnail should provoke (e.g. shock, curiosity, awe, urgency, fear, hope)",
+  "visual_contrast": "A short phrase describing a visual contrast or comparison the thumbnail could exploit (e.g. 'tiny vs. massive scale', 'before vs. after', 'light vs. darkness'); empty string if none fits",
+  "text_overlay": "3-5 word alternate on-thumbnail phrase, a variation of thumbnail_hook",
+  "avoid_elements": "Short comma-separated list of visual elements the thumbnail image must NOT contain (e.g. 'text, logos, watermarks, collage, multiple unrelated subjects')"
 }
 
 Language rules:
@@ -28,6 +34,8 @@ Language rules:
 - Do not switch to English unless the target language is English.
 - Tags may mix the target language with English where it improves discoverability.
 - Write tags lowercase, without a leading # symbol.
+- Write "thumbnail_hook", "text_overlay", "emotional_trigger" and "visual_contrast" in the target content language.
+- Write "main_subject" and "avoid_elements" in English regardless of target language, since they feed an image-generation prompt.
 
 Content type style:
 
@@ -41,6 +49,7 @@ Requirements:
 - Provide exactly 3 title suggestions, each under 100 characters.
 - The first sentence of "description" must work as a standalone hook (shown before YouTube's "Show more" cutoff).
 - Provide 10-20 relevant tags, ordered from most to least specific.
+- "thumbnail_hook" and "text_overlay" must be SHORT standalone phrases for overlaying on a thumbnail image -- never a full sentence, never identical to any title above.
 - Do not use Markdown code fences.
 - Do not include hashtags inside "description" unless the content_type is shorts.
 
