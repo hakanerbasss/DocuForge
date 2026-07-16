@@ -124,7 +124,7 @@ class RenderService:
 
             if audio_path is not None:
                 scene_duration = max(
-                    storyboard_duration,
+                    0.5,
                     audio_duration + self.AUDIO_PADDING_SECONDS,
                 )
             else:
@@ -440,26 +440,50 @@ class RenderService:
         subtitle_index = 0
 
         for _scene_number, duration, text in segments:
-            start = cursor
-            end = cursor + duration
-            cursor = end
-
+            scene_start = cursor
+            scene_end = cursor + duration
+            cursor = scene_end
             if not text:
                 continue
 
-            subtitle_index += 1
-            blocks.append(
-                f"{subtitle_index}\n"
-                f"{self._format_srt_timestamp(start)} --> "
-                f"{self._format_srt_timestamp(end)}\n"
-                f"{text}\n"
-            )
+            words = text.replace("\n", " ").split()
+            chunks: list[list[str]] = []
+            current: list[str] = []
+
+            for word in words:
+                current.append(word)
+                joined = " ".join(current)
+                if len(current) >= 8 or len(joined) >= 42 or word.endswith((".", "!", "?", ";", ":")):
+                    chunks.append(current)
+                    current = []
+
+            if current:
+                chunks.append(current)
+
+            total_words = sum(len(chunk) for chunk in chunks)
+            chunk_cursor = scene_start
+
+            for index, chunk in enumerate(chunks):
+                share = len(chunk) / max(total_words, 1)
+                chunk_duration = max(1.0, min(3.5, duration * share))
+                chunk_start = chunk_cursor
+                chunk_end = min(scene_end, chunk_start + chunk_duration)
+                if index == len(chunks) - 1:
+                    chunk_end = scene_end
+                if chunk_end <= chunk_start:
+                    continue
+
+                subtitle_index += 1
+                blocks.append(
+                    f"{subtitle_index}\n"
+                    f"{self._format_srt_timestamp(chunk_start)} --> "
+                    f"{self._format_srt_timestamp(chunk_end)}\n"
+                    f"{' '.join(chunk)}\n"
+                )
+                chunk_cursor = chunk_end
 
         srt_path.parent.mkdir(parents=True, exist_ok=True)
-        srt_path.write_text(
-            "\n".join(blocks),
-            encoding="utf-8",
-        )
+        srt_path.write_text("\n".join(blocks), encoding="utf-8")
 
     def _format_srt_timestamp(
         self,
@@ -494,9 +518,9 @@ class RenderService:
         )
 
         force_style = (
-            "FontSize=20,PrimaryColour=&H00FFFFFF,"
+            "FontSize=18,PrimaryColour=&H00FFFFFF,"
             "OutlineColour=&H00000000,BorderStyle=1,"
-            "Outline=1.5,Shadow=0.5"
+            "Outline=2,Shadow=0,Alignment=2,MarginV=80"
         )
 
         burned_path = video_path.with_name(
