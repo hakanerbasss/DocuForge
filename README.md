@@ -66,7 +66,7 @@ pip install -e .
 The web panel additionally needs `fastapi`, `uvicorn` and `pydantic` (not yet pinned in `pyproject.toml` — install manually):
 
 ```bash
-pip install fastapi uvicorn pydantic
+pip install fastapi uvicorn pydantic python-multipart
 ```
 
 FFmpeg and ffprobe must be available on `PATH`. For Piper/Supertonic voices, see their respective setup docs under `models/`.
@@ -117,6 +117,11 @@ Pixabay and Unsplash are free (rate-limited); DALL-E, Google Imagen/Veo, and fal
 charge per generation — check current pricing before turning one on for a real
 project. None of the five have been tested against a live account in this codebase;
 see [ARCHITECTURE.md](ARCHITECTURE.md) for what was and wasn't verified.
+
+All of the keys above can also be entered from the web panel at `/settings` instead of
+editing `.env` — they're written to `secrets.json` (gitignored) and take effect
+immediately, no restart needed. An env var with the same name always wins over
+whatever's saved through the settings page.
 
 ---
 
@@ -178,6 +183,11 @@ Routes:
   downstream of it, then regenerate just that stage
 - `POST /api/projects/{slug}/resume` — continue an existing project from its first
   incomplete stage
+- `GET /settings` — API key management (DeepSeek, Pexels, Pixabay, Unsplash, OpenAI,
+  Google, fal.ai, XTTS reference audio path); linked from the header on every page
+- `POST /settings/{field_key}`, `POST /settings/{field_key}/clear` — save/clear a key,
+  written to `secrets.json` and applied immediately (no restart needed). An env var
+  with the same name always takes priority and can't be overridden from this page.
 
 ---
 

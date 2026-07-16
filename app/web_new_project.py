@@ -227,7 +227,7 @@ button:disabled{opacity:.6;cursor:wait}
 </style>
 </head>
 <body>
-<header><div><a class="back" href="/">\u2190 Projelere d\u00f6n</a></div></header>
+<header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><a class="back" href="/">\u2190 Projelere d\u00f6n</a><a class="back" href="/settings">\u2699 Ayarlar</a></div></header>
 <main><section class="card">
 <h1>Yeni Proje</h1>
 <p class="muted">Konuyu ve ayarlar\u0131 se\u00e7. DocuForge ara\u015ft\u0131rma, senaryo, medya, seslendirme ve videoyu otomatik haz\u0131rlas\u0131n.</p>

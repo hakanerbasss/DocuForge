@@ -220,6 +220,13 @@ single source of truth both the progress-percentage math and the project detail 
 per-stage buttons use — defined once in `app/web_new_project.py` and imported into
 `app/web.py`.
 
+`app/web_settings.py` is the third router (`GET/POST /settings`), for managing API keys
+without touching `.env`. It's a standalone HTML page like `web_new_project.py` — not
+built on `web.py`'s shared `page()` template — specifically to avoid a circular import
+(`web.py` already imports from it to mount the router). A "⚙ Ayarlar" link in the
+header of every page (`web.py`'s `page()` template and `web_new_project.py`'s `/new`
+page each define it separately, same reasoning) points here.
+
 ---
 
 # project.json Schema
@@ -240,6 +247,26 @@ status, created_at
 for backward compatibility with older `project.json` files. `width`/`height` are
 computed properties derived from `resolution`. `from_dict()` also accepts the legacy
 `template`/`duration` keys from pre-existing projects.
+
+---
+
+# Secrets and Settings
+
+`app/core/config.py`'s `Settings` dataclass resolves each API key at process start as
+`os.getenv(ENV_NAME) or secrets.json[key]`, so an explicit env var always wins and can't
+be overridden from the web UI. `SECRET_FIELDS` maps each env var name to its
+`secrets.json`/dataclass field name — the single source of truth both `Settings` and
+`app/web_settings.py` use, so adding a new manageable secret means updating one dict
+plus one `FIELD_LABELS` entry, not touching provider code.
+
+`Settings.save_secret(key, value)` does two things: writes `secrets.json` (gitignored,
+never committed) so the value survives a restart, and `setattr`s the *live* singleton
+so it takes effect immediately for any provider instantiated afterward in the same
+process — no restart required. `is_configured(key)` is a plain truthiness check, used to
+decide whether `/settings` shows "✓ configured / Değiştir" or an input+save form for
+each field, mirroring the pattern already proven in the Instagram bot project
+(`hakanerbasss.github.io`, `supertonic-web/app.py`'s `/api/*/config` endpoints) — small
+JSON-backed config, masked status instead of ever echoing the key back to the browser.
 
 ---
 

@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from app.core.config import settings
 from app.providers.base import VoiceProvider
 
 
@@ -111,17 +112,17 @@ class XTTSVoiceProvider(VoiceProvider):
                 f"XTTS reference audio not found: {candidate}"
             )
 
-        env_value = os.environ.get(self.REFERENCE_AUDIO_ENV, "").strip()
+        configured_value = settings.xtts_reference_audio.strip()
 
-        if env_value:
-            candidate = Path(env_value)
+        if configured_value:
+            candidate = Path(configured_value)
 
             if candidate.exists():
                 return candidate
 
             raise FileNotFoundError(
                 f"XTTS reference audio not found "
-                f"(from {self.REFERENCE_AUDIO_ENV}): {candidate}"
+                f"(from {self.REFERENCE_AUDIO_ENV} or /settings): {candidate}"
             )
 
         if self.DEFAULT_REFERENCE_PATH.exists():

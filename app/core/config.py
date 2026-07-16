@@ -1,10 +1,48 @@
+import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
 
 load_dotenv()
+
+SECRETS_PATH = Path("secrets.json")
+
+# env var name -> secrets.json key, for every secret the /settings page manages.
+SECRET_FIELDS: dict[str, str] = {
+    "DEEPSEEK_API_KEY": "deepseek_api_key",
+    "PEXELS_API_KEY": "pexels_api_key",
+    "PIXABAY_API_KEY": "pixabay_api_key",
+    "UNSPLASH_ACCESS_KEY": "unsplash_access_key",
+    "OPENAI_API_KEY": "openai_api_key",
+    "GOOGLE_API_KEY": "google_api_key",
+    "FAL_KEY": "fal_api_key",
+    "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
+}
+
+
+def _load_secrets() -> dict[str, Any]:
+    if not SECRETS_PATH.exists():
+        return {}
+
+    try:
+        data = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
+def _resolve_secret(env_name: str, secrets_key: str, secrets: dict[str, Any]) -> str:
+    """An explicit env var always wins; otherwise fall back to secrets.json."""
+
+    return os.getenv(env_name) or str(secrets.get(secrets_key, "") or "")
+
+
+_secrets = _load_secrets()
 
 
 @dataclass
@@ -46,40 +84,61 @@ class Settings:
         "deepseek-chat",
     )
 
-    deepseek_api_key: str = os.getenv(
-        "DEEPSEEK_API_KEY",
-        "",
+    deepseek_api_key: str = _resolve_secret(
+        "DEEPSEEK_API_KEY", "deepseek_api_key", _secrets
     )
 
-    pexels_api_key: str = os.getenv(
-        "PEXELS_API_KEY",
-        "",
+    pexels_api_key: str = _resolve_secret(
+        "PEXELS_API_KEY", "pexels_api_key", _secrets
     )
 
-    pixabay_api_key: str = os.getenv(
-        "PIXABAY_API_KEY",
-        "",
+    pixabay_api_key: str = _resolve_secret(
+        "PIXABAY_API_KEY", "pixabay_api_key", _secrets
     )
 
-    unsplash_access_key: str = os.getenv(
-        "UNSPLASH_ACCESS_KEY",
-        "",
+    unsplash_access_key: str = _resolve_secret(
+        "UNSPLASH_ACCESS_KEY", "unsplash_access_key", _secrets
     )
 
-    openai_api_key: str = os.getenv(
-        "OPENAI_API_KEY",
-        "",
+    openai_api_key: str = _resolve_secret(
+        "OPENAI_API_KEY", "openai_api_key", _secrets
     )
 
-    google_api_key: str = os.getenv(
-        "GOOGLE_API_KEY",
-        "",
+    google_api_key: str = _resolve_secret(
+        "GOOGLE_API_KEY", "google_api_key", _secrets
     )
 
-    fal_api_key: str = os.getenv(
-        "FAL_KEY",
-        "",
+    fal_api_key: str = _resolve_secret(
+        "FAL_KEY", "fal_api_key", _secrets
     )
+
+    xtts_reference_audio: str = _resolve_secret(
+        "XTTS_REFERENCE_AUDIO", "xtts_reference_audio", _secrets
+    )
+
+    def save_secret(self, secrets_key: str, value: str) -> None:
+        """Persist a secret to secrets.json and update the live instance.
+
+        Takes effect immediately for the running process -- no restart
+        needed -- and survives one, since the next process start reads
+        secrets.json again (unless an env var overrides it).
+        """
+
+        if secrets_key not in SECRET_FIELDS.values():
+            raise ValueError(f"Unknown secret field: {secrets_key}")
+
+        secrets = _load_secrets()
+        secrets[secrets_key] = value
+
+        SECRETS_PATH.write_text(
+            json.dumps(secrets, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        setattr(self, secrets_key, value)
+
+    def is_configured(self, secrets_key: str) -> bool:
+        return bool(getattr(self, secrets_key, ""))
 
 
 settings = Settings()

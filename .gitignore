@@ -10,6 +10,7 @@ env/
 
 # Environment Variables
 .env
+secrets.json
 
 # IDE
 .vscode/

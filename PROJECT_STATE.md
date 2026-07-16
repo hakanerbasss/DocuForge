@@ -153,16 +153,17 @@ stub/mock provider'larla izole test edildi:
 - Job durumu kalıcı (`jobs/<job_id>.json`), restart sonrası kayıp yok (build VE regenerate işleri için)
 - **Resume butonu ("▶ Devam Et")** — proje detay sayfasında, `POST /api/projects/{slug}/resume`
 - **Yeniden üretme butonları** — her aşama için ayrı "Yeniden Üret", `POST /api/projects/{slug}/regenerate/{step_key}`
+- **`/settings` sayfası** — Instagram bot'taki (`supertonic-web/app.py`'nin `/api/*/config` endpoint'leri) aynı deseni izliyor: her API key için ✓ yapılandırılmış / Değiştir durumu ya da input+Kaydet formu. `secrets.json`'a yazılıyor (gitignore'da), hemen etkili oluyor — restart gerekmiyor. Bir env var aynı isimde ayarlıysa o öncelikli olur ve arayüzden değiştirilemez. Her sayfanın header'ında "⚙ Ayarlar" linki var. **Yeni bağımlılık:** `python-multipart` (form POST'ları için) — kuruluma eklendi.
 
 ### Eksik
 
 - Gerçek canlı log (sadece pipeline_state.json polling var)
-- Ses sağlayıcısı kurulum ekranı
 - İptal butonu (çalışan bir işi durdurma)
 - Sesleri arayüzden dinleme
 - Sahne ve medya düzenleme
 - Müzik dosyası yükleme arayüzü (şu an SSH ile `music/` klasörüne manuel kopyalama gerekiyor)
-- XTTS referans ses yükleme arayüzü (Instagram bot'ta var, DocuForge'da yok — şu an sadece env var / sabit dosya yolu)
+- XTTS referans ses dosyasının kendisini yükleme arayüzü (yolu artık `/settings`'ten girilebiliyor ama dosyanın kendisini upload etme yok — sunucuya SSH ile konması gerekiyor)
+- Bir build/regenerate başladıktan sonra sayfadan ayrılıp geri dönüldüğünde ilerlemeyi gösteren kalıcı bir görünüm yok (iş sunucuda muhtemelen devam ediyor — kullanıcı raporu bunu netleştirecek, aşağıya bakın)
 
 ---
 

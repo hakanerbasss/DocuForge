@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
+from app.web_settings import router as settings_router
 
 
 app = FastAPI(
@@ -16,6 +17,7 @@ app = FastAPI(
 )
 
 app.include_router(new_project_router)
+app.include_router(settings_router)
 
 PROJECTS_ROOT = Path("projects").resolve()
 
@@ -253,7 +255,7 @@ def page(title: str, body: str) -> HTMLResponse:
 
 <body>
 <header>
-    <div class="inner">
+    <div class="inner" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
         <a class="brand" href="/">
             <div class="logo">D</div>
             <div>
@@ -263,6 +265,7 @@ def page(title: str, body: str) -> HTMLResponse:
                 </span>
             </div>
         </a>
+        <a class="button secondary" href="/settings">⚙ Ayarlar</a>
     </div>
 </header>
 
