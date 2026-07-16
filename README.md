@@ -179,6 +179,12 @@ Routes:
   `jobs/<job_id>.json`
 - `GET /api/builds/{job_id}` — poll build/regenerate/resume progress (reads
   `pipeline_state.json`)
+- `GET /api/jobs/active` — every still-running job with live progress, read from disk
+  state (not tied to any one page's in-memory job_id). The dashboard polls this every
+  4s and shows a "⏳ Devam eden üretimler" section — so navigating away from `/new` and
+  back to `/` no longer looks like the build vanished, since it was never actually tied
+  to that page in the first place (it's a background thread; only the *visibility* was
+  missing before)
 - `POST /api/projects/{slug}/regenerate/{step_key}` — invalidate one stage and everything
   downstream of it, then regenerate just that stage
 - `POST /api/projects/{slug}/resume` — continue an existing project from its first

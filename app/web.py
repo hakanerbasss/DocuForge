@@ -387,7 +387,52 @@ def dashboard() -> HTMLResponse:
         </div>
     </section>
 
+    <div id="activeJobs"></div>
+
     {content}
+
+    <script>
+    async function refreshActiveJobs() {{
+        try {{
+            const r = await fetch("/api/jobs/active");
+            const data = await r.json();
+            const container = document.getElementById("activeJobs");
+
+            if (!data.jobs || data.jobs.length === 0) {{
+                container.innerHTML = "";
+                return;
+            }}
+
+            const rows = data.jobs.map(job => {{
+                const pct = Math.max(4, Math.min(100, Number(job.progress_percent || 4)));
+                const label = job.current_step || "Başlatılıyor...";
+                const slugLink = job.project_slug
+                    ? `<a class="button secondary" style="min-height:34px;padding:0 12px;font-size:13px" href="/projects/${{job.project_slug}}">Projeyi Aç</a>`
+                    : "";
+                return `
+                <div style="padding:12px 0;border-bottom:1px solid #edf1f6">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+                        <strong>${{job.topic || job.project_slug || "Proje"}}</strong>
+                        ${{slugLink}}
+                    </div>
+                    <div class="progress"><div style="width:${{pct}}%"></div></div>
+                    <div class="muted" style="font-size:13px;margin-top:4px">${{job.completed_steps}}/${{job.total_steps}} · ${{label}}</div>
+                </div>`;
+            }}).join("");
+
+            container.innerHTML = `
+            <section class="card" style="margin-bottom:17px">
+                <h2>⏳ Devam eden üretimler</h2>
+                ${{rows}}
+            </section>`;
+        }} catch (e) {{
+            // sessizce yut -- dashboard'un geri kalanı çalışmaya devam etsin
+        }}
+    }}
+
+    refreshActiveJobs();
+    setInterval(refreshActiveJobs, 4000);
+    </script>
     """
 
     return page(

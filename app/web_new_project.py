@@ -597,15 +597,17 @@ def regenerate_project_step(slug: str, step_key: str) -> dict[str, Any]:
     return {"job_id": job_id, "status": "queued", "project_slug": slug}
 
 
-@router.get("/api/builds/{job_id}")
-def build_status(job_id: str) -> dict[str, Any]:
-    with JOBS_LOCK:
-        job = JOBS.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="Üretim işi bulunamadı.")
-        result = dict(job)
+def compute_pipeline_progress(
+    project_dir: Path,
+    job_status: str | None = None,
+) -> dict[str, Any]:
+    """Compute step-by-step progress for a project from disk state alone.
 
-    project_dir = Path(result["project_path"])
+    Works from project_dir only (no job_id needed), so it's usable both
+    by /api/builds/{job_id} and by anything listing projects/jobs that
+    aren't tied to a specific in-memory job (e.g. the dashboard).
+    """
+
     project_data = load_json(project_dir / "project.json")
     pipeline_state = load_json(project_dir / "pipeline_state.json")
     steps = pipeline_state.get("steps", {})
@@ -639,16 +641,57 @@ def build_status(job_id: str) -> dict[str, Any]:
         else:
             current_step = "Tamamlandı"
 
-    if result["status"] == "completed":
+    if job_status == "completed":
         completed_steps = total_steps
         current_step = "Tamamlandı"
 
-    result["completed_steps"] = completed_steps
-    result["total_steps"] = total_steps
-    result["current_step"] = current_step
-    result["progress_percent"] = (
-        round(min(completed_steps, total_steps) / total_steps * 100)
-        if total_steps
-        else 0
+    return {
+        "completed_steps": completed_steps,
+        "total_steps": total_steps,
+        "current_step": current_step,
+        "progress_percent": (
+            round(min(completed_steps, total_steps) / total_steps * 100)
+            if total_steps
+            else 0
+        ),
+    }
+
+
+@router.get("/api/builds/{job_id}")
+def build_status(job_id: str) -> dict[str, Any]:
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Üretim işi bulunamadı.")
+        result = dict(job)
+
+    project_dir = Path(result["project_path"])
+    result.update(
+        compute_pipeline_progress(project_dir, result.get("status"))
     )
     return result
+
+
+@router.get("/api/jobs/active")
+def active_jobs() -> dict[str, Any]:
+    """List jobs still queued/running, with live progress -- for the dashboard."""
+
+    with JOBS_LOCK:
+        snapshot = list(JOBS.values())
+
+    active: list[dict[str, Any]] = []
+
+    for job in snapshot:
+        if job.get("status") not in ("queued", "running"):
+            continue
+
+        job_copy = dict(job)
+        job_copy.pop("request", None)
+
+        project_dir = Path(job_copy["project_path"])
+        job_copy.update(
+            compute_pipeline_progress(project_dir, job_copy.get("status"))
+        )
+        active.append(job_copy)
+
+    return {"jobs": active}
