@@ -5,8 +5,16 @@ from app.ai.deepseek import DeepSeekProvider
 from app.providers.voice.piper import PiperVoiceProvider
 from app.providers.voice.xtts import XTTSVoiceProvider
 from app.providers.image.pexels import PexelsImageProvider
+from app.providers.image.pixabay import PixabayImageProvider
+from app.providers.image.unsplash import UnsplashImageProvider
+from app.providers.image.dalle import DalleImageProvider
+from app.providers.image.google_imagen import GoogleImagenProvider
+from app.providers.image.fal import FalImageProvider
 from app.providers.registry import ProviderRegistry
 from app.providers.video.pexels import PexelsVideoProvider
+from app.providers.video.pixabay import PixabayVideoProvider
+from app.providers.video.google_veo import GoogleVeoProvider
+from app.providers.video.fal import FalVideoProvider
 from app.providers.voice.espeak import EspeakVoiceProvider
 
 
@@ -40,6 +48,70 @@ def register_default_providers() -> None:
             key="pexels",
             name="Pexels Videos",
             factory=PexelsVideoProvider,
+        )
+
+    if ("image", "pixabay") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="pixabay",
+            name="Pixabay Images",
+            factory=PixabayImageProvider,
+        )
+
+    if ("video", "pixabay") not in registered:
+        ProviderRegistry.register(
+            category="video",
+            key="pixabay",
+            name="Pixabay Videos",
+            factory=PixabayVideoProvider,
+        )
+
+    if ("image", "unsplash") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="unsplash",
+            name="Unsplash Images",
+            factory=UnsplashImageProvider,
+        )
+
+    if ("image", "dalle") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="dalle",
+            name="DALL-E (OpenAI Images)",
+            factory=DalleImageProvider,
+        )
+
+    if ("image", "google_imagen") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="google_imagen",
+            name="Google Imagen",
+            factory=GoogleImagenProvider,
+        )
+
+    if ("video", "google_veo") not in registered:
+        ProviderRegistry.register(
+            category="video",
+            key="google_veo",
+            name="Google Veo",
+            factory=GoogleVeoProvider,
+        )
+
+    if ("image", "fal") not in registered:
+        ProviderRegistry.register(
+            category="image",
+            key="fal",
+            name="fal.ai (Flux and others)",
+            factory=FalImageProvider,
+        )
+
+    if ("video", "fal") not in registered:
+        ProviderRegistry.register(
+            category="video",
+            key="fal",
+            name="fal.ai (Kling and others)",
+            factory=FalVideoProvider,
         )
 
     if ("voice", "espeak") not in registered:

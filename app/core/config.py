@@ -56,5 +56,30 @@ class Settings:
         "",
     )
 
+    pixabay_api_key: str = os.getenv(
+        "PIXABAY_API_KEY",
+        "",
+    )
+
+    unsplash_access_key: str = os.getenv(
+        "UNSPLASH_ACCESS_KEY",
+        "",
+    )
+
+    openai_api_key: str = os.getenv(
+        "OPENAI_API_KEY",
+        "",
+    )
+
+    google_api_key: str = os.getenv(
+        "GOOGLE_API_KEY",
+        "",
+    )
+
+    fal_api_key: str = os.getenv(
+        "FAL_KEY",
+        "",
+    )
+
 
 settings = Settings()

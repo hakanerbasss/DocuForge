@@ -232,7 +232,7 @@ button:disabled{opacity:.6;cursor:wait}
 <h1>Yeni Proje</h1>
 <p class="muted">Konuyu ve ayarlar\u0131 se\u00e7. DocuForge ara\u015ft\u0131rma, senaryo, medya, seslendirme ve videoyu otomatik haz\u0131rlas\u0131n.</p>
 
-<h3>\ud83d\udcdd \u0130\u00e7erik</h3>
+<h3>📝 \u0130\u00e7erik</h3>
 <label for="topic">Konu</label>
 <input id="topic" placeholder="\u00d6rnek: Kara Deliklerin S\u0131rr\u0131" required minlength="2" maxlength="200">
 
@@ -262,7 +262,7 @@ button:disabled{opacity:.6;cursor:wait}
 <input id="duration" type="number" value="600" min="10" max="7200">
 <div class="hint" id="durationHint">~10 dakika</div>
 
-<h3>\ud83c\udfac Medya</h3>
+<h3>🎬 Medya</h3>
 <div class="row">
 <div>
 <label for="media_mode">Medya Modu</label>
@@ -283,6 +283,30 @@ button:disabled{opacity:.6;cursor:wait}
 </div>
 </div>
 
+<div class="row">
+<div>
+<label for="image_provider">G\u00f6rsel Sa\u011flay\u0131c\u0131</label>
+<select id="image_provider">
+<option value="pexels" selected>Pexels (\u00fccretsiz stok)</option>
+<option value="pixabay">Pixabay (\u00fccretsiz stok)</option>
+<option value="unsplash">Unsplash (\u00fccretsiz stok)</option>
+<option value="dalle">DALL-E / OpenAI (AI \u00fcretim, \u00fccretli)</option>
+<option value="google_imagen">Google Imagen (AI \u00fcretim, \u00fccretli)</option>
+<option value="fal">fal.ai / Flux (AI \u00fcretim, \u00fccretli)</option>
+</select>
+</div>
+<div>
+<label for="video_provider">Video Sa\u011flay\u0131c\u0131</label>
+<select id="video_provider">
+<option value="pexels" selected>Pexels (\u00fccretsiz stok)</option>
+<option value="pixabay">Pixabay (\u00fccretsiz stok)</option>
+<option value="google_veo">Google Veo (AI \u00fcretim, \u00fccretli)</option>
+<option value="fal">fal.ai / Kling (AI \u00fcretim, \u00fccretli)</option>
+</select>
+</div>
+</div>
+<div class="hint">AI \u00fcretim sa\u011flay\u0131c\u0131lar\u0131 ilgili API anahtar\u0131n\u0131 (.env) gerektirir: OPENAI_API_KEY, GOOGLE_API_KEY, FAL_KEY, PIXABAY_API_KEY, UNSPLASH_ACCESS_KEY.</div>
+
 <label for="fps">Kare H\u0131z\u0131 (FPS)</label>
 <select id="fps">
 <option value="24">24</option>
@@ -290,7 +314,7 @@ button:disabled{opacity:.6;cursor:wait}
 <option value="60">60</option>
 </select>
 
-<h3>\ud83c\udf99 Ses</h3>
+<h3>🎙 Ses</h3>
 <div class="row">
 <div>
 <label for="voice_provider">Ses Sa\u011flay\u0131c\u0131</label>
@@ -404,8 +428,8 @@ async function startBuild(){
     content_type:document.getElementById("content_type").value,
     target_duration_seconds:parseInt(document.getElementById("duration").value),
     media_mode:document.getElementById("media_mode").value,
-    image_provider:"pexels",
-    video_provider:"pexels",
+    image_provider:document.getElementById("image_provider").value,
+    video_provider:document.getElementById("video_provider").value,
     voice_provider:document.getElementById("voice_provider").value,
     voice_name:document.getElementById("voice_name").value,
     voice_speed:parseFloat(document.getElementById("voice_speed").value),
