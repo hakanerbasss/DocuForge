@@ -3,6 +3,7 @@ from app.agents.narration import NarrationAgent
 from app.agents.registry import AgentRegistry
 from app.agents.research import ResearchAgent
 from app.agents.script import ScriptAgent
+from app.agents.seo import SEOAgent
 from app.agents.storyboard import StoryboardAgent
 from app.agents.video_prompt import VideoPromptAgent
 
@@ -59,4 +60,12 @@ def register_default_agents() -> None:
         icon="🎙",
         output_file="narration.txt",
         factory=NarrationAgent,
+    )
+
+    AgentRegistry.register(
+        key="seo",
+        name="SEO Metadata",
+        icon="📈",
+        output_file="seo.json",
+        factory=SEOAgent,
     )

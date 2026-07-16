@@ -520,6 +520,50 @@ def project_detail(slug: str) -> HTMLResponse:
         </section>
         """
 
+    seo_path = project_dir / "seo.json"
+    seo_section = ""
+
+    if seo_path.exists():
+        seo_data = load_json(seo_path)
+        titles = seo_data.get("titles")
+        description = str(seo_data.get("description", ""))
+        tags = seo_data.get("tags")
+
+        title_items = "".join(
+            f"<li>{html.escape(str(title))}</li>"
+            for title in titles
+        ) if isinstance(titles, list) else ""
+
+        tag_badges = "".join(
+            f'<span class="badge">{html.escape(str(tag))}</span>'
+            for tag in tags
+        ) if isinstance(tags, list) else ""
+
+        seo_section = f"""
+        <section class="card">
+            <h2>SEO Metadata</h2>
+
+            <h3 style="font-size:15px;margin-bottom:6px">Başlık önerileri</h3>
+            <ul style="margin-top:0">{title_items}</ul>
+
+            <h3 style="font-size:15px;margin-bottom:6px">Açıklama</h3>
+            <p>{html.escape(description)}</p>
+
+            <h3 style="font-size:15px;margin-bottom:6px">Etiketler</h3>
+            <div class="badges">{tag_badges}</div>
+
+            <div class="buttons">
+                <a
+                    class="button secondary"
+                    href="/files/{quote(project_dir.name)}/seo.json"
+                    download
+                >
+                    seo.json İndir
+                </a>
+            </div>
+        </section>
+        """
+
     steps = pipeline.get("steps", {})
     thumbnail_enabled = bool(project.get("thumbnail_enabled"))
 
@@ -641,6 +685,7 @@ def project_detail(slug: str) -> HTMLResponse:
     {video_section}
     {thumbnail_section}
     {subtitles_section}
+    {seo_section}
 
     <section
         class="grid"

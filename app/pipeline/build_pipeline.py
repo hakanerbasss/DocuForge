@@ -495,6 +495,7 @@ class BuildPipeline:
                 "research",
                 "script",
                 "storyboard",
+                "seo",
             }:
                 result = agent.run(
                     agent_input,

@@ -72,6 +72,10 @@ def get_default_pipeline_steps() -> list[PipelineStep]:
             key="narration",
             input_loader=_load_storyboard,
         ),
+        PipelineStep(
+            key="seo",
+            input_loader=_load_script,
+        ),
     ]
 
 

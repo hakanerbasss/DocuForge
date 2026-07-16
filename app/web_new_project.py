@@ -21,6 +21,7 @@ PIPELINE_STEP_ORDER: list[tuple[str, str]] = [
     ("images", "🖼 Görsel Prompt'ları"),
     ("videos", "🎥 Video Prompt'ları"),
     ("narration", "🎙 Anlatım Metni"),
+    ("seo", "📈 SEO Metadata"),
     ("media", "📦 Medya İndirme"),
     ("narration_scenes", "📝 Sahne Metinleri"),
     ("voice", "🎙 Seslendirme"),
