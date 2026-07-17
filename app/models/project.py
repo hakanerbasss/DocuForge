@@ -62,6 +62,7 @@ class DocumentaryProject:
     background_music_enabled: bool = False
     music_track: str = ""
     music_provider: str = "local"
+    music_volume: float = 0.18
     subtitles_enabled: bool = False
     subtitles_burn_in: bool = False
     thumbnail_enabled: bool = False
@@ -92,6 +93,7 @@ class DocumentaryProject:
             self.target_duration_seconds
         )
         self.voice_speed = float(self.voice_speed)
+        self.music_volume = float(self.music_volume)
         self.fps = int(self.fps)
 
         self._validate()
@@ -147,6 +149,11 @@ class DocumentaryProject:
         if not 0.5 <= self.voice_speed <= 2.0:
             raise ValueError(
                 "Voice speed must be between 0.5 and 2.0."
+            )
+
+        if not 0.0 <= self.music_volume <= 1.0:
+            raise ValueError(
+                "Music volume must be between 0.0 and 1.0."
             )
 
         if self.resolution not in self.RESOLUTIONS:
@@ -260,6 +267,9 @@ class DocumentaryProject:
             ),
             music_provider=str(
                 data.get("music_provider", "local")
+            ),
+            music_volume=float(
+                data.get("music_volume", 0.18)
             ),
             subtitles_enabled=bool(
                 data.get("subtitles_enabled", False)

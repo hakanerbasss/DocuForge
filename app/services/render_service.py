@@ -269,6 +269,15 @@ class RenderService:
         fade_duration = min(3.0, duration)
         fade_start = max(0.0, duration - fade_duration)
 
+        try:
+            music_volume = float(
+                project_data.get("music_volume", 0.18)
+            )
+        except (TypeError, ValueError):
+            music_volume = 0.18
+
+        music_volume = min(1.0, max(0.0, music_volume))
+
         mixed_path = video_path.with_name(
             "final_video_music.mp4"
         )
@@ -284,7 +293,7 @@ class RenderService:
             str(music_path),
             "-filter_complex",
             (
-                f"[1:a]volume=0.18,"
+                f"[1:a]volume={music_volume:.3f},"
                 f"afade=t=out:st={fade_start:.2f}:d={fade_duration:.2f}"
                 f"[music];"
                 f"[0:a][music]amix=inputs=2:duration=first:"

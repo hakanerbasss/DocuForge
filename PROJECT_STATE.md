@@ -381,6 +381,16 @@ Kullanıcı geri bildirimi: önizleme çalışıyor ama önceki tek-satır AI ö
 - **`/new` sayfası:** Müzik sağlayıcı `<select>`'inde artık **Jamendo varsayılan seçili** (önceden "Yerel"di). Arama kutusunun altına `musicMoodTags` adında bir çip alanı eklendi — konu değiştiğinde (blur/AI öneri seçimi) bu alan dolup her etiket ayrı, küçük, tıklanabilir bir "+ etiket" çipine dönüşüyor. Bir çipe tıklayınca (`addMusicTag`) etiket **arama kutusuna eklenir** (üzerine yazmaz, aynı etiket tekrar eklenmez), kullanıcı istediği kadar etiketi birleştirip "Ara"ya basabiliyor.
 - **Test edildi:** `/api/music-mood`'un yeni `tags` listesi formatını (boş konu/AI başarılı — numaralandırma ve fazladan boşluk gibi gürültüyü temizleyerek/AI başarısız senaryoları), `/new` sayfasının Jamendo'nun varsayılan seçili olduğunu ve yeni çip render/ekleme fonksiyonlarının sözdizimsel geçerliliğini doğruladım.
 
+### Müzik sesi seviyesi ayarı
+
+Kullanıcı sordu: arka plan müziği konuşmayı bastırmaz mı? Cevap: hayır, zaten sabit %18'de karıştırılıyordu (`amix` filtresinde `volume=0.18`) — ama bu değer koddaydı, kullanıcı hiç değiştiremiyordu. Kullanıcı ayarlanabilir olmasını istedi.
+
+- **`DocumentaryProject.music_volume: float = 0.18`** eklendi (`app/models/project.py`) — `__post_init__`'te float'a çevrilip `_validate()`'te 0.0-1.0 aralığı kontrol ediliyor, `from_dict` de okuyor.
+- **`RenderService._apply_background_music()`**: hardcoded `volume=0.18` yerine artık `project_data.get("music_volume", 0.18)` okunuyor — geçersiz/eksik değerde (tip hatası, aralık dışı) sessizce 0.18'e düşüyor veya 0.0-1.0'a clamp'leniyor, render'ı asla düşürmüyor.
+- **`BuildPipeline.run()`** ve `STEP_ALLOWED_OVERRIDES["render"]`'a `music_volume` eklendi — hem ilk üretimde hem render adımını yeniden üretirken ayarlanabiliyor.
+- **`/new` sayfası:** Müzik sağlayıcı satırının altına "Müzik Sesi Seviyesi" kaydırıcısı eklendi (%0-%50 aralık, %5 adım, varsayılan %18) — `voice_speed` kaydırıcısıyla aynı görsel desende, canlı yüzde etiketiyle. Gönderilen build isteğinde `music_volume` 0.0-1.0 kesire çevriliyor.
+- **Test edildi:** modelin varsayılan/geçerli/geçersiz `music_volume` değerlerini doğru işlediği ve `from_dict`'in okuduğu; `_apply_background_music()`'in gerçek bir ffmpeg komutu üretmeden (mock `_run`/`_probe_duration`/`_resolve_music_track`) doğru `volume=X.XXX` filtresini bastığı (özel değer, varsayılan, aralık-dışı clamp, tip hatası fallback); `/new` sayfasının kaydırıcıyla hatasız render olduğu ve JS'in geçerli olduğu.
+
 ---
 
 ## Kilitli geliştirme sırası

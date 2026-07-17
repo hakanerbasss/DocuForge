@@ -65,6 +65,7 @@ class BuildRequest(BaseModel):
     background_music_enabled: bool = Field(default=False)
     music_provider: str = Field(default="local")
     music_track: str = Field(default="")
+    music_volume: float = Field(default=0.18, ge=0.0, le=1.0)
     subtitles_enabled: bool = Field(default=False)
     subtitles_burn_in: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
@@ -127,6 +128,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 background_music_enabled=req["background_music_enabled"],
                 music_provider=req.get("music_provider", "local"),
                 music_track=req.get("music_track", ""),
+                music_volume=req.get("music_volume", 0.18),
                 subtitles_enabled=req["subtitles_enabled"],
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
@@ -410,6 +412,10 @@ Arka plan m\u00fczi\u011fi ekle
 <option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
 </select>
 <div class="hint">Jamendo/Mubert i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
+
+<label for="music_volume" style="margin-top:12px">M\u00fczik Sesi Seviyesi: <span id="musicVolumeLabel">%18</span></label>
+<input id="music_volume" type="range" min="0" max="50" step="5" value="18" oninput="document.getElementById('musicVolumeLabel').textContent='%'+this.value">
+<div class="hint">Arka plan m\u00fczi\u011finin seslendirmeye g\u00f6re ses oran\u0131. D\u00fc\u015f\u00fck tut ki konu\u015fmay\u0131 bast\u0131rmas\u0131n (varsay\u0131lan %18 \u00f6nerilir).</div>
 
 <div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
 <div style="display:flex;gap:8px">
@@ -782,6 +788,7 @@ async function startBuild(){
     background_music_enabled:document.getElementById("background_music_enabled").checked,
     music_provider:document.getElementById("music_provider").value,
     music_track:document.getElementById("music_track").value,
+    music_volume:parseInt(document.getElementById("music_volume").value)/100,
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
