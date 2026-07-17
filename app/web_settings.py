@@ -112,11 +112,12 @@ def _render_xtts_field() -> str:
     current_path = Path(settings.xtts_reference_audio) if configured else None
 
     if configured and current_path is not None and current_path.exists():
+        audio_version = int(current_path.stat().st_mtime)
         body = f"""
         <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
             <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
             <audio controls preload="metadata" style="width:100%;margin-bottom:10px">
-                <source src="/settings/xtts_reference_audio/file" type="audio/wav">
+                <source src="/settings/xtts_reference_audio/file?v={audio_version}" type="audio/wav">
             </audio>
             <form method="post" action="/settings/xtts_reference_audio/clear" style="margin:0">
                 <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
@@ -166,10 +167,14 @@ def _render_closing_image_field() -> str:
 
     if configured and current_path is not None and current_path.exists():
         checked = "checked" if enabled else ""
+        # Cache-busting: same filename gets overwritten on every re-upload,
+        # so without a query param that changes, browsers keep showing the
+        # old cached image at this exact URL even after a hard refresh.
+        image_version = int(current_path.stat().st_mtime)
         body = f"""
         <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
             <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
-            <img src="/settings/closing_image/file" alt="Kapanış görseli" style="max-width:100%;max-height:280px;border-radius:8px;display:block;margin-bottom:12px">
+            <img src="/settings/closing_image/file?v={image_version}" alt="Kapanış görseli" style="max-width:100%;max-height:280px;border-radius:8px;display:block;margin-bottom:12px">
             <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:12px;cursor:pointer">
                 <input type="checkbox" id="closingImageEnabledToggle" {checked} onchange="toggleClosingImageEnabled(this)" style="width:auto;min-height:auto">
                 Belgesellerin sonuna ekle
@@ -444,7 +449,7 @@ def get_xtts_reference_audio() -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Referans ses dosyası bulunamadı.")
 
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/settings/xtts_reference_audio/upload")
@@ -511,7 +516,7 @@ def get_closing_image() -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Kapanış görseli dosyası bulunamadı.")
 
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/settings/closing_image/upload")
