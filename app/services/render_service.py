@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -408,11 +409,19 @@ class RenderService:
         output_path: Path,
     ) -> list[float]:
         """Chain adjacent clips with ffmpeg's xfade/acrossfade filters
-        instead of a hard cut. Unlike the stream-copy concat path, this
-        decodes and re-encodes every clip in one filtergraph pass --
-        each clip is fed as its own -i input (not the concat demuxer),
-        and xfade/acrossfade are chained pairwise, carrying the running
-        combined-stream duration forward as each pair's offset.
+        instead of a hard cut.
+
+        Merges are done ONE PAIR AT A TIME (the running combined clip
+        so far + the next scene clip), never all N clips as simultaneous
+        inputs to a single ffmpeg filtergraph. A single N-input version
+        was tried first and OOM-killed a real render at 23 scenes (one
+        ffmpeg process holding ~5.6GB RSS decoding every clip at once) --
+        peak memory here stays roughly constant (about two clips' worth)
+        regardless of scene count, at the cost of re-encoding the
+        growing prefix on every merge instead of touching each clip
+        exactly once. Renders with many scenes take noticeably longer
+        as a result, but that's a much better trade than crashing the
+        whole service.
 
         The per-pair transition length is clamped to a fraction of both
         adjacent clips' own duration so a couple of very short scenes
@@ -427,75 +436,89 @@ class RenderService:
         drift out of sync more with every transition.
         """
 
-        command = ["ffmpeg", "-y"]
+        tmp_dir = output_path.parent / "transitions_tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        for clip in clip_files:
-            command += ["-i", str(clip)]
-
-        filter_parts: list[str] = []
-        video_label = "0:v"
-        audio_label = "0:a"
-        cumulative = clip_durations[0]
+        current_path = clip_files[0]
+        current_duration = clip_durations[0]
+        current_is_temp = False
         start_offsets = [0.0]
 
-        for i in range(1, len(clip_files)):
-            duration = max(
-                0.1,
-                min(
-                    self.TRANSITION_DURATION_SECONDS,
-                    clip_durations[i - 1] * 0.4,
-                    clip_durations[i] * 0.4,
-                ),
-            )
-            offset = max(0.0, cumulative - duration)
-            start_offsets.append(offset)
+        try:
+            for i in range(1, len(clip_files)):
+                duration = max(
+                    0.1,
+                    min(
+                        self.TRANSITION_DURATION_SECONDS,
+                        current_duration * 0.4,
+                        clip_durations[i] * 0.4,
+                    ),
+                )
+                offset = max(0.0, current_duration - duration)
+                start_offsets.append(offset)
 
-            out_v = f"v{i}"
-            out_a = f"a{i}"
+                merged_path = tmp_dir / f"merge_{i:04d}.mp4"
 
-            filter_parts.append(
-                f"[{video_label}][{i}:v]xfade=transition={xfade_name}:"
-                f"duration={duration:.3f}:offset={offset:.3f}[{out_v}]"
-            )
-            filter_parts.append(
-                f"[{audio_label}][{i}:a]acrossfade=d={duration:.3f}[{out_a}]"
-            )
+                command = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(current_path),
+                    "-i",
+                    str(clip_files[i]),
+                    "-filter_complex",
+                    (
+                        f"[0:v][1:v]xfade=transition={xfade_name}:"
+                        f"duration={duration:.3f}:offset={offset:.3f}[v];"
+                        f"[0:a][1:a]acrossfade=d={duration:.3f}[a]"
+                    ),
+                    "-map",
+                    "[v]",
+                    "-map",
+                    "[a]",
+                    "-r",
+                    str(self.FPS),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-ar",
+                    "48000",
+                    "-ac",
+                    "2",
+                    "-movflags",
+                    "+faststart",
+                    str(merged_path),
+                ]
 
-            video_label = out_v
-            audio_label = out_a
-            cumulative = cumulative + clip_durations[i] - duration
+                self._run(command)
 
-        command += [
-            "-filter_complex",
-            ";".join(filter_parts),
-            "-map",
-            f"[{video_label}]",
-            "-map",
-            f"[{audio_label}]",
-            "-r",
-            str(self.FPS),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
+                if not merged_path.exists() or merged_path.stat().st_size == 0:
+                    raise RuntimeError(
+                        f"Transition merge failed at clip {i + 1}: "
+                        f"{merged_path}"
+                    )
 
-        self._run(command)
+                if current_is_temp:
+                    current_path.unlink(missing_ok=True)
+
+                current_path = merged_path
+                current_is_temp = True
+                current_duration = (
+                    current_duration + clip_durations[i] - duration
+                )
+
+            shutil.move(str(current_path), str(output_path))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return start_offsets
 
