@@ -353,6 +353,20 @@ Kullanıcı isteği: konu kutusunun yanına DeepSeek'in konu önereceği bir öz
 
 ---
 
+## Dinleyip seçilebilen ücretsiz müzik arayüzü
+
+Kullanıcı isteği: mevcut otomatik müzik seçimi yeterli değil, üretimden önce parçaları dinleyip elle seçebileceği bir arayüz istiyor.
+
+- **`JamendoMusicProvider.search()`** (yeni): mevcut `get_music()` ile aynı Jamendo API'sini kullanıyor ama indirme yapmadan, en fazla `limit` adet aday parçayı `{id, name, artist, duration, preview_url, download_url}` olarak döndürüyor. `get_music()` artık bunu çağırıp ilk sonucu indiriyor (kod tekrarı kaldırıldı).
+- **`RenderService._resolve_music_track()`** genişletildi: `music_track` alanı artık sadece yerel dosya yolu değil, `http(s)://` ile başlayan bir URL de olabiliyor — bu durumda `MediaDownloader` ile `music/selected_track.mp3`'e indiriliyor. İndirme başarısız olursa (link ölmüş, ağ hatası vb.) render'ı düşürmüyor, sadece müziksiz devam ediyor (mevcut hata toleransı deseniyle aynı).
+- **`BuildPipeline.run()`** ve `STEP_ALLOWED_OVERRIDES["render"]`'a `music_track` eklendi — hem ilk üretimde hem render adımını "Yeniden Üret" ile tekrar çalıştırırken seçilebiliyor (render formunun kendisi bu turda genişletilmedi, sadece override olarak kabul ediliyor; `/new` sihirbazındaki tam dinle-seç arayüzü bu turun kapsamı).
+- **`GET /api/music-search`** (yeni endpoint, `query`/`content_type` parametreleriyle): `query` boşsa `RenderService._build_music_query()`'deki aynı içerik-türü→mood eşlemesini kullanıyor (kod tekrarı yok), `JamendoMusicProvider.search()`'ü çağırıp sonucu döndürüyor; API key yoksa/arama başarısızsa 502 + Türkçe hata.
+- **`/new` sayfası:** "Arka Plan Müziği Ekle" işaretli ve sağlayıcı "Jamendo" seçiliyken, sağlayıcı satırının altında bir arama kutusu + "🎧 Ara" butonu beliriyor. Sonuçlar, her biri parça adı/sanatçı/süre ve gömülü `<audio controls>` önizleme çalarıyla listeleniyor; "✅ Bu parçayı seç" butonuna basınca gizli `music_track` alanı o parçanın indirme URL'siyle doluyor ve seçim "🎵 Seçilen parça: ..." notuyla onaylanıyor. Sağlayıcı Jamendo dışına değiştirilirse veya müzik kapatılırsa seçim otomatik temizleniyor (build isteğine yanlışlıkla eski bir seçim gitmesin diye). Hiçbir parça seçilmezse davranış tamamen eskisi gibi — otomatik mood aramasına düşüyor.
+- **Yine bulunan lone-surrogate hatası:** bu turda eklenen "🎧 Ara" buton metni de (💡 butonundaki gibi) dosyaya ayrık bir surrogate-pair kaçışı olarak yazılmış, `/new` sayfasını aynı UTF-8 encode hatasıyla çökertiyordu — gerçek UTF-8 karakteriyle değiştirilip düzeltildi, tüm dosya taranıp başka örneği kalmadığı doğrulandı.
+- **Test edildi:** `JamendoMusicProvider.search()`'ün indirme linki olmayan sonuçları elediği ve `get_music()`'in ilk adayı indirdiği (mock `requests`/`MediaDownloader`); `_resolve_music_track()`'in bir URL'yi indirip `music/selected_track.mp3`'e yazdığı, indirme hatasında `None` döndürüp render'ı düşürmediği, mevcut yerel-yol davranışının bozulmadığı; `/api/music-search` endpoint'inin başarı/API-key-yok/boş-sorgu-mood-varsayılanı senaryoları (FastAPI `TestClient` + mock); `/new` sayfasının hatasız render olduğu ve iki `<script>` bloğunun `node --check` ile geçerli olduğu.
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:

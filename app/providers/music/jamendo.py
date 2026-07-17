@@ -32,6 +32,30 @@ class JamendoMusicProvider(MusicProvider):
     ) -> Path:
         """Search Jamendo for a royalty-free track and download it."""
 
+        tracks = self.search(query, limit=1)
+
+        if not tracks:
+            raise RuntimeError(
+                f"No Jamendo tracks found for tags: {query}"
+            )
+
+        track = tracks[0]
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        destination = output_dir / f"jamendo_{track['id']}.mp3"
+
+        MediaDownloader.download(track["download_url"], destination)
+
+        return destination
+
+    def search(
+        self,
+        query: str,
+        limit: int = 12,
+    ) -> list[dict[str, Any]]:
+        """Search Jamendo for candidate tracks without downloading --
+        used by the /new wizard's listen-and-pick music browser."""
+
         query = query.strip() or "cinematic background"
 
         response = requests.get(
@@ -41,7 +65,7 @@ class JamendoMusicProvider(MusicProvider):
                 "format": "json",
                 "tags": query,
                 "audioformat": "mp32",
-                "limit": 10,
+                "limit": limit,
                 "include": "musicinfo",
                 "order": "popularity_total",
             },
@@ -53,22 +77,21 @@ class JamendoMusicProvider(MusicProvider):
 
         results = payload.get("results", [])
 
-        if not results:
-            raise RuntimeError(
-                f"No Jamendo tracks found for tags: {query}"
-            )
+        tracks: list[dict[str, Any]] = []
 
-        track = results[0]
-        download_url = track.get("audiodownload") or track.get("audio")
+        for track in results:
+            download_url = track.get("audiodownload") or track.get("audio")
 
-        if not download_url:
-            raise RuntimeError(
-                f"Jamendo track has no downloadable audio URL: {track}"
-            )
+            if not download_url:
+                continue
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        destination = output_dir / f"jamendo_{track['id']}.mp3"
+            tracks.append({
+                "id": str(track.get("id", "")),
+                "name": str(track.get("name") or "Untitled"),
+                "artist": str(track.get("artist_name") or ""),
+                "duration": int(track.get("duration") or 0),
+                "preview_url": str(track.get("audio") or download_url),
+                "download_url": str(download_url),
+            })
 
-        MediaDownloader.download(download_url, destination)
-
-        return destination
+        return tracks

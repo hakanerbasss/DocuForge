@@ -323,6 +323,22 @@ class RenderService:
             project_data.get("music_track", "")
         ).strip()
 
+        if explicit.startswith(("http://", "https://")):
+            from app.providers.shared.downloader import MediaDownloader
+
+            music_dir = project_dir / "music"
+            music_dir.mkdir(parents=True, exist_ok=True)
+            destination = music_dir / "selected_track.mp3"
+
+            try:
+                return MediaDownloader.download(explicit, destination)
+            except Exception as error:
+                print(
+                    f"  ⚠ Seçilen müzik parçası indirilemedi "
+                    f"({explicit}): {error}"
+                )
+                return None
+
         if explicit:
             candidate = Path(explicit)
 

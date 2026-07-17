@@ -64,6 +64,7 @@ class BuildRequest(BaseModel):
     fps: int = Field(default=30)
     background_music_enabled: bool = Field(default=False)
     music_provider: str = Field(default="local")
+    music_track: str = Field(default="")
     subtitles_enabled: bool = Field(default=False)
     subtitles_burn_in: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
@@ -125,6 +126,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 fps=req["fps"],
                 background_music_enabled=req["background_music_enabled"],
                 music_provider=req.get("music_provider", "local"),
+                music_track=req.get("music_track", ""),
                 subtitles_enabled=req["subtitles_enabled"],
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
@@ -402,12 +404,22 @@ Arka plan m\u00fczi\u011fi ekle
 
 <div id="musicProviderRow" style="display:none;margin-top:10px;margin-left:22px">
 <label for="music_provider">M\u00fczik Sa\u011flay\u0131c\u0131</label>
-<select id="music_provider">
+<select id="music_provider" onchange="onMusicProviderChange()">
 <option value="local" selected>Yerel (music/ klas\u00f6r\u00fc)</option>
 <option value="jamendo">Jamendo (telifsiz)</option>
 <option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
 </select>
 <div class="hint">Jamendo/Mubert i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
+
+<div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
+<div style="display:flex;gap:8px">
+<input id="musicSearchQuery" placeholder="\u00d6rnek: cinematic ambient (bo\u015f b\u0131rak\u0131rsan i\u00e7erik t\u00fcr\u00fcne g\u00f6re aran\u0131r)" style="flex:1">
+<button type="button" id="musicSearchBtn" onclick="searchMusic()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🎧 Ara</button>
+</div>
+<div id="musicResults" style="margin-top:10px"></div>
+<div id="musicSelectedInfo" class="hint" style="display:none;margin-top:10px;font-weight:700;color:#08763a"></div>
+</div>
+<input type="hidden" id="music_track" value="">
 </div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
@@ -602,6 +614,73 @@ function pickTopicSuggestion(el){
 function onMusicToggle(){
   const on=document.getElementById("background_music_enabled").checked;
   document.getElementById("musicProviderRow").style.display=on?"block":"none";
+  if(!on)onMusicProviderChange();
+}
+
+function onMusicProviderChange(){
+  const p=document.getElementById("music_provider").value;
+  const isJamendo=p==="jamendo"&&document.getElementById("background_music_enabled").checked;
+  document.getElementById("musicBrowseRow").style.display=isJamendo?"block":"none";
+  if(!isJamendo){
+    document.getElementById("music_track").value="";
+    document.getElementById("musicResults").innerHTML="";
+    document.getElementById("musicSelectedInfo").style.display="none";
+  }
+}
+
+async function searchMusic(){
+  const btn=document.getElementById("musicSearchBtn");
+  const box=document.getElementById("musicResults");
+  const query=document.getElementById("musicSearchQuery").value.trim();
+  const contentType=document.getElementById("content_type").value;
+  btn.disabled=true;
+  btn.textContent="⏳ Aranıyor…";
+  box.innerHTML='<div class="hint">Jamendo’da telifsiz parçalar aranıyor…</div>';
+  try{
+    const params=new URLSearchParams({query, content_type: contentType});
+    const res=await fetch(`/api/music-search?${params.toString()}`);
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||"Arama başarısız.");
+    renderMusicResults(data.tracks||[]);
+  }catch(err){
+    box.innerHTML=`<div class="hint" style="color:#9f2020">${escapeHtml(err.message)}</div>`;
+  }finally{
+    btn.disabled=false;
+    btn.textContent="🎧 Ara";
+  }
+}
+
+function renderMusicResults(tracks){
+  const box=document.getElementById("musicResults");
+  if(!tracks.length){
+    box.innerHTML='<div class="hint">Sonuç bulunamadı, farklı bir arama dene.</div>';
+    return;
+  }
+  box.innerHTML=tracks.map((t,i)=>{
+    const dur=parseInt(t.duration)||0;
+    const mins=Math.floor(dur/60);
+    const secs=String(dur%60).padStart(2,"0");
+    const label=`${t.name||"Untitled"} — ${t.artist||"Bilinmeyen sanatçı"}`;
+    return `<div style="padding:10px 0;${i>0?"border-top:1px solid #eef1f6":""}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700">${escapeHtml(t.name||"Untitled")}</div>
+          <div class="hint">${escapeHtml(t.artist||"Bilinmeyen sanatçı")} · ${mins}:${secs}</div>
+        </div>
+        <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px">✅ Bu parçayı seç</button>
+      </div>
+      <audio controls preload="none" src="${escapeHtml(t.preview_url||"")}" style="width:100%;margin-top:6px;height:34px"></audio>
+    </div>`;
+  }).join("");
+}
+
+function selectMusicTrack(btn){
+  const url=btn.getAttribute("data-url");
+  const label=btn.getAttribute("data-label");
+  document.getElementById("music_track").value=url;
+  const info=document.getElementById("musicSelectedInfo");
+  info.style.display="block";
+  info.textContent="🎵 Seçilen parça: "+label;
 }
 
 function onSubtitlesToggle(){
@@ -663,6 +742,7 @@ async function startBuild(){
     fps:parseInt(document.getElementById("fps").value),
     background_music_enabled:document.getElementById("background_music_enabled").checked,
     music_provider:document.getElementById("music_provider").value,
+    music_track:document.getElementById("music_track").value,
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
@@ -778,6 +858,27 @@ def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
             status_code=502,
             detail=f"Konu önerileri alınamadı: {error}",
         ) from error
+
+
+@router.get("/api/music-search")
+def music_search(query: str = "", content_type: str = "documentary") -> dict[str, Any]:
+    from app.providers.music.jamendo import JamendoMusicProvider
+    from app.services.render_service import RenderService
+
+    search_query = query.strip() or RenderService()._build_music_query(
+        {"content_type": content_type}
+    )
+
+    try:
+        provider = JamendoMusicProvider()
+        tracks = provider.search(search_query, limit=12)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Müzik araması başarısız: {error}",
+        ) from error
+
+    return {"query": search_query, "tracks": tracks}
 
 
 @router.post("/api/builds")
