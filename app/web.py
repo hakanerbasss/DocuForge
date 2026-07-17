@@ -529,9 +529,9 @@ def dashboard() -> HTMLResponse:
                     : "";
                 return `
                 <div style="padding:12px 0;border-bottom:1px solid #edf1f6">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
-                        <strong>${{job.topic || job.project_slug || "Proje"}}</strong>
-                        <span style="display:flex;gap:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+                        <strong style="min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${{job.topic || job.project_slug || "Proje"}}</strong>
+                        <span style="display:flex;gap:8px;flex-shrink:0">
                             ${{slugLink}}
                             <button
                                 class="button secondary"
