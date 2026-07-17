@@ -731,6 +731,7 @@ def project_detail(slug: str) -> HTMLResponse:
         """
 
     subtitles_path = project_dir / "render" / "subtitles.srt"
+    subtitles_txt_path = project_dir / "render" / "subtitles.txt"
     subtitles_section = ""
 
     if subtitles_path.exists():
@@ -740,6 +741,18 @@ def project_detail(slug: str) -> HTMLResponse:
             if burned_in
             else "Sahne bazlı zamanlamalı .srt dosyası (videoya gömülü değil, ayrı dosya)."
         )
+
+        txt_button = ""
+        if subtitles_txt_path.exists():
+            txt_button = f"""
+                <a
+                    class="button secondary"
+                    href="/files/{quote(project_dir.name)}/render/subtitles.txt"
+                    download
+                >
+                    subtitles.txt İndir
+                </a>
+            """
 
         subtitles_section = f"""
         <section class="card">
@@ -755,6 +768,7 @@ def project_detail(slug: str) -> HTMLResponse:
                 >
                     subtitles.srt İndir
                 </a>
+                {txt_button}
             </div>
         </section>
         """

@@ -238,6 +238,10 @@ class RenderService:
             self._write_srt(srt_path, subtitle_segments)
             print(f"  ✅ Subtitles written ({srt_path})")
 
+            txt_path = render_dir / "subtitles.txt"
+            self._write_txt(txt_path, subtitle_segments)
+            print(f"  ✅ Transcript written ({txt_path})")
+
             if project_data.get("subtitles_burn_in"):
                 self._burn_in_subtitles(output_path, srt_path)
 
@@ -484,6 +488,24 @@ class RenderService:
 
         srt_path.parent.mkdir(parents=True, exist_ok=True)
         srt_path.write_text("\n".join(blocks), encoding="utf-8")
+
+    def _write_txt(
+        self,
+        txt_path: Path,
+        segments: list[tuple[int, float, str | None]],
+    ) -> None:
+        """Plain-text transcript -- same narration as the .srt, but as
+        readable paragraphs (no timestamps/indices/mid-sentence chunking),
+        for copy-paste into a video description or reading offline."""
+
+        paragraphs = [
+            text.strip()
+            for _scene_number, _duration, text in segments
+            if text and text.strip()
+        ]
+
+        txt_path.parent.mkdir(parents=True, exist_ok=True)
+        txt_path.write_text("\n\n".join(paragraphs), encoding="utf-8")
 
     def _format_srt_timestamp(
         self,

@@ -331,6 +331,16 @@ Kullanıcı gerçek bir projenin `subtitles.srt` dosyasını paylaştı; modül�
 
 ---
 
+## Altyazının yanına düz metin (.txt) transkript indirme
+
+Kullanıcı isteği: "altyazı srt formatının yanına txt formatı da koyalım indirilebilir olsun".
+
+- `RenderService._render()`, `subtitles_enabled` ise artık `subtitles.srt`'nin yanına `subtitles.txt` de yazıyor — yeni `_write_txt()` metodu, `.srt` üretiminde kullanılan aynı `subtitle_segments` listesini (sahne numarası, süre, metin) kullanıyor ama zaman kodu/indeks/8-kelimelik alt yazı parçalama olmadan, her sahne kendi paragrafı olacak şekilde `\n\n` ile birleştiriyor — kopyala-yapıştır transkript/açıklama metni için doğrudan kullanılabilir.
+- Proje sayfasındaki "Altyazı" kartına, mevcut `subtitles.srt İndir` butonunun yanına `subtitles.txt İndir` butonu eklendi — sadece dosya varsa gösteriliyor (eski render'larda `.txt` olmayacağı için geriye dönük uyumlu, kırık link göstermiyor).
+- **Test edildi:** `_write_txt()`'in None/boş metinli sahneleri atladığını ve paragrafları doğru ayırdığını, proje sayfasının hem `.txt` varken (her iki buton da görünüyor) hem yokken (sadece `.srt` butonu, `.txt` linki hiç render edilmiyor) doğru HTML ürettiğini FastAPI `TestClient` ile doğruladım.
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:
