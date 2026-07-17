@@ -13,6 +13,12 @@ class RenderService:
     HEIGHT = 720
     FPS = 30
 
+    TRANSITION_DURATION_SECONDS = 0.5
+    TRANSITION_XFADE_MAP = {
+        "crossfade": "fade",
+        "fade_black": "fadeblack",
+    }
+
     RESOLUTION_MAP = {
         "720p":     (1280, 720),
         "1080p":    (1920, 1080),
@@ -87,6 +93,7 @@ class RenderService:
             raise ValueError("No scene directories found.")
 
         clip_files: list[Path] = []
+        clip_durations: list[float] = []
         subtitle_segments: list[tuple[int, float, str | None]] = []
 
         for index, scene_dir in enumerate(scene_dirs, start=1):
@@ -200,39 +207,36 @@ class RenderService:
                 continue
 
             clip_files.append(clip_path)
+            clip_durations.append(scene_duration)
 
         if not clip_files:
             raise ValueError("No usable media files found.")
 
-        concat_file = render_dir / "concat.txt"
-
-        concat_file.write_text(
-            "\n".join(
-                f"file '{clip.resolve()}'"
-                for clip in clip_files
-            ),
-            encoding="utf-8",
-        )
-
         output_path = render_dir / "final_video.mp4"
+        transition = str(
+            project_data.get("scene_transition", "crossfade")
+        ).strip().lower()
 
-        command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_file),
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
+        xfade_name = self.TRANSITION_XFADE_MAP.get(transition)
 
-        self._run(command)
+        if xfade_name is not None and len(clip_files) > 1:
+            try:
+                self._concat_with_transitions(
+                    clip_files,
+                    clip_durations,
+                    xfade_name,
+                    output_path,
+                )
+            except Exception as error:
+                print(
+                    f"  ⚠ Sahne geçişi uygulanamadı ({error}); "
+                    "sert kesime düşülüyor."
+                )
+                self._concat_stream_copy(
+                    clip_files, render_dir, output_path
+                )
+        else:
+            self._concat_stream_copy(clip_files, render_dir, output_path)
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError(
@@ -268,6 +272,132 @@ class RenderService:
                 self._burn_in_subtitles(output_path, srt_path)
 
         return output_path
+
+    def _concat_stream_copy(
+        self,
+        clip_files: list[Path],
+        render_dir: Path,
+        output_path: Path,
+    ) -> None:
+        """Hard-cut concatenation -- pure stream copy, no re-encode.
+        The default/fallback path: fastest, and the only option that
+        never risks an odd ffmpeg filtergraph edge case.
+        """
+
+        concat_file = render_dir / "concat.txt"
+
+        concat_file.write_text(
+            "\n".join(
+                f"file '{clip.resolve()}'"
+                for clip in clip_files
+            ),
+            encoding="utf-8",
+        )
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_file),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+
+        self._run(command)
+
+    def _concat_with_transitions(
+        self,
+        clip_files: list[Path],
+        clip_durations: list[float],
+        xfade_name: str,
+        output_path: Path,
+    ) -> None:
+        """Chain adjacent clips with ffmpeg's xfade/acrossfade filters
+        instead of a hard cut. Unlike the stream-copy concat path, this
+        decodes and re-encodes every clip in one filtergraph pass --
+        each clip is fed as its own -i input (not the concat demuxer),
+        and xfade/acrossfade are chained pairwise, carrying the running
+        combined-stream duration forward as each pair's offset.
+
+        The per-pair transition length is clamped to a fraction of both
+        adjacent clips' own duration so a couple of very short scenes
+        can't produce a negative/degenerate offset.
+        """
+
+        command = ["ffmpeg", "-y"]
+
+        for clip in clip_files:
+            command += ["-i", str(clip)]
+
+        filter_parts: list[str] = []
+        video_label = "0:v"
+        audio_label = "0:a"
+        cumulative = clip_durations[0]
+
+        for i in range(1, len(clip_files)):
+            duration = max(
+                0.1,
+                min(
+                    self.TRANSITION_DURATION_SECONDS,
+                    clip_durations[i - 1] * 0.4,
+                    clip_durations[i] * 0.4,
+                ),
+            )
+            offset = max(0.0, cumulative - duration)
+
+            out_v = f"v{i}"
+            out_a = f"a{i}"
+
+            filter_parts.append(
+                f"[{video_label}][{i}:v]xfade=transition={xfade_name}:"
+                f"duration={duration:.3f}:offset={offset:.3f}[{out_v}]"
+            )
+            filter_parts.append(
+                f"[{audio_label}][{i}:a]acrossfade=d={duration:.3f}[{out_a}]"
+            )
+
+            video_label = out_v
+            audio_label = out_a
+            cumulative = cumulative + clip_durations[i] - duration
+
+        command += [
+            "-filter_complex",
+            ";".join(filter_parts),
+            "-map",
+            f"[{video_label}]",
+            "-map",
+            f"[{audio_label}]",
+            "-r",
+            str(self.FPS),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+
+        self._run(command)
 
     def _apply_background_music(
         self,

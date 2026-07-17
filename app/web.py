@@ -1065,6 +1065,7 @@ def project_detail(slug: str) -> HTMLResponse:
         target_duration_seconds: "Hedef Süre (saniye)",
         resolution: "Çözünürlük",
         fps: "FPS",
+        scene_transition: "Sahne Geçişi",
         background_music_enabled: "Arka Plan Müziği",
         music_provider: "Müzik Sağlayıcı",
         subtitles_enabled: "Altyazı (.srt) Üret",
@@ -1079,6 +1080,11 @@ def project_detail(slug: str) -> HTMLResponse:
         media_mode: [["mixed","Video + Fotoğraf"],["video","Sadece Video"],["image","Sadece Fotoğraf"]],
         resolution: [["720p","720p (1280x720)"],["1080p","1080p (1920x1080)"],["vertical","Dikey (1080x1920)"],["4k","4K (3840x2160)"]],
         fps: [["24","24"],["30","30"],["60","60"]],
+        scene_transition: [
+            ["cut","Sert Kesim"],
+            ["crossfade","Yumuşak Geçiş (Crossfade)"],
+            ["fade_black","Karartarak Geçiş"],
+        ],
         thumbnail_source: [
             ["auto","Otomatik (ücretsiz varsa onu kullan)"],
             ["ai","Yapay Zeka (OpenAI — ücretli, 1 kapak)"],

@@ -62,6 +62,7 @@ class BuildRequest(BaseModel):
     voice_speed: float = Field(default=1.0, ge=0.5, le=2.0)
     resolution: str = Field(default="720p")
     fps: int = Field(default=30)
+    scene_transition: str = Field(default="crossfade")
     background_music_enabled: bool = Field(default=False)
     music_provider: str = Field(default="local")
     music_track: str = Field(default="")
@@ -125,6 +126,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 voice_speed=req["voice_speed"],
                 resolution=req["resolution"],
                 fps=req["fps"],
+                scene_transition=req.get("scene_transition", "crossfade"),
                 background_music_enabled=req["background_music_enabled"],
                 music_provider=req.get("music_provider", "local"),
                 music_track=req.get("music_track", ""),
@@ -369,6 +371,14 @@ button:disabled{opacity:.6;cursor:wait}
 <option value="30" selected>30</option>
 <option value="60">60</option>
 </select>
+
+<label for="scene_transition">Sahne Ge\u00e7i\u015fi</label>
+<select id="scene_transition">
+<option value="cut">Sert Kesim</option>
+<option value="crossfade" selected>Yumu\u015fak Ge\u00e7i\u015f (Crossfade)</option>
+<option value="fade_black">Karartarak Ge\u00e7i\u015f</option>
+</select>
+<div class="hint">Sahneler aras\u0131nda nas\u0131l ge\u00e7ilece\u011fini belirler. Yumu\u015fak ge\u00e7i\u015f \u00e7o\u011fu belgesel i\u00e7in en do\u011fal g\u00f6r\u00fcnen se\u00e7enektir.</div>
 
 <h3>🎙 Ses</h3>
 <div class="row">
@@ -807,6 +817,7 @@ async function startBuild(){
     voice_speed:parseFloat(document.getElementById("voice_speed").value),
     resolution:document.getElementById("resolution").value,
     fps:parseInt(document.getElementById("fps").value),
+    scene_transition:document.getElementById("scene_transition").value,
     background_music_enabled:document.getElementById("background_music_enabled").checked,
     music_provider:document.getElementById("music_provider").value,
     music_track:document.getElementById("music_track").value,

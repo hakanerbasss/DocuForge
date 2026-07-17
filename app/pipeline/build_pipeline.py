@@ -34,6 +34,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
     "render": {
         "resolution",
         "fps",
+        "scene_transition",
         "background_music_enabled",
         "music_provider",
         "music_track",
@@ -75,6 +76,7 @@ class BuildPipeline:
         voice_speed: float = 1.0,
         resolution: str = "720p",
         fps: int = 30,
+        scene_transition: str = "crossfade",
         background_music_enabled: bool = False,
         music_provider: str = "local",
         music_track: str = "",
@@ -113,6 +115,7 @@ class BuildPipeline:
             voice_speed=voice_speed,
             resolution=resolution,
             fps=fps,
+            scene_transition=scene_transition,
             background_music_enabled=background_music_enabled,
             music_provider=music_provider,
             music_track=music_track,

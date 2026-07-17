@@ -42,6 +42,12 @@ class DocumentaryProject:
         "scene",
     }
 
+    SCENE_TRANSITIONS: ClassVar[set[str]] = {
+        "cut",
+        "crossfade",
+        "fade_black",
+    }
+
     title: str
     language: str = "tr"
     content_type: str = "documentary"
@@ -58,6 +64,7 @@ class DocumentaryProject:
 
     resolution: str = "720p"
     fps: int = 30
+    scene_transition: str = "crossfade"
 
     background_music_enabled: bool = False
     music_track: str = ""
@@ -88,6 +95,7 @@ class DocumentaryProject:
         self.resolution = str(self.resolution).strip().lower()
         self.music_track = str(self.music_track).strip()
         self.thumbnail_source = str(self.thumbnail_source).strip().lower()
+        self.scene_transition = str(self.scene_transition).strip().lower()
         self.thumbnail_hook_override = str(
             self.thumbnail_hook_override
         ).strip()
@@ -175,6 +183,12 @@ class DocumentaryProject:
                 f"Allowed: {sorted(self.THUMBNAIL_SOURCES)}"
             )
 
+        if self.scene_transition not in self.SCENE_TRANSITIONS:
+            raise ValueError(
+                f"Invalid scene transition: {self.scene_transition}. "
+                f"Allowed: {sorted(self.SCENE_TRANSITIONS)}"
+            )
+
         if not self.status:
             raise ValueError("Project status cannot be empty.")
 
@@ -260,6 +274,9 @@ class DocumentaryProject:
             ),
             resolution=raw_resolution,
             fps=int(data.get("fps", 30)),
+            scene_transition=str(
+                data.get("scene_transition", "crossfade")
+            ),
             background_music_enabled=bool(
                 data.get(
                     "background_music_enabled",
