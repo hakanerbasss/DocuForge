@@ -390,6 +390,7 @@ Kullanıcı sordu: arka plan müziği konuşmayı bastırmaz mı? Cevap: hayır,
 - **`BuildPipeline.run()`** ve `STEP_ALLOWED_OVERRIDES["render"]`'a `music_volume` eklendi — hem ilk üretimde hem render adımını yeniden üretirken ayarlanabiliyor.
 - **`/new` sayfası:** Müzik sağlayıcı satırının altına "Müzik Sesi Seviyesi" kaydırıcısı eklendi (%0-%50 aralık, %5 adım, varsayılan %18) — `voice_speed` kaydırıcısıyla aynı görsel desende, canlı yüzde etiketiyle. Gönderilen build isteğinde `music_volume` 0.0-1.0 kesire çevriliyor.
 - **Test edildi:** modelin varsayılan/geçerli/geçersiz `music_volume` değerlerini doğru işlediği ve `from_dict`'in okuduğu; `_apply_background_music()`'in gerçek bir ffmpeg komutu üretmeden (mock `_run`/`_probe_duration`/`_resolve_music_track`) doğru `volume=X.XXX` filtresini bastığı (özel değer, varsayılan, aralık-dışı clamp, tip hatası fallback); `/new` sayfasının kaydırıcıyla hatasız render olduğu ve JS'in geçerli olduğu.
+- **Düzeltme (kullanıcı ekran görüntüsüyle bildirdi):** her "Bu parçayı seç" butonu zaten metninde sabit "✅" işareti taşıdığı için, hangi parçanın gerçekten seçili olduğu hiç belli olmuyordu — hepsi aynı görünüyordu. `selectMusicTrack()` artık tıklanınca ÖNCE tüm `.music-pick-btn` butonlarını nötr (mavi, "Bu parçayı seç") duruma resetliyor, SONRA tıklanan butonu yeşil "✅ Seçildi" yapıyor — tam olarak bir seçim her an görsel olarak işaretli.
 
 ---
 

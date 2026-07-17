@@ -711,7 +711,7 @@ function renderMusicResults(tracks){
           <div style="font-weight:700">${escapeHtml(t.name||"Untitled")}</div>
           <div class="hint">${escapeHtml(t.artist||"Bilinmeyen sanatçı")} · ${mins}:${secs}</div>
         </div>
-        <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px">✅ Bu parçayı seç</button>
+        <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Bu parçayı seç</button>
       </div>
       <audio controls preload="none" src="${escapeHtml(t.preview_url||"")}" style="width:100%;margin-top:6px;height:34px"></audio>
     </div>`;
@@ -719,6 +719,17 @@ function renderMusicResults(tracks){
 }
 
 function selectMusicTrack(btn){
+  document.querySelectorAll(".music-pick-btn").forEach(b=>{
+    b.textContent="Bu parçayı seç";
+    b.style.background="#eef3fc";
+    b.style.color="#2166f3";
+    b.style.border="1px solid #cbd6e5";
+  });
+  btn.textContent="✅ Seçildi";
+  btn.style.background="#08763a";
+  btn.style.color="white";
+  btn.style.border="1px solid #08763a";
+
   const url=btn.getAttribute("data-url");
   const label=btn.getAttribute("data-label");
   document.getElementById("music_track").value=url;
