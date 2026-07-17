@@ -365,6 +365,14 @@ Kullanıcı isteği: mevcut otomatik müzik seçimi yeterli değil, üretimden �
 - **Yine bulunan lone-surrogate hatası:** bu turda eklenen "🎧 Ara" buton metni de (💡 butonundaki gibi) dosyaya ayrık bir surrogate-pair kaçışı olarak yazılmış, `/new` sayfasını aynı UTF-8 encode hatasıyla çökertiyordu — gerçek UTF-8 karakteriyle değiştirilip düzeltildi, tüm dosya taranıp başka örneği kalmadığı doğrulandı.
 - **Test edildi:** `JamendoMusicProvider.search()`'ün indirme linki olmayan sonuçları elediği ve `get_music()`'in ilk adayı indirdiği (mock `requests`/`MediaDownloader`); `_resolve_music_track()`'in bir URL'yi indirip `music/selected_track.mp3`'e yazdığı, indirme hatasında `None` döndürüp render'ı düşürmediği, mevcut yerel-yol davranışının bozulmadığı; `/api/music-search` endpoint'inin başarı/API-key-yok/boş-sorgu-mood-varsayılanı senaryoları (FastAPI `TestClient` + mock); `/new` sayfasının hatasız render olduğu ve iki `<script>` bloğunun `node --check` ile geçerli olduğu.
 
+### Konuya göre otomatik arama terimi önerisi
+
+Kullanıcı takip isteği: müzik önizleme çalışıyor, güzel — konu seçilince arama kutusu da konuya göre otomatik dolsun istedi (şu ana kadar sadece içerik türüne göre sabit bir mood kullanılıyordu, ör. her belgesel için "cinematic documentary ambient").
+
+- **Yeni endpoint:** `GET /api/music-mood` (`topic`, `content_type`) — konu boşsa doğrudan `RenderService._build_music_query()`'deki sabit mood'u döndürüyor; konu varsa DeepSeek'e "bu konuya uygun 3-5 kısa İngilizce mood/tür anahtar kelimesi öner (Jamendo aramasında kullanılacak)" diye tek satırlık bir prompt gönderip yanıtı temizleyip döndürüyor. AI çağrısı başarısız olursa (API key yok, ağ hatası vb.) sessizce aynı sabit mood'a düşüyor — bu sadece bir kutuyu önceden dolduran bir öneri, hata verip build'i engellemesi anlamsız.
+- **`/new` sayfası:** müzik arama kutusu artık konu her değiştiğinde (konu inputundan çıkınca/blur, ya da AI konu önerisinden bir başlık seçilince) otomatik olarak bu endpoint'i çağırıp kendini dolduruyor -- kullanıcı yine de "Ara"ya basmadan önce metni elle değiştirebiliyor, otomatik arama tetiklenmiyor. Sadece müzik açık + Jamendo seçiliyken (`musicBrowseRow` görünürken) çalışıyor, gereksiz çağrı yapmıyor.
+- **Test edildi:** `/api/music-mood`'un boş konu/AI başarılı/AI başarısız üç senaryosu (FastAPI `TestClient` + mock `get_ai`), `/new` sayfasının yeni JS ile hatasız render olduğu ve sözdizimsel olarak geçerli olduğu.
+
 ---
 
 ## Kilitli geliştirme sırası

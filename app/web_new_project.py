@@ -609,6 +609,7 @@ function renderTopicSuggestions(suggestions){
 function pickTopicSuggestion(el){
   document.getElementById("topic").value=el.getAttribute("data-title");
   document.getElementById("topicSuggestions").style.display="none";
+  updateMusicMoodSuggestion();
 }
 
 function onMusicToggle(){
@@ -625,6 +626,27 @@ function onMusicProviderChange(){
     document.getElementById("music_track").value="";
     document.getElementById("musicResults").innerHTML="";
     document.getElementById("musicSelectedInfo").style.display="none";
+  } else {
+    updateMusicMoodSuggestion();
+  }
+}
+
+async function updateMusicMoodSuggestion(){
+  if(document.getElementById("musicBrowseRow").style.display!=="block")return;
+  const topic=document.getElementById("topic").value.trim();
+  const contentType=document.getElementById("content_type").value;
+  const box=document.getElementById("musicSearchQuery");
+  const original=box.placeholder;
+  box.placeholder="⏳ Konuya göre arama terimleri hazırlanıyor…";
+  try{
+    const params=new URLSearchParams({topic, content_type: contentType});
+    const res=await fetch(`/api/music-mood?${params.toString()}`);
+    const data=await res.json();
+    if(data.query)box.value=data.query;
+  }catch(e){
+    /* sadece bir öneri, sessizce geç */
+  }finally{
+    box.placeholder=original;
   }
 }
 
@@ -713,6 +735,7 @@ function onProviderChange(){
 }
 
 document.getElementById("duration").addEventListener("input",updateHint);
+document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggestion);
 
 async function startBuild(){
   const btn=document.getElementById("startButton");
@@ -858,6 +881,42 @@ def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
             status_code=502,
             detail=f"Konu önerileri alınamadı: {error}",
         ) from error
+
+
+@router.get("/api/music-mood")
+def music_mood(topic: str = "", content_type: str = "documentary") -> dict[str, Any]:
+    """Best-effort English mood/genre keywords for the music search box,
+    derived from the project topic -- falls back to the plain content-type
+    mood (same one /api/music-search itself falls back to) if the topic is
+    empty or the AI call fails, since this only ever prefills a text box
+    the user can still edit before searching."""
+
+    from app.services.render_service import RenderService
+
+    fallback = RenderService()._build_music_query(
+        {"content_type": content_type}
+    )
+
+    topic = topic.strip()
+
+    if not topic:
+        return {"query": fallback}
+
+    try:
+        from app.ai.factory import get_ai
+
+        prompt = (
+            "Suggest 3-5 short English mood/genre keywords for searching "
+            "royalty-free background music on Jamendo, fitting for a "
+            f"{content_type} video about this topic:\n\n{topic}\n\n"
+            "Return ONLY the keywords, lowercase, space-separated. "
+            "No explanation, no punctuation, no quotes."
+        )
+        response = get_ai().generate(prompt)
+        keywords = " ".join(str(response).strip().split())[:80]
+        return {"query": keywords or fallback}
+    except Exception:
+        return {"query": fallback}
 
 
 @router.get("/api/music-search")
