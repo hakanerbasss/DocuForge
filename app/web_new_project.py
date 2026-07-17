@@ -1239,6 +1239,20 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
             {"key": "local", "name": "Yerel (music/ klasörü)"},
         )
 
+    if "thumbnail_hook_override" in allowed:
+        seo_data = load_json(project_dir / "seo.json")
+        titles = seo_data.get("titles")
+        title_choices = [
+            {"key": title.strip(), "name": title.strip()}
+            for title in titles
+            if isinstance(title, str) and title.strip()
+        ] if isinstance(titles, list) else []
+
+        choices["thumbnail_hook_override"] = [
+            {"key": "", "name": "Otomatik (SEO önerisi)"},
+            *title_choices,
+        ]
+
     return {
         "step_key": step_key,
         "allowed_fields": sorted(allowed),

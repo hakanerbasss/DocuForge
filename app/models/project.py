@@ -67,6 +67,7 @@ class DocumentaryProject:
     subtitles_burn_in: bool = False
     thumbnail_enabled: bool = False
     thumbnail_source: str = "auto"
+    thumbnail_hook_override: str = ""
 
     status: str = "created"
     created_at: str = ""
@@ -87,6 +88,9 @@ class DocumentaryProject:
         self.resolution = str(self.resolution).strip().lower()
         self.music_track = str(self.music_track).strip()
         self.thumbnail_source = str(self.thumbnail_source).strip().lower()
+        self.thumbnail_hook_override = str(
+            self.thumbnail_hook_override
+        ).strip()
         self.status = str(self.status).strip().lower()
 
         self.target_duration_seconds = int(
@@ -282,6 +286,9 @@ class DocumentaryProject:
             ),
             thumbnail_source=str(
                 data.get("thumbnail_source", "auto")
+            ),
+            thumbnail_hook_override=str(
+                data.get("thumbnail_hook_override", "")
             ),
             status=str(data.get("status", "created")),
             created_at=str(data.get("created_at", "")),

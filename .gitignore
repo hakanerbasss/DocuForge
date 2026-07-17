@@ -42,6 +42,6 @@ output/
 
 projects/
 jobs/
-models/
+/models/
 __pycache__/
 *.pyc

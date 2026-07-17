@@ -206,7 +206,11 @@ class ThumbnailService:
             value = seo_data.get(key)
             return value.strip() if isinstance(value, str) and value.strip() else ""
 
-        hook = seo_str("thumbnail_hook") or self._shorten_words(
+        hook_override = str(
+            project_data.get("thumbnail_hook_override", "")
+        ).strip()
+
+        hook = hook_override or seo_str("thumbnail_hook") or self._shorten_words(
             primary_title, max_words=5
         )
 

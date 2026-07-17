@@ -41,7 +41,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "subtitles_enabled",
         "subtitles_burn_in",
     },
-    "thumbnail": {"thumbnail_source"},
+    "thumbnail": {"thumbnail_source", "thumbnail_hook_override"},
 }
 
 

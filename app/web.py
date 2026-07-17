@@ -1070,6 +1070,7 @@ def project_detail(slug: str) -> HTMLResponse:
         subtitles_enabled: "Altyazı (.srt) Üret",
         subtitles_burn_in: "Altyazıyı Videoya Göm",
         thumbnail_source: "Kapak Görseli Kaynağı",
+        thumbnail_hook_override: "Kapak Üzerindeki Başlık",
     }};
 
     const STATIC_CHOICES = {{
