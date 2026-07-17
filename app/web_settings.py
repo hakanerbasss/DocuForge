@@ -429,10 +429,22 @@ def save_setting(
     return RedirectResponse(url="/settings", status_code=303)
 
 
+FILE_BACKED_FIELDS = {"xtts_reference_audio", "closing_image"}
+
+
 @router.post("/settings/{field_key}/clear")
 def clear_setting(field_key: str) -> RedirectResponse:
     if field_key not in SECRET_FIELDS.values():
         raise HTTPException(status_code=404, detail="Bilinmeyen ayar.")
+
+    # These fields store a filesystem path, not the value itself --
+    # clearing the pointer without deleting the file would leave the
+    # actual upload (ses/görsel dosyası) orphaned on disk indefinitely.
+    if field_key in FILE_BACKED_FIELDS and settings.is_configured(field_key):
+        try:
+            Path(getattr(settings, field_key)).unlink(missing_ok=True)
+        except OSError:
+            pass
 
     settings.save_secret(field_key, "")
 
