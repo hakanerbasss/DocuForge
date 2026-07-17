@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.providers.defaults import register_default_providers
 from app.providers.registry import ProviderRegistry
 from app.providers.base import VoiceProvider
+from app.utils.tr_tts_normalize import clean_tts_text
 
 
 class VoiceService:
@@ -85,6 +86,13 @@ class VoiceService:
                 raise ValueError(
                     f"Narration text is empty: {text_path}"
                 )
+
+            # TTS motorlarının hiçbiri (espeak/Piper/Supertonic/XTTS)
+            # rakam, tarih, saat veya kısaltmaları kendi başına doğru
+            # Türkçe okumuyor -- motora gitmeden hemen önce metni
+            # normalize ediyoruz. Türkçe olmayan projeler dokunulmadan
+            # geçer (clean_tts_text kendi lang kapısını uyguluyor).
+            text = clean_tts_text(text, lang=language)
 
             print(
                 f"[{index}/{len(scenes)}] "

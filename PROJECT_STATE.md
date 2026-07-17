@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (10. güncelleme aynı gün — tasarımsal SEO açıklaması + paragraf/emoji korunan kopyalama + etiket başına kopyalama)
+Son güncelleme: 17 Temmuz 2026 (Türkçe TTS sayı/kısaltma okuma normalizasyonu — Instagram bot projesinden devralınan `clean_tts_text` tüm ses sağlayıcılarına tek noktadan entegre edildi)
 
 ## Ana hedef
 
@@ -302,6 +302,19 @@ Kullanıcı üç şey istedi: (1) açıklama metni maddeler/emoji/sembollerle da
 - **Kopyalama mekanizması düzeltildi:** Açıklama artık `data-copy` HTML attribute'u yerine görünür `<p id="seoDescription" style="white-space:pre-wrap">` elemanının `.textContent`'inden okunuyor (`copyElementText()` yeni JS fonksiyonu) — bu, HTML attribute içine gömmenin kırılgan olabileceği çoklu satır/boş satırların TAM olarak korunmasını garantiliyor. Ayrıca `white-space:pre-wrap` sayesinde açıklama artık proje sayfasında da düz metin yerine gerçek madde/paragraf yapısıyla görünüyor (önceden tarayıcı boşlukları/satır sonlarını görsel olarak yutuyordu).
 - **Etiket başına kopyalama:** Her etiket rozeti artık tek başına tıklanabilir (kendi `data-copy` değeriyle `copyToClipboard`), üzerinde küçük 📋 ikonu var. Eski "hepsini virgülle kopyala" butonu da duruyor, kaldırılmadı — sadece ek olarak tekli kopyalama geldi.
 - **Test edildi:** çok satırlı/emoji'li bir description'ın `_parse_and_validate`'den (SEOAgent) bozulmadan geçtiği, proje sayfasında `white-space:pre-wrap` + `#seoDescription` elemanının doğru render edildiği, her etiketin kendi `data-copy` değerine sahip olduğu, "hepsini kopyala" butonunun hâlâ çalıştığı, yeni `copyElementText` fonksiyonunun JS sözdizimi ve tüm sayfaların hatasız render olduğu.
+
+---
+
+## Türkçe TTS sayı/kısaltma okuma normalizasyonu
+
+Kullanıcının Instagram bot projesindeki (`hakanerbasss.github.io`) ayrı bir Claude oturumu, Supertonic TTS'in Türkçe rakamları, tarihleri, saatleri, hal eklerini ve kurum kısaltmalarını doğru okuyamadığını canlıda tespit edip bağımsız (dış paket gerektirmeyen, sadece `re` kullanan) bir `tr_tts_normalize.py` modülü geliştirmişti. Bu oturuma "önce oku, sonra konuşalım" diyerek entegrasyon için devretti — o oturumun docuForge reposuna erişimi yok.
+
+- **Kod inceleme:** DocuForge'da 4 ses sağlayıcısı var (`app/providers/voice/espeak.py`, `piper.py`, `supertonic.py`, `xtts.py`) — `supertonic.py` Instagram botundakiyle birebir aynı Supertonic SDK'sını çağırıyor, yani orada görülen sorun burada da aynen var. Diğer üçü de kendi başına sayı/tarih normalizasyonu yapmıyor.
+- **Tek chokepoint bulundu:** `app/services/voice_service.py`'deki `VoiceService.generate()`, sahne metnini okuyup doğrudan `provider.synthesize()`'a geçiriyor — 4 sağlayıcının hepsi buradan geçiyor. Normalizasyon burada tek noktadan eklendi, tek tek provider'lara dokunmaya gerek kalmadı.
+- **Entegrasyon:** `tr_tts_normalize.py`, `app/utils/tr_tts_normalize.py` olarak taşındı (`clean_tts_text` public fonksiyonu), `voice_service.py` sahne metnini okuduktan hemen sonra `text = clean_tts_text(text, lang=language)` çağırıyor. `language` zaten `project.json`'dan okunup sağlayıcıya geçirilen aynı değer olduğu için Türkçe olmayan projeler dokunulmadan geçiyor (fonksiyonun kendi `lang == "tr"` kapısı sayesinde).
+- **Kapsam:** tam sayılar, sıra sayılar, ondalık sayılar (virgül/nokta), yüzde (+ aralık), saat (+ aralık), tarih, sıcaklık/derece, negatif sayılar, hal ekleri (kesme işaretinden sonraki -e/-de/-den/-in/-inde Türkçe ünlü uyumuyla doğru sayı sözcüğüne bağlanıyor), para birimi/ölçü/veri birimi kısaltmaları, kurum/sınav kısaltmaları (TBMM, YKS, SGK, ABD, vb. tam açılım + doğru hal ekiyle), sözlükte olmayan büyük harfli kısaltmalar (harf harf okunuyor, NATO/FETÖ gibi kelime-gibi-okunanlar hariç), markdown kalıntıları ve URL temizliği.
+- **Bilinen sınırlama (kaynak modülden devralındı):** skor (3-1) ile sayı aralığı (10-15) ayrımı regex ile bağlamdan çözülemiyor, ikisi de düz yan yana okunuyor — tam çözüm için TTS öncesi bir LLM adımı gerekir, henüz uygulanmadı.
+- **Test edildi:** `test_tr_tts_normalize.py` — 21 farklı normalizasyon senaryosu (yukarıdaki kapsamın hepsi) + Türkçe olmayan dilin dokunulmadan geçtiği doğrulandı (22/22 geçti). Ayrıca `VoiceService.generate()`'ın sahte bir `VoiceProvider`'a normalize edilmiş metni gönderdiği uçtan uca doğrulandı (mock provider + mock `_probe_duration`).
 
 ---
 
