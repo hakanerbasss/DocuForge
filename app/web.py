@@ -13,6 +13,7 @@ from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
 from app.web_settings import router as settings_router
+from app.web_storage import router as storage_router
 
 
 app = FastAPI(
@@ -22,6 +23,7 @@ app = FastAPI(
 
 app.include_router(new_project_router)
 app.include_router(settings_router)
+app.include_router(storage_router)
 app.mount(
     "/static",
     StaticFiles(directory=Path(__file__).parent / "static"),
@@ -319,7 +321,10 @@ def page(title: str, body: str) -> HTMLResponse:
                 </span>
             </div>
         </a>
-        <a class="button secondary" href="/settings">⚙ Ayarlar</a>
+        <div style="display:flex;gap:8px">
+            <a class="button secondary" href="/storage">📦 Depolama</a>
+            <a class="button secondary" href="/settings">⚙ Ayarlar</a>
+        </div>
     </div>
 </header>
 

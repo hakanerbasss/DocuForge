@@ -495,6 +495,46 @@ Kullanıcının sorusu yerinde: Jamendo'nun kataloğu **karışık lisanslarla**
 - **Her iki arayüzde de** (`/new` ve render'ın "Yeniden Üret"'i) her sonucun altında ✅ (ticari kullanıma uygun) / ⚠️ (uygun değil) / gri (bilinmiyor) rozeti gösteriliyor, aramanın üstünde de genel bir uyarı notu var.
 - **Test edildi:** `_parse_license`'ın BY / BY-NC-SA / CC0 / boş-lisans durumlarını doğru ayırt ettiği; `get_music()`'in en popüler sonuç NC lisanslı olsa bile listede sonra gelen ticari-uygun bir adayı doğru seçtiği (mock `requests`/`MediaDownloader`).
 
+## Kapak tasarımı güçlendirme + konu önerisi önceliklendirme
+
+Gerçek YouTube Studio verisiyle (Pamukkale/dolandırıcılık videoları soyut "yapay zeka" konularından 5-10 kat daha çok izlenme almış) desteklenen iki değişiklik.
+
+- **`ThumbnailService`**: 4 şablonun tümünde yazı boyutu ~%20-30 büyütüldü, kontur kalınlaştırıldı, gölge artık font boyutuyla orantılı (`_draw_text_block` yeniden yazıldı). Arka planı karışık/açık renkli olabilecek şablonlara (Mystery Focus, Split Contrast) yazının arkasına yarı saydam koyu şerit eklendi (`highlight_alpha` parametresi).
+- **`app/prompts/topic_suggestions.txt`**: Belgesel/bilgilendirici öneriler artık açıkça "somut yer + gizem" ve "kişisel risk/korunma" açılarını önceliklendiriyor, soyut/felsefi önerileri 8'de en fazla 1-2'yle sınırlayıp listenin altına koyuyor.
+
+## Kapak başlığını SEO başlıklarından seçme
+
+Kapak üzerindeki yazı (`thumbnail_hook`) ile kullanıcının seçtiği video başlığı birbirinden bağımsızdı, aynı olmaları garanti değildi.
+
+- **`DocumentaryProject.thumbnail_hook_override`** (yeni alan, varsayılan `""`) — `STEP_ALLOWED_OVERRIDES["thumbnail"]`'a eklendi.
+- **`ThumbnailService._build_brief()`**: override doluysa `thumbnail_hook`'un önüne geçiyor.
+- **`step_options()`**: `thumbnail` adımı için `seo.json`'daki başlık listesini `choices["thumbnail_hook_override"]` olarak dolduruyor (+ "Otomatik" seçeneği) — proje sayfasındaki mevcut `<select>` deseni (branch 2) hiçbir JS değişikliği gerektirmeden bunu otomatik render ediyor.
+
+## Kapanış görseli / XTTS önizleme önbellek hatası düzeltmesi
+
+Kullanıcı yeni bir kapanış görseli yükleyip sayfayı yenilediğinde eski görsel gelmeye devam ediyordu — sebep sunucu değil, tarayıcı önbelleğiydi (aynı dosya adı üzerine yazılıyor, `<img src>` URL'i hiç değişmiyordu). `/settings/closing_image/file` ve `/settings/xtts_reference_audio/file` önizleme URL'lerine dosyanın `mtime`'ına dayalı bir sürüm parametresi (`?v=...`) eklendi, ayrıca `Cache-Control: no-store` eklendi.
+
+## Seçilebilir sahne geçişleri + otomatik cold-open
+
+Kullanıcının kendi önerisiyle: sahneler arasında sert kesim yerine seçilebilir geçiş türleri, artı çok izlenen YouTube kanallarının kullandığı "önce en çarpıcı anı göster, sonra baştan başla" (cold open) tekniği.
+
+- **`scene_transition`** (yeni proje alanı: `cut` / `crossfade` / `fade_black`, varsayılan `crossfade`) — `/new`'de seçilebilir, render adımının "Yeniden Üret"inde değiştirilebilir.
+- **Cold open**: `storyboard.txt` artık her senaryoda tam olarak bir sahneyi (asla ilk/son sahne değil) `"hook_worthy": true` diye işaretliyor. Render sırasında o sahnenin klibinden sessiz, ~3 saniyelik bir kesit alınıp videonun en başına sert kesimle ekleniyor (`_build_hook_clip`, `_find_hook_scene_number`). Herhangi bir adımda sorun olursa özellik sessizce atlanıyor.
+- **Altyazı zamanlama düzeltmesi**: Geçişler videonun toplam süresini kısalttığı için (`amix`/`xfade` overlap), altyazı zaman damgaları artık gerçek sahne başlangıç ofsetlerinden (`_concat_with_transitions`'ın döndürdüğü `start_offsets`) hesaplanıyor, ham sahne sürelerinin naif toplamından değil — aksi halde her geçişte altyazı biraz daha kayardı.
+
+## Crossfade OOM hatası ve düzeltmesi + yarım kalmış video tespiti
+
+Gerçek bir VPS render'ında (23 sahneli video) crossfade özelliği tek ffmpeg komutunda 23 klibi aynı anda işlerken ~5.6GB RAM kullandı, kernel OOM-killer `docuforge-web` servisini düşürdü (`systemd: Failed with result 'oom-kill'`). Servis yeniden başlayınca yarım kalmış (`moov atom not found`) `final_video.mp4`'ü "tamamlanmış" sanıp render'ı atladı.
+
+- **`_concat_with_transitions`** artık tüm klipleri tek seferde değil, **ikişer ikişer sıralı** birleştiriyor (büyüyen "şimdiye kadarki birleşik klip" + bir sonraki sahne) — bellek kullanımı sahne sayısından bağımsız, sabit kalıyor (test edildi: 23 sahnede bile ffmpeg'e aynı anda en fazla 2 girdi veriliyor). Ofset/süre matematiği değişmedi, sadece iş nasıl planlandığı değişti.
+- **`RenderService.is_valid_output()`** (yeni, ffprobe tabanlı) + **`BuildPipeline._render_is_complete()`** artık sadece "dosya var mı ve boş değil mi" değil, gerçekten oynatılabilir bir video mu diye de kontrol ediyor — kesintiye uğramış bir render bir daha "tamamlandı" sayılıp atlanmıyor.
+
+## Depolama sekmesi + dosya temizliği düzeltmeleri
+
+- **`/settings/{field}/clear`** artık `xtts_reference_audio`/`closing_image` gibi dosya tabanlı alanlarda, sadece ayarı sıfırlamıyor, sunucudaki gerçek dosyayı da siliyor (önceden dosya öksüz kalıyordu).
+- **Yeni `/storage` sayfası** (`app/web_storage.py`): disk (toplam/dolu/boş), RAM (`/proc/meminfo`), proje başına disk kullanımı (büyükten küçüğe sıralı) ve buradan doğrudan proje silme. Dashboard, proje detay sayfası, ayarlar ve `/new` sayfasının başlıklarına "📦 Depolama" linki eklendi.
+- **Doğrulandı:** "Projeyi Sil" (`DELETE /api/projects/{slug}`) gerçekten `shutil.rmtree()` ile tüm dosyaları diskten kaldırıyor (test edildi) — disk şişmesi riski yaratmıyor.
+
 ---
 
 ## Kilitli geliştirme sırası

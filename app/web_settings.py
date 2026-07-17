@@ -287,6 +287,7 @@ code{{background:#eef3fb;padding:1px 5px;border-radius:5px;font-size:12px}}
 <body>
 <header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
 <a class="back" href="/">← Projelere dön</a>
+<a class="button secondary" href="/storage" style="min-height:34px;padding:0 12px;font-size:13px">📦 Depolama</a>
 </div></header>
 <main>
 <section class="card">

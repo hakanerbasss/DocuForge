@@ -281,7 +281,7 @@ button:disabled{opacity:.6;cursor:wait}
 </style>
 </head>
 <body>
-<header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><a class="back" href="/">\u2190 Projelere d\u00f6n</a><a class="back" href="/settings">\u2699 Ayarlar</a></div></header>
+<header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><a class="back" href="/">\u2190 Projelere d\u00f6n</a><a class="back" href="/storage">\U0001F4E6 Depolama</a><a class="back" href="/settings">\u2699 Ayarlar</a></div></header>
 <main>
 <div id="activeJobBanner"></div>
 <section class="card">
