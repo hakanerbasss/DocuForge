@@ -418,6 +418,7 @@ Arka plan m\u00fczi\u011fi ekle
 <div class="hint">Arka plan m\u00fczi\u011finin seslendirmeye g\u00f6re ses oran\u0131. D\u00fc\u015f\u00fck tut ki konu\u015fmay\u0131 bast\u0131rmas\u0131n (varsay\u0131lan %18 \u00f6nerilir).</div>
 
 <div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
+<div class="hint" style="margin-bottom:8px">Jamendo katalo\u011fu farkl\u0131 lisanslar i\u00e7eriyor -- her sonucun alt\u0131nda ✅/⚠️ ile ticari kullan\u0131ma uygunlu\u011fu g\u00f6steriliyor, YouTube’a y\u00fcklemeden \u00f6nce kontrol et.</div>
 <div style="display:flex;gap:8px">
 <input id="musicSearchQuery" placeholder="\u00d6rnek: cinematic ambient (bo\u015f b\u0131rak\u0131rsan i\u00e7erik t\u00fcr\u00fcne g\u00f6re aran\u0131r)" style="flex:1">
 <button type="button" id="musicSearchBtn" onclick="searchMusic()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🎧 Ara</button>
@@ -694,6 +695,15 @@ async function searchMusic(){
   }
 }
 
+function musicLicenseBadge(license){
+  if(!license||license.commercial_ok===null||license.commercial_ok===undefined){
+    return `<span style="color:#8899aa">Lisans bilinmiyor -- yüklemeden önce kontrol et</span>`;
+  }
+  const color=license.commercial_ok?"#08763a":"#9f2020";
+  const icon=license.commercial_ok?"✅":"⚠️";
+  return `<span style="color:${color};font-weight:700">${icon} ${escapeHtml(license.label||"")}</span>`;
+}
+
 function renderMusicResults(tracks){
   const box=document.getElementById("musicResults");
   if(!tracks.length){
@@ -710,6 +720,7 @@ function renderMusicResults(tracks){
         <div>
           <div style="font-weight:700">${escapeHtml(t.name||"Untitled")}</div>
           <div class="hint">${escapeHtml(t.artist||"Bilinmeyen sanatçı")} · ${mins}:${secs}</div>
+          <div class="hint" style="margin-top:2px">${musicLicenseBadge(t.license)}</div>
         </div>
         <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Bu parçayı seç</button>
       </div>
@@ -1233,6 +1244,8 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
         "allowed_fields": sorted(allowed),
         "current": current,
         "choices": choices,
+        "content_type": project_data.get("content_type", "documentary"),
+        "topic": project_data.get("title", ""),
     }
 
 

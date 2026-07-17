@@ -1088,7 +1088,10 @@ def project_detail(slug: str) -> HTMLResponse:
 
     const NUMERIC_FIELDS = new Set(["fps","target_duration_seconds","voice_speed"]);
 
+    let currentRegenOpts = null;
+
     function showRegenerateForm(opts) {{
+        currentRegenOpts = opts;
         return new Promise(resolve => {{
             const overlay = document.createElement("div");
             overlay.style.cssText = "position:fixed;inset:0;background:rgba(10,20,35,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px";
@@ -1100,6 +1103,23 @@ def project_detail(slug: str) -> HTMLResponse:
             for (const field of opts.allowed_fields) {{
                 const label = FIELD_LABELS_TR[field] || field;
                 const current = opts.current[field];
+
+                if (field === "music_track") {{
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <div style="margin-top:6px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
+                        <div class="muted" style="font-size:12px;margin-bottom:8px">Jamendo kataloğu farklı lisanslar içeriyor -- sonuçların altındaki ✅/⚠️ ticari kullanıma uygunluğu gösterir, YouTube'a yüklemeden önce kontrol et.</div>
+                        <div style="display:flex;gap:8px">
+                            <input type="text" id="regenMusicQuery" placeholder="Örnek: cinematic ambient (boş bırakırsan otomatik aranır)" style="flex:1;min-height:40px;border:1px solid #cbd6e5;border-radius:8px;padding:0 10px;font:inherit">
+                            <button type="button" id="regenMusicSearchBtn" onclick="regenSearchMusic()" style="width:auto;min-height:40px;padding:0 14px;font-size:13px">🎧 Ara</button>
+                        </div>
+                        <div id="regenMusicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+                        <div id="regenMusicResults" style="margin-top:10px;max-height:280px;overflow:auto"></div>
+                        <div id="regenMusicSelectedInfo" class="muted" style="display:none;margin-top:8px;font-weight:700;font-size:12px;color:#08763a"></div>
+                        </div>
+                        <input type="hidden" data-field="music_track" id="regenMusicTrackValue" value="${{current ?? ""}}">`;
+                    continue;
+                }}
+
                 const providerChoices = opts.choices[field];
                 const staticChoices = STATIC_CHOICES[field];
 
@@ -1141,6 +1161,10 @@ def project_detail(slug: str) -> HTMLResponse:
             overlay.appendChild(box);
             document.body.appendChild(overlay);
 
+            if (opts.allowed_fields.includes("music_track")) {{
+                regenUpdateMusicMoodSuggestion();
+            }}
+
             box.querySelector("#regenCancel").onclick = () => {{ overlay.remove(); resolve(null); }};
             box.querySelector("#regenSubmit").onclick = () => {{
                 const overrides = {{}};
@@ -1154,6 +1178,123 @@ def project_detail(slug: str) -> HTMLResponse:
                 resolve(overrides);
             }};
         }});
+    }}
+
+    function escapeHtmlLocal(s) {{
+        const d = document.createElement("div");
+        d.textContent = s == null ? "" : String(s);
+        return d.innerHTML;
+    }}
+
+    async function regenUpdateMusicMoodSuggestion() {{
+        const box = document.getElementById("regenMusicMoodTags");
+        if (!box) return;
+        const topic = (currentRegenOpts && currentRegenOpts.topic) || "";
+        const contentType = (currentRegenOpts && currentRegenOpts.content_type) || "documentary";
+        box.innerHTML = '<span class="muted" style="font-size:12px">Etiketler hazırlanıyor…</span>';
+        try {{
+            const params = new URLSearchParams({{topic, content_type: contentType}});
+            const res = await fetch(`/api/music-mood?${{params.toString()}}`);
+            const data = await res.json();
+            regenRenderMusicMoodTags(data.tags || []);
+        }} catch (e) {{
+            box.innerHTML = "";
+        }}
+    }}
+
+    function regenRenderMusicMoodTags(tags) {{
+        const box = document.getElementById("regenMusicMoodTags");
+        if (!box) return;
+        if (!tags.length) {{ box.innerHTML = ""; return; }}
+        box.innerHTML = tags.map(tag =>
+            `<button type="button" data-tag="${{escapeHtmlLocal(tag)}}" onclick="regenAddMusicTag(this)" style="width:auto;min-height:28px;margin-top:0;padding:0 10px;font-size:12px;font-weight:700;background:white;color:#2166f3;border:1px solid #cbd6e5;border-radius:999px;cursor:pointer">+ ${{escapeHtmlLocal(tag)}}</button>`
+        ).join("");
+    }}
+
+    function regenAddMusicTag(btn) {{
+        const tag = btn.getAttribute("data-tag");
+        const input = document.getElementById("regenMusicQuery");
+        const current = input.value.split(/\s+/).map(t => t.trim()).filter(Boolean);
+        if (!current.includes(tag)) {{
+            current.push(tag);
+            input.value = current.join(" ");
+        }}
+    }}
+
+    async function regenSearchMusic() {{
+        const btn = document.getElementById("regenMusicSearchBtn");
+        const box = document.getElementById("regenMusicResults");
+        const query = document.getElementById("regenMusicQuery").value.trim();
+        const contentType = (currentRegenOpts && currentRegenOpts.content_type) || "documentary";
+        btn.disabled = true;
+        btn.textContent = "⏳ Aranıyor…";
+        box.innerHTML = '<div class="muted" style="font-size:13px">Jamendo’da telifsiz parçalar aranıyor…</div>';
+        try {{
+            const params = new URLSearchParams({{query, content_type: contentType}});
+            const res = await fetch(`/api/music-search?${{params.toString()}}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || "Arama başarısız.");
+            regenRenderMusicResults(data.tracks || []);
+        }} catch (err) {{
+            box.innerHTML = `<div class="muted" style="font-size:13px;color:#9f2020">${{escapeHtmlLocal(err.message)}}</div>`;
+        }} finally {{
+            btn.disabled = false;
+            btn.textContent = "🎧 Ara";
+        }}
+    }}
+
+    function regenMusicLicenseBadge(license) {{
+        if (!license || license.commercial_ok === null || license.commercial_ok === undefined) {{
+            return '<span style="color:#8899aa">Lisans bilinmiyor</span>';
+        }}
+        const color = license.commercial_ok ? "#08763a" : "#9f2020";
+        const icon = license.commercial_ok ? "✅" : "⚠️";
+        return `<span style="color:${{color}};font-weight:700">${{icon}} ${{escapeHtmlLocal(license.label || "")}}</span>`;
+    }}
+
+    function regenRenderMusicResults(tracks) {{
+        const box = document.getElementById("regenMusicResults");
+        if (!tracks.length) {{
+            box.innerHTML = '<div class="muted" style="font-size:13px">Sonuç bulunamadı, farklı bir arama dene.</div>';
+            return;
+        }}
+        box.innerHTML = tracks.map((t, i) => {{
+            const dur = parseInt(t.duration) || 0;
+            const mins = Math.floor(dur / 60);
+            const secs = String(dur % 60).padStart(2, "0");
+            const label = `${{t.name || "Untitled"}} — ${{t.artist || "Bilinmeyen sanatçı"}}`;
+            return `<div style="padding:10px 0;${{i > 0 ? "border-top:1px solid #eef1f6" : ""}}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                    <div>
+                        <div style="font-weight:700;font-size:13px">${{escapeHtmlLocal(t.name || "Untitled")}}</div>
+                        <div class="muted" style="font-size:12px">${{escapeHtmlLocal(t.artist || "Bilinmeyen sanatçı")}} · ${{mins}}:${{secs}}</div>
+                        <div style="font-size:12px;margin-top:2px">${{regenMusicLicenseBadge(t.license)}}</div>
+                    </div>
+                    <button type="button" class="regen-music-pick-btn" data-url="${{escapeHtmlLocal(t.download_url || "")}}" data-label="${{escapeHtmlLocal(label)}}" onclick="regenSelectMusicTrack(this)" style="width:auto;min-height:32px;margin-top:0;padding:0 12px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
+                </div>
+                <audio controls preload="none" src="${{escapeHtmlLocal(t.preview_url || "")}}" style="width:100%;margin-top:6px;height:32px"></audio>
+            </div>`;
+        }}).join("");
+    }}
+
+    function regenSelectMusicTrack(btn) {{
+        document.querySelectorAll(".regen-music-pick-btn").forEach(b => {{
+            b.textContent = "Seç";
+            b.style.background = "#eef3fc";
+            b.style.color = "#2166f3";
+            b.style.border = "1px solid #cbd6e5";
+        }});
+        btn.textContent = "✅ Seçildi";
+        btn.style.background = "#08763a";
+        btn.style.color = "white";
+        btn.style.border = "1px solid #08763a";
+
+        const url = btn.getAttribute("data-url");
+        const label = btn.getAttribute("data-label");
+        document.getElementById("regenMusicTrackValue").value = url;
+        const info = document.getElementById("regenMusicSelectedInfo");
+        info.style.display = "block";
+        info.textContent = "🎵 Seçilen parça: " + label;
     }}
 
     function copyToClipboard(btn) {{

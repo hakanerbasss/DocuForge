@@ -473,6 +473,30 @@ Kullanıcı, Video Render'ı "Yeniden Üret" ile ayar değiştirip çalıştırd
 
 ---
 
+## Render adımına da müzik dinle-seç arayüzü + Jamendo telif farkındalığı
+
+Kullanıcı iki şey sordu: (1) render devam ederken, "Yeniden Üret" ile müziği sonradan değiştirebilir miyim (o an sadece ham bir URL kutusu vardı), (2) bu müziklerin YouTube'a yüklerken telif sorunu olur mu.
+
+### Render'ın "Yeniden Üret" formuna müzik arayıcı
+
+`/new` sihirbazındaki dinle-seç arayüzü (arama kutusu + mood etiketleri + önizlemeli sonuç listesi) sadece yeni proje oluştururken vardı; proje sayfasındaki render adımını yeniden üretirken `music_track` düz bir metin kutusuydu (elle URL yapıştırmak gerekiyordu).
+
+- **`/api/projects/{slug}/step-options/{step_key}`** artık `content_type` ve `topic` (proje başlığı) da döndürüyor — mood etiketi önerisi (`/api/music-mood`) için gerekli bağlam.
+- **`app/web.py`**: `showRegenerateForm()`'daki jenerik alan-oluşturucu döngüsüne `music_track` için özel bir dal eklendi — aynı arama kutusu/mood etiketi/sonuç listesi deseni, ama dinamik olarak oluşturulan modal içinde (`regenSearchMusic`, `regenRenderMusicResults`, `regenSelectMusicTrack`, `regenUpdateMusicMoodSuggestion`, `regenRenderMusicMoodTags`, `regenAddMusicTag` — `/new`'deki fonksiyonların bu modale uyarlanmış hali, ayrı script bağlamı olduğu için kod tekrarı kaçınılmazdı). Modal açılırken `music_track` alanı varsa mood etiketleri otomatik yükleniyor.
+- **Test edildi:** `/api/projects/{slug}/step-options/render`'ın `content_type`/`topic` döndürdüğü; proje detay sayfasının yeni JS ile (f-string süslü parantez kaçışı dahil) hatasız render olduğu ve iki `<script>` bloğunun da `node --check` ile sözdizimsel olarak geçerli olduğu.
+
+### Jamendo lisans farkındalığı
+
+Kullanıcının sorusu yerinde: Jamendo'nun kataloğu **karışık lisanslarla** dolu — bazı parçalar CC BY/BY-SA/BY-ND (ticari kullanım serbest), bazıları CC BY-NC/BY-NC-SA/BY-NC-ND (**ticari kullanım YASAK** — parasal gelir elde eden bir YouTube kanalında kullanmak lisans ihlali olur). Bu, önemsenmesi gereken gerçek bir risk.
+
+- **`JamendoMusicProvider._parse_license(url)`** (yeni): Jamendo API'sinin her parça için döndürdüğü `license_ccurl` alanını okuyup insan-okunur bir etiket (`"CC BY-NC (ticari kullanım YOK)"` gibi) ve bir `commercial_ok` bayrağı (True/False/bilinmiyorsa None) üretiyor. CC0 (kamu malı) ayrıca tanınıyor.
+- **`search()`** artık her sonuca `license: {url, label, commercial_ok}` ekliyor.
+- **`get_music()`** (otomatik seçim yolu, kullanıcı elle bir parça seçmediğinde devreye giren) artık en popüler 10 aday arasından **ticari kullanıma uygun olan ilkini** tercih ediyor — sadece en popüler (ama belki NC lisanslı) tek sonucu körlemesine almıyor.
+- **Her iki arayüzde de** (`/new` ve render'ın "Yeniden Üret"'i) her sonucun altında ✅ (ticari kullanıma uygun) / ⚠️ (uygun değil) / gri (bilinmiyor) rozeti gösteriliyor, aramanın üstünde de genel bir uyarı notu var.
+- **Test edildi:** `_parse_license`'ın BY / BY-NC-SA / CC0 / boş-lisans durumlarını doğru ayırt ettiği; `get_music()`'in en popüler sonuç NC lisanslı olsa bile listede sonra gelen ticari-uygun bir adayı doğru seçtiği (mock `requests`/`MediaDownloader`).
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:

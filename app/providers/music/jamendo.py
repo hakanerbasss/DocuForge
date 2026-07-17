@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +7,15 @@ import requests
 from app.core.config import settings
 from app.providers.base import MusicProvider
 from app.providers.shared.downloader import MediaDownloader
+
+_LICENSE_LABELS = {
+    "by": "CC BY (ticari kullanıma uygun)",
+    "by-sa": "CC BY-SA (ticari kullanıma uygun)",
+    "by-nd": "CC BY-ND (ticari kullanıma uygun)",
+    "by-nc": "CC BY-NC (ticari kullanım YOK)",
+    "by-nc-sa": "CC BY-NC-SA (ticari kullanım YOK)",
+    "by-nc-nd": "CC BY-NC-ND (ticari kullanım YOK)",
+}
 
 
 class JamendoMusicProvider(MusicProvider):
@@ -30,16 +40,26 @@ class JamendoMusicProvider(MusicProvider):
         output_dir: Path,
         **options: Any,
     ) -> Path:
-        """Search Jamendo for a royalty-free track and download it."""
+        """Search Jamendo for a royalty-free track and download it.
 
-        tracks = self.search(query, limit=1)
+        Prefers a commercially-clear track (CC BY / BY-SA / BY-ND, no
+        "NC" restriction) among the candidates -- these videos usually
+        end up on a monetized YouTube channel, and Jamendo's catalog
+        mixes commercial and non-commercial-only licenses. Falls back
+        to the single best match if none of the candidates are clearly
+        commercial-safe, rather than failing the build over it."""
+
+        tracks = self.search(query, limit=10)
 
         if not tracks:
             raise RuntimeError(
                 f"No Jamendo tracks found for tags: {query}"
             )
 
-        track = tracks[0]
+        track = next(
+            (t for t in tracks if t["license"]["commercial_ok"] is True),
+            tracks[0],
+        )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         destination = output_dir / f"jamendo_{track['id']}.mp3"
@@ -92,6 +112,38 @@ class JamendoMusicProvider(MusicProvider):
                 "duration": int(track.get("duration") or 0),
                 "preview_url": str(track.get("audio") or download_url),
                 "download_url": str(download_url),
+                "license": self._parse_license(
+                    str(track.get("license_ccurl") or "")
+                ),
             })
 
         return tracks
+
+    def _parse_license(self, url: str) -> dict[str, Any]:
+        """Turn Jamendo's license_ccurl into a human-readable label and a
+        commercial_ok flag (True/False/None-if-unknown), so the /new and
+        project-page music browsers can warn before someone picks a
+        non-commercial-only track for a monetized YouTube upload."""
+
+        if not url:
+            return {"url": "", "label": "Bilinmiyor", "commercial_ok": None}
+
+        lower = url.lower()
+
+        if "publicdomain" in lower or "/zero/" in lower:
+            return {
+                "url": url,
+                "label": "CC0 (kamu malı, ticari kullanıma uygun)",
+                "commercial_ok": True,
+            }
+
+        match = re.search(r"/licenses/([a-z0-9-]+)/", lower)
+        slug = match.group(1) if match else ""
+
+        if not slug:
+            return {"url": url, "label": "Bilinmiyor", "commercial_ok": None}
+
+        commercial_ok = "nc" not in slug.split("-")
+        label = _LICENSE_LABELS.get(slug, slug.upper())
+
+        return {"url": url, "label": label, "commercial_ok": commercial_ok}
