@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from app.core.config import settings
+from app.core.config import SECRET_FIELDS, settings
 
 XTTS_REFERENCE_DIR = Path("models/xtts")
 XTTS_REFERENCE_PATH = XTTS_REFERENCE_DIR / "reference.wav"
@@ -97,7 +97,7 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
     "closing_image": (
         "Belgesel Kapanış Görseli",
         "CLOSING_IMAGE",
-        "Belgesel türündeki videoların son sahnesinde otomatik üretilen kapanış çekimi yerine kullanılacak sabit bir görsel (ör. ChatGPT/DALL-E'de tasarladığın bir kapanış karesi). Anlatım sesi yine o sahnenin metniyle çalar, sadece görsel değişir. Yapılandırılmazsa AI'ın kendi ürettiği kapanış çekimi kullanılmaya devam eder.",
+        "Belgesel türündeki videoların son sahnesinde otomatik üretilen kapanış çekimi yerine kullanılacak sabit bir görsel (ör. ChatGPT/DALL-E'de tasarladığın bir kapanış karesi). Anlatım sesi yine o sahnenin metniyle çalar, sadece görsel değişir. Yüklemek yetmez -- aşağıdaki 'Belgesellerin sonuna ekle' anahtarı da açık olmalı; kapalıyken (veya hiç yüklenmemişse) AI'ın kendi ürettiği kapanış çekimi kullanılır.",
         "image",
         "",
     ),
@@ -162,12 +162,21 @@ def _render_closing_image_field() -> str:
     ]
     configured = settings.is_configured("closing_image")
     current_path = Path(settings.closing_image) if configured else None
+    enabled = settings.is_configured("closing_image_enabled")
 
     if configured and current_path is not None and current_path.exists():
+        checked = "checked" if enabled else ""
         body = f"""
         <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
             <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
-            <img src="/settings/closing_image/file" alt="Kapanış görseli" style="max-width:100%;max-height:280px;border-radius:8px;display:block;margin-bottom:10px">
+            <img src="/settings/closing_image/file" alt="Kapanış görseli" style="max-width:100%;max-height:280px;border-radius:8px;display:block;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:12px;cursor:pointer">
+                <input type="checkbox" id="closingImageEnabledToggle" {checked} onchange="toggleClosingImageEnabled(this)" style="width:auto;min-height:auto">
+                Belgesellerin sonuna ekle
+            </label>
+            <div class="muted" style="font-size:12px;margin-bottom:10px">
+                Kapalıyken görsel yüklü kalır ama kullanılmaz -- AI'ın kendi ürettiği kapanış çekimi devreye girer.
+            </div>
             <form method="post" action="/settings/closing_image/clear" style="margin:0">
                 <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
             </form>
@@ -344,6 +353,33 @@ async function submitXttsUpload(formData) {{
     }}
 }}
 
+async function toggleClosingImageEnabled(checkbox) {{
+    checkbox.disabled = true;
+    try {{
+        let r;
+        if (checkbox.checked) {{
+            const fd = new URLSearchParams();
+            fd.append("value", "1");
+            r = await fetch("/settings/closing_image_enabled", {{
+                method: "POST",
+                headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
+                body: fd,
+            }});
+        }} else {{
+            r = await fetch("/settings/closing_image_enabled/clear", {{method: "POST"}});
+        }}
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Kaydedilemedi.");
+        }}
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+        checkbox.checked = !checkbox.checked;
+    }} finally {{
+        checkbox.disabled = false;
+    }}
+}}
+
 async function uploadClosingImageFile() {{
     const input = document.getElementById("closingImageFileInput");
     if (!input.files || !input.files.length) {{ alert("Bir görsel seç."); return; }}
@@ -375,7 +411,7 @@ def save_setting(
     field_key: str,
     value: str = Form(...),
 ) -> RedirectResponse:
-    if field_key not in FIELD_LABELS:
+    if field_key not in SECRET_FIELDS.values():
         raise HTTPException(status_code=404, detail="Bilinmeyen ayar.")
 
     value = value.strip()
@@ -390,7 +426,7 @@ def save_setting(
 
 @router.post("/settings/{field_key}/clear")
 def clear_setting(field_key: str) -> RedirectResponse:
-    if field_key not in FIELD_LABELS:
+    if field_key not in SECRET_FIELDS.values():
         raise HTTPException(status_code=404, detail="Bilinmeyen ayar.")
 
     settings.save_secret(field_key, "")

@@ -361,8 +361,12 @@ class RenderService:
         instruction) for anyone who wants a consistent, hand-designed
         ending across every video instead of a fresh one each time.
         Narration audio for that scene is untouched, only the visual is
-        swapped. Falls back to the normal scene media on any problem
-        (not configured, file missing) rather than failing the render."""
+        swapped. Requires the separate "closing_image_enabled" switch to
+        be on -- having a file uploaded is not by itself enough, so a
+        design can sit there unused until someone deliberately flips it
+        on. Falls back to the normal scene media on any problem (not
+        configured, switch off, file missing) rather than failing the
+        render."""
 
         if not is_last_scene:
             return None
@@ -376,6 +380,9 @@ class RenderService:
 
         try:
             from app.core.config import settings
+
+            if not settings.is_configured("closing_image_enabled"):
+                return None
 
             if not settings.is_configured("closing_image"):
                 return None
