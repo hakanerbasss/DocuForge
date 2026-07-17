@@ -1051,7 +1051,14 @@ class BuildPipeline:
         self,
         project_dir: Path,
     ) -> bool:
-        """Validate the final rendered video."""
+        """Validate the final rendered video.
+
+        Non-empty isn't enough -- a render interrupted mid-write (a
+        service restart, an OOM kill) can leave a truncated MP4 that's
+        still non-empty on disk but has no moov atom and won't play.
+        Without the playability check, resuming/regenerating a project
+        would see that broken file and skip re-rendering entirely.
+        """
 
         output_path = (
             project_dir
@@ -1059,10 +1066,10 @@ class BuildPipeline:
             / "final_video.mp4"
         )
 
-        return (
-            output_path.exists()
-            and output_path.stat().st_size > 0
-        )
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            return False
+
+        return RenderService().is_valid_output(output_path)
 
     def _try_load_json(
         self,

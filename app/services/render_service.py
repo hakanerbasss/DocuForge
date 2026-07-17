@@ -366,6 +366,23 @@ class RenderService:
 
         self._run(command)
 
+    def is_valid_output(self, path: Path) -> bool:
+        """Best-effort sanity check that a rendered video file is a
+        complete, playable container -- not just a non-empty file.
+
+        Guards against a class of bug where the render process gets
+        interrupted mid-write (service restart, OOM kill, disk full)
+        and leaves a truncated MP4 (e.g. missing its moov atom) that
+        still passes an exists()+size>0 check but won't actually play.
+        A resume/skip decision based only on that weaker check would
+        wrongly treat the broken file as finished output.
+        """
+
+        try:
+            return self._probe_duration(path) > 0
+        except Exception:
+            return False
+
     def _naive_offsets(
         self,
         clip_durations: list[float],
