@@ -227,11 +227,20 @@ class RenderService:
             )
 
         if project_data.get("background_music_enabled"):
-            self._apply_background_music(
-                project_dir,
-                output_path,
-                project_data,
-            )
+            try:
+                self._apply_background_music(
+                    project_dir,
+                    output_path,
+                    project_data,
+                )
+            except Exception as error:
+                # A music-mixing failure (bad track, ffmpeg filter issue)
+                # shouldn't cost the whole render -- the video without
+                # music is still a valid, usable result.
+                print(
+                    f"  ⚠ Arka plan müziği eklenemedi, müziksiz devam "
+                    f"ediliyor: {error}"
+                )
 
         if project_data.get("subtitles_enabled"):
             srt_path = render_dir / "subtitles.srt"
@@ -278,6 +287,11 @@ class RenderService:
 
         music_volume = min(1.0, max(0.0, music_volume))
 
+        volume_stage = self._music_volume_stage(
+            music_volume,
+            fade_start,
+        )
+
         mixed_path = video_path.with_name(
             "final_video_music.mp4"
         )
@@ -293,7 +307,7 @@ class RenderService:
             str(music_path),
             "-filter_complex",
             (
-                f"[1:a]volume={music_volume:.3f},"
+                f"[1:a]{volume_stage},"
                 f"afade=t=out:st={fade_start:.2f}:d={fade_duration:.2f}"
                 f"[music];"
                 f"[0:a][music]amix=inputs=2:duration=first:"
@@ -322,6 +336,44 @@ class RenderService:
         print(
             f"  ✅ Background music mixed ({music_path.name})"
         )
+
+    def _music_volume_stage(
+        self,
+        music_volume: float,
+        fade_start: float,
+    ) -> str:
+        """Build the ffmpeg `volume` stage for the music track.
+
+        Narration runs almost back-to-back scene to scene (only a ~0.35s
+        padding gap between them, see AUDIO_PADDING_SECONDS) -- too short
+        for a swell to be audible or feel like anything but a glitch. The
+        one genuinely quiet stretch is the tail: by the time the video
+        reaches its existing fade-out window, narration has finished. So
+        instead of chasing every micro-pause, the music ramps up to a
+        fuller "swell" during that tail and holds it until the existing
+        afade=out (applied by the caller, right after this stage) carries
+        it down to silence -- a swell into the ending rather than an
+        abrupt cut. Falls back to a flat volume for very short videos
+        where there isn't enough tail room for the ramp to sound smooth
+        rather than choppy.
+        """
+
+        swell_volume = min(0.55, music_volume * 2.5)
+        ramp_duration = min(2.0, fade_start)
+
+        if ramp_duration < 0.5 or swell_volume <= music_volume:
+            return f"volume={music_volume:.3f}"
+
+        swell_start = fade_start - ramp_duration
+
+        volume_expr = (
+            f"if(lt(t,{swell_start:.2f}),{music_volume:.3f},"
+            f"min({swell_volume:.3f},{music_volume:.3f}+"
+            f"({swell_volume:.3f}-{music_volume:.3f})*"
+            f"(t-{swell_start:.2f})/{ramp_duration:.2f}))"
+        )
+
+        return f"volume=eval=frame:volume='{volume_expr}'"
 
     def _resolve_music_track(
         self,

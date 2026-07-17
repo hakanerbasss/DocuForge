@@ -53,6 +53,14 @@ Rules:
 - Duration must be an integer between 3 and 60 seconds.
 - Visual descriptions must be concise, concrete and searchable.
 - Avoid camera instructions that make stock-media searches overly specific.
+- For documentary and informational content types: make the LAST scene's
+  "visual" a genuine closing shot, not just another topic-illustrating shot.
+  It should visually resolve the story -- a wide, symbolic, contemplative
+  composition (e.g. a slow pull-back revealing scale, a wide landscape at
+  dawn/dusk, light breaking through, a vista the narration's conclusion
+  earns) that still ties directly to the documentary's actual subject, not
+  a generic stock sunset unrelated to the topic. No on-screen text, no
+  logo, no watermark -- this is a background shot, not an end card.
 
 Script:
 

@@ -407,6 +407,30 @@ Kullanıcı gerçek bir üretimin (`yeraltı_şehri` konulu) `subtitles.txt` dos
 
 ---
 
+## Müzik "bitişe doğru yükselme" (swell) + belgesellerde tasarımlı kapanış sahnesi
+
+Kullanıcının iki isteği: (1) "konuşmanın sustuğu anlarda müzik yükselsin, mantıklı olabilir" fikrine görüş, (2) belgesellerde son kare/sahne için güzel bir kapanış tasarımı. İkisini de uygulamamı, ama alternatif olarak ChatGPT'de tasarlanmış bir kapanış görselinin yüklenip kullanılabileceği fikrini de düşünmemi istedi.
+
+### Müzik yükselmesi -- neden "her duraklamada" değil, "bitişe doğru"
+
+Gerçek mimariye bakıldı: sahneler arasında sadece `AUDIO_PADDING_SECONDS = 0.35` saniyelik bir boşluk var (her sahne kendi anlatımı + bu kısa dolgu kadar sürüyor, sonra direkt bir sonraki sahne başlıyor) — bu kadar kısa bir pencerede bir yükselme kulağa "cırt" diye bir aksaklık gibi gelir, gerçek bir "nefes alma" hissi vermez. Buna karşılık, SON anlatım satırından sonra, videonun zaten var olan bitiş fade-out penceresi (`fade_duration = min(3.0, süre)`) boyunca gerçek bir sessiz/düşük-yoğunluklu an var. Bu yüzden yükselmeyi her sahne arasına değil, **bitişe doğru tek bir kez** uyguladım:
+
+- **`RenderService._music_volume_stage()`** (yeni): sabit `volume=X` yerine, videonun son ~2 saniyesinde müziği kademeli olarak (base'in ~2.5 katına, en fazla %55'e) yükselten bir ffmpeg `volume=eval=frame:volume='if(...)'` ifadesi üretiyor — yükselme tam olarak mevcut fade-out'un başladığı ana denk geliyor, oradan itibaren zaten var olan `afade=out` bunu sessizliğe indiriyor. Matematiği (süreklilik, üst sınır) Python'da ffmpeg'in eval mantığını birebir taklit ederek doğruladım (t=0, yükselme başlangıcı, ortası, fade başlangıcı, fade ortası, video sonu noktalarında). Yeterli kuyruk süresi olmayan (çok kısa) videolarda veya müzik sesi 0 ise, eskisi gibi düz `volume=X`'e düşüyor.
+- **Önemli dürüstlük notu:** bu ortamda gerçek bir ffmpeg kurulu değil, bu yüzden ifadeyi gerçek ffmpeg'e karşı test edemedim — sadece matematiği (Python'da) ve sözdizimini (mevcut `_burn_in_subtitles`'daki `force_style='...'` deseniyle aynı tek-tırnak kaçış yöntemini kullanarak) doğrulayabildim. Bunu telafi etmek için `render()`'daki `_apply_background_music()` çağrısı artık `try/except` ile sarmalandı — müzik karıştırma herhangi bir nedenle (bu ifade dahil) başarısız olursa render'ın tamamı düşmüyor, sadece müziksiz devam ediyor ve log'a uyarı yazıyor. **Sunucuda gerçek bir render ile doğrulanması gerekiyor** — eğer müzik hiç eklenmiyorsa (log'da "Arka plan müziği eklenemedi" uyarısı varsa) bana bildir, ifadeyi düzeltirim.
+- **`amix` filtresine `normalize=0`** eklendi (önceki turda) zaten bu yükselmenin gerçekten duyulmasını sağlıyor — `normalize=1` olsaydı ffmpeg kendi otomatik dengelemesiyle bu bilinçli yükselmeyi de bozabilirdi.
+
+### Belgesel kapanış sahnesi
+
+`app/prompts/storyboard.txt`'e yeni bir kural eklendi: documentary/informational içerik türlerinde SON sahnenin `visual` alanı, diğer sahnelerden farklı olarak bilinçli bir "kapanış çekimi" olacak şekilde yazılmalı — geniş açılı, sembolik, hikayeyi görsel olarak sonuçlandıran bir kompozisyon (ör. ölçeği açığa çıkaran yavaş bir geri çekilme, gün doğumu/batımı, ışığın süzülmesi), ama yine de belgeselin GERÇEK konusuna bağlı kalarak (alakasız jenerik bir gün batımı değil). Metin/logo yok (bu bir arka plan çekimi, bitmiş bir end-card değil). Bu, yeni bir pipeline aşaması değil — mevcut `image_prompts`/`video_prompts` ajanları zaten her sahnenin `visual` metnini sinematik bir prompt'a çeviriyor, bu yüzden son sahnenin metni farklı yazıldığında otomatik olarak oraya akıyor.
+
+### Değerlendirilen ama uygulanmayan alternatif: yüklenebilir kapanış görseli
+
+Kullanıcı, ChatGPT'de tasarlanmış sabit bir kapanış görselinin `/settings`'ten yüklenip (XTTS referans ses yükleme özelliğiyle aynı desende) belgesel türü videoların sonuna otomatik eklenebileceği fikrini attı — tasarımı beğenmezse tekrar yükleyip değiştirebilir. Bu, AI'ın HER üretimde yeni bir kapanış görseli üretmesine (mevcut çözüm) karşı, KULLANICININ elle tasarladığı SABİT bir görseli kullanmanın alternatifi. İkisi birbirini dışlamıyor — ileride "otomatik AI kapanış" varsayılan kalırken, yüklenmiş bir görsel varsa onu önceliklendiren bir geçersiz kılma (override) eklenebilir, tıpkı XTTS referans sesinin çalışma şekli gibi. Şimdilik uygulanmadı, kullanıcı onaylarsa ayrı bir iş olarak eklenebilir.
+
+- **Test edildi:** `_music_volume_stage()`'in dört dalının (uzun video→yükselme, kısa video→düz, sessiz müzik→düz, sınır değer→yükselme) doğru çalıştığı; üretilen tam `filter_complex` string'inin `eval=frame`, `normalize=0` içerdiği ve tırnak dengesinin doğru olduğu; yükselme+fade matematiğinin süreklilik/üst-sınır açısından doğru olduğu (Python mirror); `test_tr_tts_normalize.py`'nin (36 test) hâlâ geçtiği.
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:
