@@ -570,7 +570,7 @@ class ThumbnailService:
 
     def _draw_text_block(
         self,
-        draw: ImageDraw.ImageDraw,
+        canvas: Image.Image,
         lines: list[str],
         font: ImageFont.FreeTypeFont,
         fill: tuple[int, int, int],
@@ -579,8 +579,26 @@ class ThumbnailService:
         anchor_xy: tuple[int, int],
         align: str = "center",
         line_spacing: float = 1.18,
+        highlight_alpha: int = 0,
     ) -> int:
+        """Draw a wrapped text block with a drop shadow + outline stroke,
+        both scaled to font size so bigger hooks stay proportionally
+        bold instead of looking thin. When highlight_alpha > 0, a
+        translucent dark bar is composited behind the whole block first
+        -- for templates whose background isn't already darkened
+        (gradient/vignette), this is what keeps text legible over a
+        busy or light real-scene photo.
+        """
+
+        draw = ImageDraw.Draw(canvas)
         x_anchor, y = anchor_xy
+        font_size = getattr(font, "size", 40)
+        shadow_offset = max(3, font_size // 16)
+
+        placements: list[tuple[str, int, int, int]] = []
+        cursor_y = y
+        left_bound = x_anchor
+        right_bound = x_anchor
 
         for line in lines:
             bbox = draw.textbbox(
@@ -591,9 +609,35 @@ class ThumbnailService:
 
             x = x_anchor - line_w // 2 if align == "center" else x_anchor
 
-            draw.text((x + 3, y + 3), line, font=font, fill=(0, 0, 0))
+            placements.append((line, x, cursor_y, line_h))
+            left_bound = min(left_bound, x)
+            right_bound = max(right_bound, x + line_w)
+            cursor_y += int(line_h * line_spacing)
+
+        if highlight_alpha > 0 and placements:
+            pad_x = int(font_size * 0.35)
+            pad_y = int(font_size * 0.25)
+            box = (
+                left_bound - pad_x,
+                y - pad_y,
+                right_bound + pad_x,
+                cursor_y - int(placements[-1][3] * (line_spacing - 1)) + pad_y,
+            )
+            overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+            ImageDraw.Draw(overlay).rectangle(box, fill=(0, 0, 0, highlight_alpha))
+            blended = Image.alpha_composite(
+                canvas.convert("RGBA"), overlay
+            ).convert("RGB")
+            canvas.paste(blended, (0, 0))
+            draw = ImageDraw.Draw(canvas)
+
+        for line, x, line_y, _line_h in placements:
             draw.text(
-                (x, y),
+                (x + shadow_offset, line_y + shadow_offset),
+                line, font=font, fill=(0, 0, 0),
+            )
+            draw.text(
+                (x, line_y),
                 line,
                 font=font,
                 fill=fill,
@@ -601,9 +645,7 @@ class ThumbnailService:
                 stroke_fill=stroke_fill,
             )
 
-            y += int(line_h * line_spacing)
-
-        return y
+        return cursor_y
 
     def _apply_top_gradient(
         self,
@@ -665,18 +707,19 @@ class ThumbnailService:
         hook = self._turkish_upper(brief["hook"])
         font, lines = self._fit_text_lines(
             draw, hook, max_width=int(width * 0.85), max_lines=2,
-            base_size=int(height * 0.09),
+            base_size=int(height * 0.11),
         )
 
         self._draw_text_block(
-            draw,
+            canvas,
             lines,
             font,
             fill=(255, 220, 60),
             stroke_fill=(0, 0, 0),
-            stroke_width=max(3, int(height * 0.01)),
-            anchor_xy=(width // 2, int(height * 0.07)),
+            stroke_width=max(4, int(height * 0.013)),
+            anchor_xy=(width // 2, int(height * 0.06)),
             align="center",
+            highlight_alpha=90,
         )
 
         return canvas
@@ -721,18 +764,19 @@ class ThumbnailService:
         hook = self._turkish_upper(brief["hook"])
         font, lines = self._fit_text_lines(
             draw, hook, max_width=int(width * 0.6), max_lines=2,
-            base_size=int(height * 0.075),
+            base_size=int(height * 0.095),
         )
 
         self._draw_text_block(
-            draw,
+            canvas,
             lines,
             font,
             fill=(255, 255, 255),
             stroke_fill=(0, 0, 0),
-            stroke_width=max(3, int(height * 0.009)),
-            anchor_xy=(int(width * 0.08), int(height * 0.75)),
+            stroke_width=max(4, int(height * 0.012)),
+            anchor_xy=(int(width * 0.08), int(height * 0.73)),
             align="left",
+            highlight_alpha=130,
         )
 
         return canvas
@@ -747,24 +791,24 @@ class ThumbnailService:
         canvas = ImageEnhance.Contrast(bg).enhance(1.08)
         canvas = ImageEnhance.Color(canvas).enhance(1.05)
         canvas = self._apply_top_gradient(
-            canvas, height_fraction=0.42, max_alpha=185
+            canvas, height_fraction=0.46, max_alpha=205
         )
 
         draw = ImageDraw.Draw(canvas)
         hook = self._turkish_upper(brief["hook"])
         font, lines = self._fit_text_lines(
-            draw, hook, max_width=int(width * 0.7), max_lines=2,
-            base_size=int(height * 0.085),
+            draw, hook, max_width=int(width * 0.75), max_lines=2,
+            base_size=int(height * 0.105),
         )
 
         self._draw_text_block(
-            draw,
+            canvas,
             lines,
             font,
             fill=(255, 255, 255),
             stroke_fill=(0, 0, 0),
-            stroke_width=max(3, int(height * 0.009)),
-            anchor_xy=(int(width * 0.06), int(height * 0.08)),
+            stroke_width=max(4, int(height * 0.012)),
+            anchor_xy=(int(width * 0.06), int(height * 0.07)),
             align="left",
         )
 
@@ -836,13 +880,13 @@ class ThumbnailService:
         y_anchor = int(height * 0.62)
 
         if number_word:
-            big_font = self._font(int(height * 0.22))
+            big_font = self._font(int(height * 0.24))
             draw.text(
-                (int(width * 0.06), int(height * 0.32)),
+                (int(width * 0.06), int(height * 0.31)),
                 number_word,
                 font=big_font,
                 fill=(255, 210, 40),
-                stroke_width=max(4, int(height * 0.012)),
+                stroke_width=max(5, int(height * 0.014)),
                 stroke_fill=(0, 0, 0),
             )
             remaining_words = [
@@ -855,15 +899,15 @@ class ThumbnailService:
         if hook_text:
             font, lines = self._fit_text_lines(
                 draw, hook_text, max_width=int(width * 0.75), max_lines=2,
-                base_size=int(height * 0.11),
+                base_size=int(height * 0.13),
             )
             self._draw_text_block(
-                draw,
+                canvas,
                 lines,
                 font,
                 fill=(255, 255, 255),
                 stroke_fill=(0, 0, 0),
-                stroke_width=max(3, int(height * 0.01)),
+                stroke_width=max(4, int(height * 0.012)),
                 anchor_xy=(int(width * 0.06), y_anchor),
                 align="left",
             )

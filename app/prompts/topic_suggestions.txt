@@ -8,13 +8,23 @@ Suggest 8 distinct video topic ideas for a new {{ content_type }} video.
 
 Content type style:
 
-- documentary: intriguing "what if" / mystery / big-scale hypothetical or
-  investigative angles with a strong visual hook.
+- documentary: prioritize two proven angles above all others --
+  (1) a CONCRETE, real, specific place, structure, or historical event
+  (a named city, building, ruin, natural site) explored through a mystery
+  or discovery hook, and (2) a PERSONAL-RISK / self-protection angle --
+  a real danger, scam, or everyday threat the viewer can imagine
+  happening to themselves or someone they know. Both angles consistently
+  outperform abstract or purely philosophical framings ("what if AI
+  becomes conscious", "is reality a simulation") in click-through and
+  watch-time -- include at most 1-2 abstract/philosophical suggestions
+  among the 8, and always rank them below the concrete-place and
+  personal-risk ones.
 - news: timely, factual, high-interest current-affairs or explainer angles.
 - shorts: single-idea, immediately graspable, high-curiosity angles that work
   in under a minute.
 - informational: practical "how/why" explainer angles with a clear payoff for
-  the viewer.
+  the viewer, favoring topics that help the viewer protect themselves,
+  their money, or their safety when such an angle genuinely fits.
 
 Return ONLY valid JSON. Structure:
 
@@ -31,7 +41,7 @@ Return ONLY valid JSON. Structure:
 
 Requirements:
 
-- Provide exactly 8 suggestions, ordered from HIGHEST to LOWEST expected click-through potential.
+- Provide exactly 8 suggestions, ordered from HIGHEST to LOWEST expected click-through potential. For documentary and informational content, concrete-place and personal-risk/self-protection angles rank above abstract or philosophical ones.
 - Titles must be distinct from each other -- do not repeat the same core idea with minor wording changes.
 - Titles under 80 characters, written the way a real creator would phrase a video title (question form, bold claim, or curiosity gap all work).
 - "hook" is one sentence, not a full paragraph.
