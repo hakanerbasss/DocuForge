@@ -1,7 +1,9 @@
 import html
 import json
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
@@ -51,6 +53,28 @@ def load_json(path: Path) -> dict:
         return {}
 
     return data if isinstance(data, dict) else {}
+
+
+def format_finished_at(value: str | None) -> str | None:
+    """Render a step's ISO completion timestamp in the user's local
+    time (Türkiye) -- otherwise "Yeniden Üret" gives no way to tell a
+    fresh run from a stale one when a step's duration alone doesn't
+    make that obvious."""
+
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        parsed = parsed.astimezone(ZoneInfo("Europe/Istanbul"))
+    except Exception:
+        pass
+
+    return parsed.strftime("%d.%m %H:%M")
 
 
 def safe_project_dir(slug: str) -> Path:
@@ -883,6 +907,9 @@ def project_detail(slug: str) -> HTMLResponse:
             if isinstance(info, dict)
             else 0
         )
+        finished_at = format_finished_at(
+            info.get("finished_at") if isinstance(info, dict) else None
+        )
 
         icon = (
             "✅"
@@ -903,6 +930,7 @@ def project_detail(slug: str) -> HTMLResponse:
                     <span class="muted step-status-text">
                         {html.escape(status)}
                         · {html.escape(str(duration))} sn
+                        {f'· {html.escape(finished_at)}' if finished_at else ''}
                     </span>
                     <button
                         class="button secondary"

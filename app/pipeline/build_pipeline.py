@@ -2,6 +2,7 @@ import json
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -811,6 +812,7 @@ class BuildPipeline:
             "duration_seconds": round(elapsed, 2),
             "output": str(output_path),
             "error": None,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
         }
 
         state["status"] = "running"
@@ -849,6 +851,7 @@ class BuildPipeline:
             ),
             "output": str(output_path),
             "error": None,
+            "finished_at": current.get("finished_at"),
         }
 
         state["status"] = "running"
@@ -878,6 +881,7 @@ class BuildPipeline:
             "duration_seconds": round(elapsed, 2),
             "output": str(output_path),
             "error": str(error),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
         }
 
         state["status"] = "failed"

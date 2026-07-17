@@ -460,6 +460,19 @@ Kullanıcı bildirdi: videoya gömülen altyazının arkası şeffaf olduğu iç
 
 ---
 
+## Adım tamamlanma saati gösterimi
+
+Kullanıcı, Video Render'ı "Yeniden Üret" ile ayar değiştirip çalıştırdıktan sonra kapanış görselinin gelmediğini fark etti. İncelerken iki ayrı şey ortaya çıktı:
+
+1. **"Kapak Görseli" adımı "pending" kalmış olması beklenen bir davranış** — `regenerate_step()` zaten sadece hedef adımı hemen çalıştırıp SONRASINDAKİ tüm adımları geçersiz kılıyor (kullanıcı önizleyip "▶ Devam Et" ile devam etsin diye, tasarım gereği). Video Render'ı yeniden üretince Thumbnail'ın "pending" kalması bug değil.
+2. **Asıl gerçek sorun:** hangi "completed" adımın YENİ (switch açıldıktan sonraki) çalıştırma olduğunu, hangisinin ESKİ olduğunu ayırt edecek hiçbir zaman bilgisi yoktu — sadece süre (`duration_seconds`) gösteriliyordu, ki bu iki farklı çalıştırma arasında neredeyse aynı olabilir. Kullanıcı haklı olarak "kapanış görseli gelmedi, ama bu render yeni mi eski mi bilmiyorum" dedi.
+
+- **`BuildPipeline`**: `_record_success`, `_record_existing_completion`, `_record_failure_and_raise` artık her adımın state kaydına `finished_at` (ISO 8601, UTC) zaman damgası ekliyor. `_record_existing_completion` (diskte zaten var olan çıktıyı tanıma, gerçek bir çalıştırma değil) önceki `finished_at`'ı koruyor, yeni bir tane üretmiyor.
+- **`app/web.py`**: yeni `format_finished_at()` yardımcı fonksiyonu bu UTC zaman damgasını **Europe/Istanbul** saatine çevirip `GG.AA SS:DD` formatında gösteriyor (kullanıcının telefon saatiyle bire bir eşleşsin diye — UTC olarak bıraksaydım 3 saat geride görünüp kafa daha da karışırdı). Proje detay sayfasındaki her adım satırında artık `completed · 428.45 sn · 17.07 16:06` gibi görünüyor.
+- **Test edildi:** `format_finished_at()`'ın UTC→İstanbul dönüşümünü doğru yaptığı ve boş/hatalı girdilerde `None` döndürdüğü; `_record_success`'in `finished_at` yazdığı, `_record_existing_completion`'ın var olan `finished_at`'ı koruduğu; proje detay sayfasının bu zaman damgasını doğru render ettiği (`TestClient`).
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:
