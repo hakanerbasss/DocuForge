@@ -136,18 +136,31 @@ class RenderService:
                 self._read_scene_subtitle_text(audio_info),
             ))
 
-            video_files = sorted(scene_dir.glob("*.mp4"))
-
-            image_files = sorted(
-                file_path
-                for pattern in (
-                    "*.jpg",
-                    "*.jpeg",
-                    "*.png",
-                    "*.webp",
-                )
-                for file_path in scene_dir.glob(pattern)
+            closing_image_path = self._resolve_closing_image(
+                project_data,
+                is_last_scene=(index == len(scene_dirs)),
             )
+
+            if closing_image_path is not None:
+                video_files = []
+                image_files = [closing_image_path]
+                print(
+                    "  🎬 Yüklenmiş kapanış görseli kullanılıyor "
+                    f"({closing_image_path.name})"
+                )
+            else:
+                video_files = sorted(scene_dir.glob("*.mp4"))
+
+                image_files = sorted(
+                    file_path
+                    for pattern in (
+                        "*.jpg",
+                        "*.jpeg",
+                        "*.png",
+                        "*.webp",
+                    )
+                    for file_path in scene_dir.glob(pattern)
+                )
 
             clip_path = (
                 clips_dir
@@ -336,6 +349,48 @@ class RenderService:
         print(
             f"  ✅ Background music mixed ({music_path.name})"
         )
+
+    def _resolve_closing_image(
+        self,
+        project_data: dict[str, Any],
+        is_last_scene: bool,
+    ) -> Path | None:
+        """A fixed, user-uploaded closing-shot image (configured in
+        /settings) for the last scene of a documentary -- an alternative
+        to the AI-generated closing shot (storyboard.txt's last-scene
+        instruction) for anyone who wants a consistent, hand-designed
+        ending across every video instead of a fresh one each time.
+        Narration audio for that scene is untouched, only the visual is
+        swapped. Falls back to the normal scene media on any problem
+        (not configured, file missing) rather than failing the render."""
+
+        if not is_last_scene:
+            return None
+
+        content_type = str(
+            project_data.get("content_type", "")
+        ).strip().lower()
+
+        if content_type != "documentary":
+            return None
+
+        try:
+            from app.core.config import settings
+
+            if not settings.is_configured("closing_image"):
+                return None
+
+            path = Path(settings.closing_image)
+
+            if path.exists() and path.stat().st_size > 0:
+                return path
+        except Exception as error:
+            print(
+                f"  ⚠ Kapanış görseli okunamadı, sahne kendi medyasını "
+                f"kullanacak: {error}"
+            )
+
+        return None
 
     def _music_volume_stage(
         self,
@@ -616,10 +671,16 @@ class RenderService:
             .replace("'", "’")
         )
 
+        # BorderStyle=3 draws an opaque box behind the text instead of
+        # just an outline (BorderStyle=1) -- a plain outline wasn't
+        # enough to stay readable on some bright/busy scenes. BackColour
+        # is ASS's &HAABBGGRR format; alpha 80 (~50% opaque) gives a
+        # soft dark backing without going flat black. Outline now sets
+        # the box's padding around the text rather than a text stroke.
         force_style = (
             "FontSize=18,PrimaryColour=&H00FFFFFF,"
-            "OutlineColour=&H00000000,BorderStyle=1,"
-            "Outline=2,Shadow=0,Alignment=2,MarginV=80"
+            "BackColour=&H80000000,BorderStyle=3,"
+            "Outline=3,Shadow=0,Alignment=2,MarginV=80"
         )
 
         burned_path = video_path.with_name(

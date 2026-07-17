@@ -10,6 +10,8 @@ from app.core.config import settings
 XTTS_REFERENCE_DIR = Path("models/xtts")
 XTTS_REFERENCE_PATH = XTTS_REFERENCE_DIR / "reference.wav"
 
+CLOSING_IMAGE_DIR = Path("models/closing")
+
 
 router = APIRouter()
 
@@ -92,6 +94,13 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "password",
         "...",
     ),
+    "closing_image": (
+        "Belgesel Kapanış Görseli",
+        "CLOSING_IMAGE",
+        "Belgesel türündeki videoların son sahnesinde otomatik üretilen kapanış çekimi yerine kullanılacak sabit bir görsel (ör. ChatGPT/DALL-E'de tasarladığın bir kapanış karesi). Anlatım sesi yine o sahnenin metniyle çalar, sadece görsel değişir. Yapılandırılmazsa AI'ın kendi ürettiği kapanış çekimi kullanılmaya devam eder.",
+        "image",
+        "",
+    ),
 }
 
 
@@ -147,9 +156,52 @@ def _render_xtts_field() -> str:
     """
 
 
+def _render_closing_image_field() -> str:
+    label, env_name, description, _input_type, _placeholder = FIELD_LABELS[
+        "closing_image"
+    ]
+    configured = settings.is_configured("closing_image")
+    current_path = Path(settings.closing_image) if configured else None
+
+    if configured and current_path is not None and current_path.exists():
+        body = f"""
+        <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
+            <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
+            <img src="/settings/closing_image/file" alt="Kapanış görseli" style="max-width:100%;max-height:280px;border-radius:8px;display:block;margin-bottom:10px">
+            <form method="post" action="/settings/closing_image/clear" style="margin:0">
+                <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
+            </form>
+        </div>
+        """
+    else:
+        body = """
+        <div>
+            <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Görsel yükle</label>
+            <div style="display:flex;gap:8px">
+                <input type="file" id="closingImageFileInput" accept="image/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
+                <button type="button" class="button" onclick="uploadClosingImageFile()" style="white-space:nowrap">Yükle</button>
+            </div>
+        </div>
+        """
+
+    return f"""
+    <div style="padding:16px 0;border-bottom:1px solid #edf1f6">
+        <div style="font-weight:700;margin-bottom:2px">{html.escape(label)}</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">
+            {html.escape(description)}
+            (<code>{env_name}</code> ortam değişkeni ayarlıysa her zaman öncelikli olur ve buradan değiştirilemez.)
+        </div>
+        {body}
+    </div>
+    """
+
+
 def _render_field(field_key: str) -> str:
     if field_key == "xtts_reference_audio":
         return _render_xtts_field()
+
+    if field_key == "closing_image":
+        return _render_closing_image_field()
 
     label, env_name, description, input_type, placeholder = FIELD_LABELS[
         field_key
@@ -291,6 +343,23 @@ async function submitXttsUpload(formData) {{
         document.getElementById("xttsStartRecord").style.display = "inline-flex";
     }}
 }}
+
+async function uploadClosingImageFile() {{
+    const input = document.getElementById("closingImageFileInput");
+    if (!input.files || !input.files.length) {{ alert("Bir görsel seç."); return; }}
+    const fd = new FormData();
+    fd.append("file", input.files[0]);
+    try {{
+        const r = await fetch("/settings/closing_image/upload", {{method: "POST", body: fd}});
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Yükleme başarısız.");
+        }}
+        location.href = "/settings";
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+    }}
+}}
 </script>
 <script>
 if ("serviceWorker" in navigator) {{
@@ -391,6 +460,51 @@ async def upload_xtts_reference_audio(
     settings.save_secret(
         "xtts_reference_audio",
         str(XTTS_REFERENCE_PATH.resolve()),
+    )
+
+    return RedirectResponse(url="/settings", status_code=303)
+
+
+@router.get("/settings/closing_image/file")
+def get_closing_image() -> FileResponse:
+    if not settings.is_configured("closing_image"):
+        raise HTTPException(status_code=404, detail="Kapanış görseli ayarlı değil.")
+
+    path = Path(settings.closing_image)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Kapanış görseli dosyası bulunamadı.")
+
+    return FileResponse(path)
+
+
+@router.post("/settings/closing_image/upload")
+async def upload_closing_image(
+    file: UploadFile = File(...),
+) -> RedirectResponse:
+    CLOSING_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename or "upload").suffix.lower()
+
+    if suffix not in (".jpg", ".jpeg", ".png", ".webp"):
+        suffix = ".jpg"
+
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Dosya boş.")
+
+    # Eski yüklemeden kalma farklı uzantılı bir dosya varsa (ör. önce .png
+    # yüklenip şimdi .jpg yükleniyorsa) karışıklık olmasın diye temizleniyor.
+    for old_file in CLOSING_IMAGE_DIR.glob("closing_image.*"):
+        old_file.unlink(missing_ok=True)
+
+    destination = CLOSING_IMAGE_DIR / f"closing_image{suffix}"
+    destination.write_bytes(content)
+
+    settings.save_secret(
+        "closing_image",
+        str(destination.resolve()),
     )
 
     return RedirectResponse(url="/settings", status_code=303)

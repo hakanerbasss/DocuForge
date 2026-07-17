@@ -21,6 +21,7 @@ SECRET_FIELDS: dict[str, str] = {
     "GOOGLE_API_KEY": "google_api_key",
     "FAL_KEY": "fal_api_key",
     "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
+    "CLOSING_IMAGE": "closing_image",
     "JAMENDO_CLIENT_ID": "jamendo_client_id",
     "MUBERT_COMPANY_ID": "mubert_company_id",
     "MUBERT_LICENSE_TOKEN": "mubert_license_token",
@@ -117,6 +118,10 @@ class Settings:
 
     xtts_reference_audio: str = _resolve_secret(
         "XTTS_REFERENCE_AUDIO", "xtts_reference_audio", _secrets
+    )
+
+    closing_image: str = _resolve_secret(
+        "CLOSING_IMAGE", "closing_image", _secrets
     )
 
     jamendo_client_id: str = _resolve_secret(

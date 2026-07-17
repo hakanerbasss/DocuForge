@@ -431,6 +431,27 @@ Kullanıcı, ChatGPT'de tasarlanmış sabit bir kapanış görselinin `/settings
 
 ---
 
+## Yüklenebilir kapanış görseli + altyazı okunabilirlik düzeltmesi
+
+### Kapanış görseli yükleme (bir önceki turda konuşulan alternatif)
+
+Kullanıcı, AI'ın her üretimde yeni bir kapanış çekimi üretmesine ek/alternatif olarak, `/settings`'ten sabit bir görsel yüklenip belgesel projelerinin son sahnesinde kullanılabilmesini istedi — tıpkı XTTS referans ses yükleme özelliğiyle aynı desende (yükle, "Yapılandırılmış" durumu göster, "Değiştir" ile üzerine yaz).
+
+- **`app/core/config.py`**: `closing_image` yeni bir secret alanı — `CLOSING_IMAGE` env var / `secrets.json`'daki `closing_image` anahtarı, mevcut `_resolve_secret`/`save_secret`/`is_configured` mekanizmasıyla aynı şekilde çalışıyor.
+- **`app/web_settings.py`**: `_render_closing_image_field()` (XTTS'in `_render_xtts_field()`'ıyla aynı desen, ses yerine `<img>` önizleme) — yapılandırılmışsa görsel önizleme + "Değiştir", değilse dosya seçici + "Yükle". `POST /settings/closing_image/upload` (ffmpeg transcode gerekmiyor, görsel doğrudan `models/closing/closing_image{uzantı}` olarak kaydediliyor, farklı bir uzantıyla yeniden yüklenirse eski dosya temizleniyor), `GET /settings/closing_image/file` (önizleme/render için servis ediyor). Temizleme (`/clear`) zaten var olan genel `POST /settings/{field_key}/clear` endpoint'i tarafından otomatik karşılanıyor (yeni kod gerekmedi).
+- **`RenderService._resolve_closing_image(project_data, is_last_scene)`** (yeni): sadece SON sahnede VE `content_type == "documentary"` iken VE bir kapanış görseli yapılandırılıp dosyası gerçekten varsa o görselin yolunu döndürüyor, aksi tüm durumlarda `None` (herhangi bir sorunda — okunamama, dosya yok — sessizce normal sahne medyasına düşüyor, render'ı hiç düşürmüyor). `render()`'daki sahne döngüsünde, `closing_image_path` `None` değilse o sahnenin `video_files`/`image_files`'ı bu tek görselle değiştiriliyor — sahnenin kendi anlatım sesi/süresi AYNEN kullanılıyor, sadece görsel değişiyor.
+- **Yapılandırılmazsa hiçbir şey değişmiyor** — varsayılan davranış hâlâ AI'ın otomatik ürettiği kapanış çekimi (bir önceki turda storyboard.txt'e eklenen kural).
+- **Test edildi:** `_resolve_closing_image`'ın 5 dalı (son sahne değil, yanlış içerik türü, yapılandırılmamış, dosya eksik, başarılı) mock `settings` ile; `/settings` sayfasının yeni alanla hatasız render olduğu ve JS'in geçerli olduğu; uçtan uca yükleme akışı (`TestClient` ile gerçek dosya yükleme → önizleme → farklı uzantıyla değiştirme → temizleme, hepsi disk üzerinde doğrulanıp temizlendi); **tam bir `render()` çalıştırması** (2 sahneli sahte proje, mock `_image_to_clip`/`_run`) ile SADECE son sahnenin kaynak görselinin değiştiği, ilk sahnenin kendi medyasını kullanmaya devam ettiği doğrulandı.
+
+### Altyazı okunabilirlik düzeltmesi
+
+Kullanıcı bildirdi: videoya gömülen altyazının arkası şeffaf olduğu için bazı (parlak/karışık) sahnelerde okunamıyor. Kök neden: `_burn_in_subtitles()`'daki ASS `force_style`, `BorderStyle=1` (sadece ince siyah anahat, arka plan yok) kullanıyordu.
+
+- **Düzeltme:** `BorderStyle=3`'e geçildi — bu, metnin arkasına OPAK bir kutu çiziyor (`BackColour` ile), sadece anahat değil. `BackColour=&H80000000` (ASS'in `&HAABBGGRR` formatında, alfa `80` ≈ %50 opaklık) ile "kapkara değil, hafif karartılmış" bir arka plan elde edildi — kullanıcının açıkça istediği gibi. `Outline` değeri `BorderStyle=3` modunda artık metin kalınlığı değil, kutunun metin etrafındaki iç boşluğu anlamına geliyor (3'e çıkarıldı, biraz nefes payı için).
+- **Dürüstlük notu:** bu ortamda gerçek ffmpeg/libass kurulu değil (zaten bu fonksiyonun kendi docstring'i de bunu önceden not etmişti), bu yüzden gerçek bir render'da görsel olarak doğrulayamadım — sözdizimi ASS/libass'ın resmi `force_style` alan adlarına ve `&HAABBGGRR` renk formatına dayanıyor. **Sunucuda altyazı gömülü bir projeyi yeniden render edip gözle kontrol etmen gerekiyor.**
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:
