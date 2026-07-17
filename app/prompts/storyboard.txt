@@ -22,7 +22,8 @@ Structure:
       "title": "Scene title in the target content language",
       "duration": 20,
       "narration": "Narration text in the target content language",
-      "visual": "Detailed cinematic visual search description in English"
+      "visual": "Detailed cinematic visual search description in English",
+      "hook_worthy": false
     }
   ]
 }
@@ -53,6 +54,16 @@ Rules:
 - Duration must be an integer between 3 and 60 seconds.
 - Visual descriptions must be concise, concrete and searchable.
 - Avoid camera instructions that make stock-media searches overly specific.
+- For documentary, informational and news content types (not shorts):
+  mark exactly ONE scene as "hook_worthy": true -- the single most
+  visually striking, dramatic, or attention-grabbing moment in the
+  whole video (the kind of shot a creator would show first as a
+  teaser before cutting back to the real start, e.g. an aerial shot,
+  a dramatic reveal, a surprising action). Prefer a scene from the
+  middle of the video, not the first or last scene. Every other scene
+  must have "hook_worthy": false. For shorts, set every scene's
+  "hook_worthy" to false -- the format is already short enough that a
+  separate cold open doesn't help.
 - For documentary and informational content types: make the LAST scene's
   "visual" a genuine closing shot, not just another topic-illustrating shot.
   It should visually resolve the story -- a wide, symbolic, contemplative

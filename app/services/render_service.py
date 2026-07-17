@@ -218,10 +218,11 @@ class RenderService:
         ).strip().lower()
 
         xfade_name = self.TRANSITION_XFADE_MAP.get(transition)
+        start_offsets: list[float] | None = None
 
         if xfade_name is not None and len(clip_files) > 1:
             try:
-                self._concat_with_transitions(
+                start_offsets = self._concat_with_transitions(
                     clip_files,
                     clip_durations,
                     xfade_name,
@@ -235,13 +236,61 @@ class RenderService:
                 self._concat_stream_copy(
                     clip_files, render_dir, output_path
                 )
-        else:
+
+        if start_offsets is None:
             self._concat_stream_copy(clip_files, render_dir, output_path)
+            start_offsets = self._naive_offsets(clip_durations)
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError(
                 f"Final video was not created: {output_path}"
             )
+
+        subtitle_offset = 0.0
+        hook_scene_number = self._find_hook_scene_number(storyboard)
+
+        if hook_scene_number is not None:
+            hook_clip_path = (
+                clips_dir / f"clip_{hook_scene_number:03d}.mp4"
+            )
+
+            if hook_clip_path in clip_files:
+                hook_scene_duration = clip_durations[
+                    clip_files.index(hook_clip_path)
+                ]
+                hook_duration = min(3.0, hook_scene_duration)
+
+                if hook_duration >= 1.0:
+                    try:
+                        teaser_path = render_dir / "hook_teaser.mp4"
+                        hooked_path = render_dir / "final_video_hook.mp4"
+                        self._build_hook_clip(
+                            hook_clip_path, teaser_path, hook_duration
+                        )
+                        self._concat_stream_copy(
+                            [teaser_path, output_path],
+                            render_dir,
+                            hooked_path,
+                        )
+                        if (
+                            not hooked_path.exists()
+                            or hooked_path.stat().st_size == 0
+                        ):
+                            raise RuntimeError(
+                                "Cold open concat produced an empty file."
+                            )
+                        hooked_path.replace(output_path)
+                        subtitle_offset = hook_duration
+                        print(
+                            "  🎬 Cold open eklendi "
+                            f"(sahne {hook_scene_number}, "
+                            f"{hook_duration:.1f}s)"
+                        )
+                    except Exception as error:
+                        print(
+                            f"  ⚠ Cold open eklenemedi ({error}); "
+                            "atlanıyor."
+                        )
 
         if project_data.get("background_music_enabled"):
             try:
@@ -261,7 +310,12 @@ class RenderService:
 
         if project_data.get("subtitles_enabled"):
             srt_path = render_dir / "subtitles.srt"
-            self._write_srt(srt_path, subtitle_segments)
+            self._write_srt(
+                srt_path,
+                subtitle_segments,
+                start_offsets,
+                global_offset=subtitle_offset,
+            )
             print(f"  ✅ Subtitles written ({srt_path})")
 
             txt_path = render_dir / "subtitles.txt"
@@ -312,13 +366,30 @@ class RenderService:
 
         self._run(command)
 
+    def _naive_offsets(
+        self,
+        clip_durations: list[float],
+    ) -> list[float]:
+        """Scene start times for a plain hard-cut concat -- each scene
+        starts exactly where the previous one ended, no overlap.
+        """
+
+        offsets: list[float] = []
+        cursor = 0.0
+
+        for duration in clip_durations:
+            offsets.append(cursor)
+            cursor += duration
+
+        return offsets
+
     def _concat_with_transitions(
         self,
         clip_files: list[Path],
         clip_durations: list[float],
         xfade_name: str,
         output_path: Path,
-    ) -> None:
+    ) -> list[float]:
         """Chain adjacent clips with ffmpeg's xfade/acrossfade filters
         instead of a hard cut. Unlike the stream-copy concat path, this
         decodes and re-encodes every clip in one filtergraph pass --
@@ -329,6 +400,14 @@ class RenderService:
         The per-pair transition length is clamped to a fraction of both
         adjacent clips' own duration so a couple of very short scenes
         can't produce a negative/degenerate offset.
+
+        Returns each scene's actual start time in the combined output
+        (index-aligned with clip_files) -- unlike a hard cut, each
+        transition shortens the combined timeline by its own duration,
+        so a scene's real start drifts earlier than the naive sum of
+        the durations before it. Callers building subtitle timestamps
+        need these, not clip_durations' cumulative sum, or captions
+        drift out of sync more with every transition.
         """
 
         command = ["ffmpeg", "-y"]
@@ -340,6 +419,7 @@ class RenderService:
         video_label = "0:v"
         audio_label = "0:a"
         cumulative = clip_durations[0]
+        start_offsets = [0.0]
 
         for i in range(1, len(clip_files)):
             duration = max(
@@ -351,6 +431,7 @@ class RenderService:
                 ),
             )
             offset = max(0.0, cumulative - duration)
+            start_offsets.append(offset)
 
             out_v = f"v{i}"
             out_a = f"a{i}"
@@ -398,6 +479,90 @@ class RenderService:
         ]
 
         self._run(command)
+
+        return start_offsets
+
+    def _build_hook_clip(
+        self,
+        source_clip: Path,
+        destination: Path,
+        duration: float,
+    ) -> None:
+        """Trim the first `duration` seconds off an already-rendered
+        scene clip for use as a cold-open teaser. Video is stream-copied
+        (cutting from t=0 needs no keyframe seek, so -c:v copy is safe
+        here) and audio is replaced with silence rather than reusing the
+        scene's real narration, which will play again moments later once
+        the video cuts back to that scene for real.
+        """
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(source_clip),
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=48000:cl=stereo",
+            "-t",
+            f"{duration:.3f}",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(destination),
+        ]
+
+        self._run(command)
+
+        if not destination.exists() or destination.stat().st_size == 0:
+            raise RuntimeError(
+                f"Hook teaser clip was not created: {destination}"
+            )
+
+    def _find_hook_scene_number(
+        self,
+        storyboard: dict[str, Any],
+    ) -> int | None:
+        """Which scene (if any) the storyboard agent flagged as the
+        most visually striking moment, for use as a cold-open teaser
+        shown before the video cuts back to its real start. Never the
+        first or last scene -- that would either duplicate the real
+        opening or spoil the ending -- and only for videos with enough
+        scenes that a teaser+reset actually makes sense.
+        """
+
+        scenes = storyboard.get("scenes")
+
+        if not isinstance(scenes, list) or len(scenes) < 3:
+            return None
+
+        for position, scene in enumerate(scenes, start=1):
+            if not isinstance(scene, dict):
+                continue
+
+            if not scene.get("hook_worthy"):
+                continue
+
+            if position == 1 or position == len(scenes):
+                continue
+
+            try:
+                return int(scene.get("scene", position))
+            except (TypeError, ValueError):
+                return position
+
+        return None
 
     def _apply_background_music(
         self,
@@ -707,15 +872,19 @@ class RenderService:
         self,
         srt_path: Path,
         segments: list[tuple[int, float, str | None]],
+        start_offsets: list[float],
+        global_offset: float = 0.0,
     ) -> None:
         blocks: list[str] = []
-        cursor = 0.0
         subtitle_index = 0
 
-        for _scene_number, duration, text in segments:
-            scene_start = cursor
-            scene_end = cursor + duration
-            cursor = scene_end
+        for i, (_scene_number, duration, text) in enumerate(segments):
+            scene_start = global_offset + start_offsets[i]
+            scene_end = (
+                global_offset + start_offsets[i + 1]
+                if i + 1 < len(start_offsets)
+                else scene_start + duration
+            )
             if not text:
                 continue
 

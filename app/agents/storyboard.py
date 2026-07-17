@@ -141,6 +141,12 @@ Do not include explanations before or after the JSON.
                     "a non-empty string."
                 )
 
+        # Optional cold-open marker (added after the field became part
+        # of the schema) -- coerce rather than reject so an older/looser
+        # model response doesn't fail the whole storyboard over it.
+        if "hook_worthy" in scene:
+            scene["hook_worthy"] = bool(scene["hook_worthy"])
+
     def _remove_code_fences(
         self,
         response: str,
