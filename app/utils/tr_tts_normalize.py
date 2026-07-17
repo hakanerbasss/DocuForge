@@ -320,6 +320,15 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
 
         _EKYAK = r"(?:['’]([a-zçğıöşüA-ZÇĞİÖŞÜ]{1,4}))?"  # kesme işaretli ek — yakalanır, silinmez
 
+        # ppm (milyonda bir): "%" ile aynı mantık, ÖNEK biçiminde okunur -- "X
+        # ppm" -> "milyonda X" ("X milyonda bir" değil). Büyük sayı
+        # dönüşümünden ÖNCE işlenmeli, yoksa rakam zaten sözcüğe çevrilmiş
+        # olur ve bu regex hiç eşleşmez.
+        def _ppm(m):
+            out = 'milyonda ' + _tr_num_to_words(int(m.group(1)))
+            return _tr_attach_suffix(out, m.group(2) or '')
+        text = re.sub(r'\b(\d+)\s*ppm\b' + _EKYAK, _ppm, text, flags=re.IGNORECASE)
+
         # Mobil nesil: 5G → beşinci nesil. Genel büyük-sayı dönüşümünden ÖNCE
         # işlenmeli — yoksa '5' sözcüğe çevrilir ama bitişik 'G' harfi öylece
         # kalır ('beşG' gibi tek garip token oluşur, TTS'i şaşırtır). Arkasındaki
@@ -382,9 +391,15 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
         # okuyordu (gerçek bug, canlıda yakalandı). {1,2} sınırı, 3 haneli
         # binlik gruplarının bu regex'e hiç takılmayıp aşağıdaki binlik ayırıcı
         # adımına düşmesini sağlayan örtük ayrım mekanizması — bilerek dar tutulur.
-        # 3.5 → üç nokta beş
+        # 3.5 → üç virgül beş. DeepSeek üretimi Türkçe metinlerde ondalıkları sık
+        # sık İngilizce noktayla yazıyor (1.2, 4.3, 2.9 gibi) -- bunları harfiyen
+        # "nokta" diye (noktalama işaretinin adı) değil, Türkçe'de ondalık ayracın
+        # doğal okunuşu olan "virgül" ile okumak gerçek üretim script'lerinde çok
+        # daha doğal sesleniyor ("bir nokta iki derece" değil "bir virgül iki
+        # derece"). Nokta hâlâ binlik ayıracı olarak (3 haneli gruplar) ayrı bir
+        # regex'te kaldırılıyor, bu regex'e hiç takılmıyor.
         def _ondalik_nokta(m):
-            out = _tr_num_to_words(int(m.group(1))) + ' nokta ' + _tr_ondalik_kisim(m.group(2))
+            out = _tr_num_to_words(int(m.group(1))) + ' virgül ' + _tr_ondalik_kisim(m.group(2))
             return _tr_attach_suffix(out, m.group(3) or '')
         text = re.sub(r'\b(\d+)\.(\d{1,2})(?!\d)' + _EKYAK, _ondalik_nokta, text)
         # 3,5 → üç virgül beş
@@ -438,6 +453,18 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
         text = re.sub(r'\bMB\b' + _EKYAK, _kisaltma('megabayt'), text, flags=re.IGNORECASE)
         text = re.sub(r'\bKB\b' + _EKYAK, _kisaltma('kilobayt'), text, flags=re.IGNORECASE)
 
+        # Enerji/konsantrasyon birimleri -- belgesel/haber script'lerinde sık
+        # geçiyor (enerji tüketimi, iklim istatistikleri) ama sözlükte yoktu,
+        # olduğu gibi TTS'e gidip garip okunuyordu. "saat" son kelimesi zaten
+        # yukarıdaki hal eki sözlüklerinde var, bileşik "X saat" biçimi hal
+        # ekini doğru bağlıyor (ör. "megavat saate" gibi). TWh/MWh/kWh, tek
+        # harfli \bWh\b'den ÖNCE işlenmeli -- yoksa \bWh\b onların içindeki
+        # "Wh" kısmını tek başına eşleştirip önekleri (T/M/k) açıklamasız bırakır.
+        text = re.sub(r'\bTWh\b' + _EKYAK, _kisaltma('teravat saat'), text)
+        text = re.sub(r'\bMWh\b' + _EKYAK, _kisaltma('megavat saat'), text)
+        text = re.sub(r'\bkWh\b' + _EKYAK, _kisaltma('kilovat saat'), text, flags=re.IGNORECASE)
+        text = re.sub(r'\bWh\b' + _EKYAK, _kisaltma('vat saat'), text)
+
         # Kısaltma sözlüğümüzde olmayan (ÇYDD, PKK, TRT, KHK gibi — sonsuz
         # sayıda olabilecek) büyük harfli kısaltmalar için son çare: harfleri
         # boşlukla ayır ki Supertonic her harfi ayrı ayrı Türkçe harf ismiyle
@@ -445,13 +472,24 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
         # telaffuza kaçmasın. İSTİSNA: bazı kısaltmalar Türkçe'de tek kelime
         # gibi okunur (NATO → "nato", FETÖ → "fetö") — onları bölersek bozulur,
         # o yüzden ayrı bir listede tutulup dokunulmuyor.
-        _TR_KISALTMA_KELIME_GIBI = {'NATO','FETÖ','UEFA','FIFA','AFAD','ASELSAN','TUSAŞ','ROKETSAN'}
+        _TR_KISALTMA_KELIME_GIBI = {
+            'NATO','FETÖ','UEFA','FIFA','AFAD','ASELSAN','TUSAŞ','ROKETSAN','NASA',
+        }
+        # Ardından kesme işaretiyle gelen bir ek varsa (ör. GPU'lar, NASA'nın) onu
+        # da bu regex'e yakalatıyoruz -- yoksa ek, aşağıdaki genel güvenlik ağına
+        # kalıp harf harf ayrılmış SON harfe boşluksuz yapışıyordu ("G P U'lar" ->
+        # "G P Ular" gibi anlamsız/garip bir okunuşa yol açıyordu). Kelime gibi
+        # okunanlarda (NASA vb.) ek zaten doğrudan bitişik yazılır (Türkçe'de
+        # kesme işareti sadece imla kuralı, telaffuzu etkilemez); harf harf
+        # ayrılanlarda ek boşlukla ayrı bir kelime olarak eklenir.
         def _harf_harf(m):
-            kelime = m.group(0)
+            kelime = m.group(1)
+            suffix = m.group(2) or ''
             if kelime.upper() in _TR_KISALTMA_KELIME_GIBI:
-                return kelime
-            return ' '.join(kelime)
-        text = re.sub(r'\b[A-ZÇĞİÖŞÜ]{2,6}\b', _harf_harf, text)
+                return kelime + suffix
+            spelled = ' '.join(kelime)
+            return f'{spelled} {suffix}' if suffix else spelled
+        text = re.sub(r'\b([A-ZÇĞİÖŞÜ]{2,6})\b' + _EKYAK, _harf_harf, text)
 
         # Son güvenlik ağı: sayı/birim dışındaki kelimelerde de (özel adlar,
         # "Meteoroloji'den" gibi) kesme işareti+ek kalıyordu — bunlar bizim sayı
@@ -466,6 +504,11 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
     text = re.sub(r'https?://\S+', '', text)
     # Özel semboller
     text = re.sub(r'[#@|_~^\\<>{}[\]]', ' ', text)
+    # Bir kelimeye/rakama bitişik kalan kalıntı tireler (ör. "GPT-3" gibi harf
+    # kodu+rakam birleşimlerinden kalan "-üçün") -- saat/yüzde aralığı ve skor
+    # regex'lerinin BİLEREK ürettiği " - " (boşluklu, okunabilir duraklama)
+    # ayracına DOKUNMUYOR, sadece boşluksuz/bitişik tireleri temizliyor.
+    text = re.sub(r'(?<!\s)-(?!\s)', ' ', text)
     # Birden fazla boşluk → tek boşluk
     text = re.sub(r'\s+', ' ', text).strip()
     return text

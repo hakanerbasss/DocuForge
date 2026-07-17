@@ -17,6 +17,12 @@ Language rules:
 - Do not switch to English unless the target language is English.
 - Use fluent, natural and emotionally engaging language.
 - Preserve proper names and necessary scientific terminology.
+- For Turkish ("tr"): never use a comma as a thousands separator (never write
+  "1,287" to mean one thousand two hundred eighty-seven -- this reads as a
+  decimal in Turkish and gets misread by text-to-speech). Write large whole
+  numbers either with no separator ("1287") or with a period as the thousands
+  separator ("1.287"), and use a comma only for an actual decimal fraction
+  ("3,5").
 
 Content type style:
 

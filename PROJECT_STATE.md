@@ -314,7 +314,20 @@ Kullanıcının Instagram bot projesindeki (`hakanerbasss.github.io`) ayrı bir 
 - **Entegrasyon:** `tr_tts_normalize.py`, `app/utils/tr_tts_normalize.py` olarak taşındı (`clean_tts_text` public fonksiyonu), `voice_service.py` sahne metnini okuduktan hemen sonra `text = clean_tts_text(text, lang=language)` çağırıyor. `language` zaten `project.json`'dan okunup sağlayıcıya geçirilen aynı değer olduğu için Türkçe olmayan projeler dokunulmadan geçiyor (fonksiyonun kendi `lang == "tr"` kapısı sayesinde).
 - **Kapsam:** tam sayılar, sıra sayılar, ondalık sayılar (virgül/nokta), yüzde (+ aralık), saat (+ aralık), tarih, sıcaklık/derece, negatif sayılar, hal ekleri (kesme işaretinden sonraki -e/-de/-den/-in/-inde Türkçe ünlü uyumuyla doğru sayı sözcüğüne bağlanıyor), para birimi/ölçü/veri birimi kısaltmaları, kurum/sınav kısaltmaları (TBMM, YKS, SGK, ABD, vb. tam açılım + doğru hal ekiyle), sözlükte olmayan büyük harfli kısaltmalar (harf harf okunuyor, NATO/FETÖ gibi kelime-gibi-okunanlar hariç), markdown kalıntıları ve URL temizliği.
 - **Bilinen sınırlama (kaynak modülden devralındı):** skor (3-1) ile sayı aralığı (10-15) ayrımı regex ile bağlamdan çözülemiyor, ikisi de düz yan yana okunuyor — tam çözüm için TTS öncesi bir LLM adımı gerekir, henüz uygulanmadı.
-- **Test edildi:** `test_tr_tts_normalize.py` — 21 farklı normalizasyon senaryosu (yukarıdaki kapsamın hepsi) + Türkçe olmayan dilin dokunulmadan geçtiği doğrulandı (22/22 geçti). Ayrıca `VoiceService.generate()`'ın sahte bir `VoiceProvider`'a normalize edilmiş metni gönderdiği uçtan uca doğrulandı (mock provider + mock `_probe_duration`).
+- **Test edildi:** `test_tr_tts_normalize.py` — normalizasyon senaryoları + Türkçe olmayan dilin dokunulmadan geçtiği doğrulandı. Ayrıca `VoiceService.generate()`'ın sahte bir `VoiceProvider`'a normalize edilmiş metni gönderdiği uçtan uca doğrulandı (mock provider + mock `_probe_duration`).
+
+### Kullanıcının gerçek bir üretim altyazısıyla (`yapay_zeka_dogayi_kurtarabilir_mi`) bulduğu ek hatalar
+
+Kullanıcı gerçek bir projenin `subtitles.srt` dosyasını paylaştı; modülü o metinle çalıştırıp 6 gerçek hata bulundu ve düzeltildi — hepsi regex/sözlük eksikliğiydi, gerçek bağlamsal belirsizlik değildi (LLM'e gerek kalmadı):
+
+- **Enerji birimleri eksikti:** `MWh`, `Wh`, `TWh`, `kWh` sözlükte yoktu, olduğu gibi TTS'e gidiyordu → "megavat saat"/"vat saat"/"teravat saat"/"kilovat saat" olarak açılıyor.
+- **`ppm` hiç tanınmıyordu**, eklenirken de önce yanlış yapıldı (sonek gibi "420 milyonda bir" değil, `%` ile aynı ÖNEK mantığıyla "milyonda dört yüz yirmi" olması gerekiyordu) — düzeltildi.
+- **`NASA` harf harf okunuyordu** ("N A S Anın") — kelime gibi okunanlar listesine eklendi.
+- **Harf-harf ayrılmış kısaltmalara gelen ek boşluksuz yapışıyordu:** `GPU'lar` → `G P Ular` (anlamsız) yerine artık `G P U lar` (ek ayrı kelime olarak boşlukla ekleniyor). `_harf_harf` artık kesme işaretli eki kendi regex'ine dahil edip (`_EKYAK`) doğru şekilde çözüyor.
+- **`GPT-3` gibi harf-kodu+tire+rakam kalıpları** tireyi hiç temizlemiyordu (`G P T-üçün` gibi çıplak tire TTS'e gidiyordu) — son "özel semboller" adımına, saat/yüzde aralığı ve skor regex'lerinin bilerek ürettiği boşluklu " - " ayracına DOKUNMADAN, sadece bitişik/kalıntı tireleri temizleyen bir kural eklendi.
+- **Ondalık nokta "nokta" diye okunuyordu:** DeepSeek üretimi script'lerde ondalıklar sık sık İngilizce noktayla yazılıyor (1.2, 4.3, 2.9 gibi) — artık noktalama işaretinin harfi harfine adı ("nokta") yerine Türkçe'de ondalık ayracın doğal okunuşu olan "virgül" ile okunuyor ("bir nokta iki derece" değil "bir virgül iki derece").
+- **Çözülmeyen tek gerçek belirsizlik:** `1,287 MWh` gibi İngilizce binlik-ayıracı virgülü, zaten test edilmiş 3 haneli ondalık hassasiyet örneğiyle (`0,003`) regex düzeyinde ayırt edilemiyor (ikisi de virgülden sonra 3 hane). Regex ile riskli bir tahmin yapmak yerine kaynağında çözüldü: `app/prompts/script.txt`'e "Türkçe'de binlik ayıracı olarak virgül kullanma" talimatı eklendi.
+- **Test edildi:** yukarıdaki 8 yeni senaryo `test_tr_tts_normalize.py`'ye eklendi (toplam 30 test), hepsi geçti; `VoiceService.generate()` uçtan uca tekrar doğrulandı.
 
 ---
 

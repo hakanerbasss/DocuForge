@@ -25,6 +25,16 @@ cases = [
     ("ÇYDD toplantı yaptı.", "Ç Y D D toplantı yaptı."),
     ("NATO zirvesi yapıldı.", "NATO zirvesi yapıldı."),
     ("**kalın** ve `kod` metin.", "kalın ve metin."),
+    # Gerçek üretim script'inde (yapay_zeka_dogayi_kurtarabilir_mi) bulunan,
+    # daha önce yanlış okunan kalıplar.
+    ("Sıcaklık 1.2 derece arttı.", "Sıcaklık bir virgül iki derece arttı."),
+    ("Bir sorgu 2.9 Wh enerji tüketiyor.", "Bir sorgu iki virgül dokuz vat saat enerji tüketiyor."),
+    ("Tüketim 85 ile 134 TWh arasında.", "Tüketim seksen beş ile yüz otuz dört teravat saat arasında."),
+    ("Eğitim 200 MWh enerji tüketti.", "Eğitim iki yüz megavat saat enerji tüketti."),
+    ("280 ppm iken 420 ppm'e ulaştı.", "milyonda iki yüz seksen iken milyonda dört yüz yirmiye ulaştı."),
+    ("NASA'nın verilerine göre.", "NASAnın verilerine göre."),
+    ("GPU'lar ve TPU'lar yenileniyor.", "G P U lar ve T P U lar yenileniyor."),
+    ("GPT-3'ün eğitimi uzun sürdü.", "G P T üçün eğitimi uzun sürdü."),
 ]
 
 failures = []
