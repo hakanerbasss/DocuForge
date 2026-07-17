@@ -373,6 +373,14 @@ Kullanıcı takip isteği: müzik önizleme çalışıyor, güzel — konu seçi
 - **`/new` sayfası:** müzik arama kutusu artık konu her değiştiğinde (konu inputundan çıkınca/blur, ya da AI konu önerisinden bir başlık seçilince) otomatik olarak bu endpoint'i çağırıp kendini dolduruyor -- kullanıcı yine de "Ara"ya basmadan önce metni elle değiştirebiliyor, otomatik arama tetiklenmiyor. Sadece müzik açık + Jamendo seçiliyken (`musicBrowseRow` görünürken) çalışıyor, gereksiz çağrı yapmıyor.
 - **Test edildi:** `/api/music-mood`'un boş konu/AI başarılı/AI başarısız üç senaryosu (FastAPI `TestClient` + mock `get_ai`), `/new` sayfasının yeni JS ile hatasız render olduğu ve sözdizimsel olarak geçerli olduğu.
 
+### Etiketler kısaltıldı + tıklanabilir çip haline getirildi
+
+Kullanıcı geri bildirimi: önizleme çalışıyor ama önceki tek-satır AI önerisi ("mysterious dark ambient tech cinematic" gibi 5 kelime birden) Jamendo'da sonuç getirmiyordu — Jamendo'nun `tags` parametresi tek uzun bir AND'lenmiş ifadeyle değil, birkaç kısa bağımsız etiketle çok daha iyi eşleşiyor. Kullanıcı ayrıca Jamendo'nun varsayılan sağlayıcı olmasını ve etiketlerin arama kutusuna tek tek eklenebilmesini istedi.
+
+- **`GET /api/music-mood` artık `{"query": "..."}` değil `{"tags": [...]}` döndürüyor** — DeepSeek'e "6 tane KISA, BAĞIMSIZ mood/tür etiketi öner (1-2 kelime, ör. 'cinematic', 'dark ambient', 'epic')" diye soruluyor, virgülle ayrılmış liste olarak parse ediliyor. Konu boşsa veya AI başarısız olursa, sabit content-type mood'u kelimelere bölüp (`"cinematic documentary ambient"` → `["cinematic","documentary","ambient"]`) aynı liste formatını koruyor.
+- **`/new` sayfası:** Müzik sağlayıcı `<select>`'inde artık **Jamendo varsayılan seçili** (önceden "Yerel"di). Arama kutusunun altına `musicMoodTags` adında bir çip alanı eklendi — konu değiştiğinde (blur/AI öneri seçimi) bu alan dolup her etiket ayrı, küçük, tıklanabilir bir "+ etiket" çipine dönüşüyor. Bir çipe tıklayınca (`addMusicTag`) etiket **arama kutusuna eklenir** (üzerine yazmaz, aynı etiket tekrar eklenmez), kullanıcı istediği kadar etiketi birleştirip "Ara"ya basabiliyor.
+- **Test edildi:** `/api/music-mood`'un yeni `tags` listesi formatını (boş konu/AI başarılı — numaralandırma ve fazladan boşluk gibi gürültüyü temizleyerek/AI başarısız senaryoları), `/new` sayfasının Jamendo'nun varsayılan seçili olduğunu ve yeni çip render/ekleme fonksiyonlarının sözdizimsel geçerliliğini doğruladım.
+
 ---
 
 ## Kilitli geliştirme sırası

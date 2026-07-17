@@ -405,8 +405,8 @@ Arka plan m\u00fczi\u011fi ekle
 <div id="musicProviderRow" style="display:none;margin-top:10px;margin-left:22px">
 <label for="music_provider">M\u00fczik Sa\u011flay\u0131c\u0131</label>
 <select id="music_provider" onchange="onMusicProviderChange()">
-<option value="local" selected>Yerel (music/ klas\u00f6r\u00fc)</option>
-<option value="jamendo">Jamendo (telifsiz)</option>
+<option value="local">Yerel (music/ klas\u00f6r\u00fc)</option>
+<option value="jamendo" selected>Jamendo (telifsiz)</option>
 <option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
 </select>
 <div class="hint">Jamendo/Mubert i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
@@ -416,6 +416,7 @@ Arka plan m\u00fczi\u011fi ekle
 <input id="musicSearchQuery" placeholder="\u00d6rnek: cinematic ambient (bo\u015f b\u0131rak\u0131rsan i\u00e7erik t\u00fcr\u00fcne g\u00f6re aran\u0131r)" style="flex:1">
 <button type="button" id="musicSearchBtn" onclick="searchMusic()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🎧 Ara</button>
 </div>
+<div id="musicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
 <div id="musicResults" style="margin-top:10px"></div>
 <div id="musicSelectedInfo" class="hint" style="display:none;margin-top:10px;font-weight:700;color:#08763a"></div>
 </div>
@@ -635,18 +636,33 @@ async function updateMusicMoodSuggestion(){
   if(document.getElementById("musicBrowseRow").style.display!=="block")return;
   const topic=document.getElementById("topic").value.trim();
   const contentType=document.getElementById("content_type").value;
-  const box=document.getElementById("musicSearchQuery");
-  const original=box.placeholder;
-  box.placeholder="⏳ Konuya göre arama terimleri hazırlanıyor…";
+  const box=document.getElementById("musicMoodTags");
+  box.innerHTML='<span class="hint">Etiketler hazırlanıyor…</span>';
   try{
     const params=new URLSearchParams({topic, content_type: contentType});
     const res=await fetch(`/api/music-mood?${params.toString()}`);
     const data=await res.json();
-    if(data.query)box.value=data.query;
+    renderMusicMoodTags(data.tags||[]);
   }catch(e){
-    /* sadece bir öneri, sessizce geç */
-  }finally{
-    box.placeholder=original;
+    box.innerHTML="";
+  }
+}
+
+function renderMusicMoodTags(tags){
+  const box=document.getElementById("musicMoodTags");
+  if(!tags.length){box.innerHTML="";return;}
+  box.innerHTML=tags.map(tag=>
+    `<button type="button" class="music-tag-btn" data-tag="${escapeHtml(tag)}" onclick="addMusicTag(this)" style="width:auto;min-height:30px;margin-top:0;padding:0 12px;font-size:12px;font-weight:700;background:white;color:#2166f3;border:1px solid #cbd6e5;border-radius:999px;cursor:pointer">+ ${escapeHtml(tag)}</button>`
+  ).join("");
+}
+
+function addMusicTag(btn){
+  const tag=btn.getAttribute("data-tag");
+  const input=document.getElementById("musicSearchQuery");
+  const current=input.value.split(/\s+/).map(t=>t.trim()).filter(Boolean);
+  if(!current.includes(tag)){
+    current.push(tag);
+    input.value=current.join(" ");
   }
 }
 
@@ -885,38 +901,43 @@ def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
 
 @router.get("/api/music-mood")
 def music_mood(topic: str = "", content_type: str = "documentary") -> dict[str, Any]:
-    """Best-effort English mood/genre keywords for the music search box,
-    derived from the project topic -- falls back to the plain content-type
-    mood (same one /api/music-search itself falls back to) if the topic is
-    empty or the AI call fails, since this only ever prefills a text box
-    the user can still edit before searching."""
+    """Short, individual English mood/genre tags for the music search box,
+    derived from the project topic -- Jamendo's tag search matches best on
+    a handful of short standalone tags, not one long AND-ed phrase, so this
+    returns a list the UI renders as clickable chips rather than a single
+    query string. Falls back to the plain content-type mood (same one
+    /api/music-search itself falls back to) split into words if the topic
+    is empty or the AI call fails, since this only ever prefills a text
+    box the user can still edit before searching."""
 
     from app.services.render_service import RenderService
 
-    fallback = RenderService()._build_music_query(
+    fallback_tags = RenderService()._build_music_query(
         {"content_type": content_type}
-    )
+    ).split()
 
     topic = topic.strip()
 
     if not topic:
-        return {"query": fallback}
+        return {"tags": fallback_tags}
 
     try:
         from app.ai.factory import get_ai
 
         prompt = (
-            "Suggest 3-5 short English mood/genre keywords for searching "
-            "royalty-free background music on Jamendo, fitting for a "
-            f"{content_type} video about this topic:\n\n{topic}\n\n"
-            "Return ONLY the keywords, lowercase, space-separated. "
-            "No explanation, no punctuation, no quotes."
+            "Suggest 6 short, individual music mood/genre tags (1-2 words "
+            "each, e.g. 'cinematic', 'dark ambient', 'epic', 'uplifting') "
+            "for searching royalty-free background music on Jamendo, "
+            f"fitting a {content_type} video about this topic:\n\n{topic}\n\n"
+            "Return ONLY a comma-separated list, lowercase. "
+            "No numbering, no explanation, no quotes."
         )
-        response = get_ai().generate(prompt)
-        keywords = " ".join(str(response).strip().split())[:80]
-        return {"query": keywords or fallback}
+        response = str(get_ai().generate(prompt)).strip()
+        tags = [tag.strip() for tag in response.split(",") if tag.strip()]
+
+        return {"tags": tags[:8] or fallback_tags}
     except Exception:
-        return {"query": fallback}
+        return {"tags": fallback_tags}
 
 
 @router.get("/api/music-search")
