@@ -394,6 +394,19 @@ Kullanıcı sordu: arka plan müziği konuşmayı bastırmaz mı? Cevap: hayır,
 
 ---
 
+## MS/yıl+nokta/Roma rakamı seslendirme hataları + amix normalize sorunu
+
+Kullanıcı gerçek bir üretimin (`yeraltı_şehri` konulu) `subtitles.txt` dosyasını paylaştı: "MS kısmında seslendirme hatası var, diğer kısımlara da bakarsın" ve ayrıca "%18 ayarladım ama daha yüksek çıkıyor, konuşmayı bastırıyor" dedi. Metni `clean_tts_text`'ten geçirip 4 gerçek hata + 1 render (ffmpeg) hatası bulundu:
+
+- **`MS`/`MÖ` (Milattan Sonra/Önce) sözlükte yoktu** — "MS 532'de" harf harf "M S beş yüz otuz ikide" okunuyordu. Kurum kısaltmaları sözlüğüne eklendi.
+- **Sıra sayı/yıl+nokta karışıklığı (en ciddi bulgu):** `"1453. İstanbul fethedildi"` gibi bir yılın ardından cümle sonu noktası gelen kalıplar, mevcut sıra sayı regex'i tarafından yanlışlıkla "1453'üncü" (ordinal) diye okunuyordu — "bin dört yüz elli üçüncü İstanbul fethedildi" gibi anlamsız bir cümle çıkıyordu. Kök neden: eski regex `\d+\.` içeren HER durumu ordinal sayıyordu, nokta sonrası küçük/büyük harf ayrımı yapmıyordu. **Düzeltme:** nokta sonrası KÜÇÜK harfle aynı cümle içinde devam ediyorsa ("13. yüzyılda" gibi) hâlâ ordinal; BÜYÜK harfle yeni cümle başlıyorsa ya da metin bitiyorsa ("1453. İstanbul", "Yıl 330. Roma" gibi) sayı kelimeye çevrilip nokta (cümle arası duraklama için) korunuyor.
+- **Roma rakamlı hükümdar numaraları hiç tanınmıyordu:** "I. Konstantin", "I. Justinianus" gibi kalıplar dokunulmadan TTS'e gidiyordu (harf gibi "ı" okunması bekleniyor). I-XX arası sabit bir ordinal sözlükle ("I. Ahmet" → "birinci Ahmet") çözüldü — büyük harfle devam eden isim öncesi Roma rakamı+nokta kalıbı yakalanıyor, sözlükte olmayan daha büyük/nadir bir rakama dokunulmuyor.
+- **LIDAR/UNESCO gibi ek kelime-gibi-okunan kısaltmalar** kelime gibi okunanlar listesine eklendi (UNICEF, RADAR, SONAR, INTERPOL de eklendi) — önceden harf harf "L I D A R" okunuyordu.
+- **Asıl "%18 ayarladım ama daha yüksek çıkıyor" sorunu TTS metniyle ilgili değildi, render/ffmpeg tarafındaydı:** `amix` filtresi varsayılan olarak `normalize=1` ile çalışıyor -- ffmpeg bunu, girdi sayısına göre seviyeleri OTOMATİK olarak dinamik şekilde yeniden dengeleyip clipping'i önlemek için kullanıyor; bu da bizim `volume=0.18` ile önceden ayarladığımız sabit oranı bozup, özellikle anlatımın SUSTUĞU anlarda müziği geri yukarı çekiyordu (daha az "aktif" girdi olduğunu düşünüp otomatik telafi ediyordu). `amix` filtresine `normalize=0` eklendi -- artık ses oranını SADECE bizim ayarladığımız `volume=X` belirliyor, ffmpeg'in kendi otomatik dengelemesi devre dışı.
+- **Test edildi:** 6 yeni normalizasyon senaryosu `test_tr_tts_normalize.py`'ye eklendi (toplam 36, hepsi geçti) + tüm gerçek `subtitles.txt` transkripti satır satır tekrar çalıştırılıp gözle doğrulandı; `_apply_background_music()`'in ürettiği ffmpeg filtresinde artık `normalize=0` bulunduğu mock testle doğrulandı.
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:

@@ -207,6 +207,8 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             'TCMB': 'Türkiye Cumhuriyet Merkez Bankası',
             'BM': 'Birleşmiş Milletler',
             'AB': 'Avrupa Birliği',
+            'MS': 'Milattan Sonra',
+            'MÖ': 'Milattan Önce',
         }
         # Açılımın SON kelimesi ünlüyle bittiği için hal eki tampon 'n' ister
         # (Kurumu'ndan, Meclisi'nde gibi) — genel güvenlik ağı sadece apostrofu
@@ -312,11 +314,53 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             return out
         text = re.sub(r'%\s*(\d+)(?:,(\d{1,2}))?', _yuzde, text)
 
-        # Sıra sayılar: "13." (nokta + boşluk/son, arkasında rakam YOK) → "on üçüncü"
-        # ÖNCE işlenmeli — aksi halde "13." önce "on üç." olur, sıra anlamı kaybolur.
+        # Sıra sayılar: "13. yüzyılda" gibi, arkasından KÜÇÜK harfle aynı
+        # cümle içinde devam eden "X." kalıbı → "on üçüncü" (nokta hiç
+        # okunmaz, ordinal ekiyle birleşik okunur). ÖNCE işlenmeli — aksi
+        # halde "13." önce "on üç." olur, sıra anlamı kaybolur.
+        #
+        # Arkasından BÜYÜK harfle yeni bir cümle başlıyorsa ("1453. İstanbul
+        # fethedildi.", "Yıl 330. Roma İmparatoru..." gibi) bu bir sıra sayı
+        # DEĞİL, bir yıl/sayının ardından gelen cümle sonu noktasıdır --
+        # gerçek üretim script'inde canlı yakalanan bug: "1453." yanlışlıkla
+        # "bin dört yüz elli üçüncü" diye (1453'üncü anlamında) okunuyordu.
+        # Bu durumda sayı kelimeye çevrilir VE nokta (cümle arası duraklama
+        # için) korunur.
         def _sira_sayi(m):
             return _tr_ordinal_words(int(m.group(1)))
-        text = re.sub(r'\b(\d{1,4})\.(?=\s|$)', _sira_sayi, text)
+        text = re.sub(r'\b(\d{1,4})\.(?=\s[a-zçğıöşü])', _sira_sayi, text)
+
+        def _yil_nokta(m):
+            return _tr_num_to_words(int(m.group(1))) + '.'
+        text = re.sub(r'\b(\d{1,4})\.(?=\s[A-ZÇĞİÖŞÜ]|$)', _yil_nokta, text)
+
+        # Roma rakamlı hükümdar/sıra numaraları: "I. Konstantin", "III.
+        # Selim" gibi -- Türkçe tarih/belgesel metinlerinde hükümdar
+        # numaralandırması hemen hemen her zaman Roma rakamıyla yazılır
+        # (Arap rakamlı sıra sayı yukarıda ayrıca ele alınıyor, ikisi
+        # karışmıyor: biri Roma harfleri, biri rakam). Kapsam I-XX
+        # (pratikte hükümdar numaralandırmasının neredeyse tamamını
+        # kapsıyor) -- listede olmayan daha büyük/nadir bir Roma rakamı
+        # dokunulmadan bırakılır, yanlış tahmin etmek hiç dönüştürmemekten
+        # daha kötü bir okuma hatasına yol açar.
+        _ROMA_SIRA_SAYI = {
+            'I': 'birinci', 'II': 'ikinci', 'III': 'üçüncü', 'IV': 'dördüncü',
+            'V': 'beşinci', 'VI': 'altıncı', 'VII': 'yedinci', 'VIII': 'sekizinci',
+            'IX': 'dokuzuncu', 'X': 'onuncu', 'XI': 'on birinci', 'XII': 'on ikinci',
+            'XIII': 'on üçüncü', 'XIV': 'on dördüncü', 'XV': 'on beşinci',
+            'XVI': 'on altıncı', 'XVII': 'on yedinci', 'XVIII': 'on sekizinci',
+            'XIX': 'on dokuzuncu', 'XX': 'yirminci',
+        }
+        def _roma_sira_sayi(m):
+            return _ROMA_SIRA_SAYI[m.group(1)]
+        _roma_pattern = '|'.join(
+            sorted(_ROMA_SIRA_SAYI, key=len, reverse=True)
+        )
+        text = re.sub(
+            rf'\b({_roma_pattern})\.(?=\s[A-ZÇĞİÖŞÜ])',
+            _roma_sira_sayi,
+            text,
+        )
 
         _EKYAK = r"(?:['’]([a-zçğıöşüA-ZÇĞİÖŞÜ]{1,4}))?"  # kesme işaretli ek — yakalanır, silinmez
 
@@ -474,6 +518,7 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
         # o yüzden ayrı bir listede tutulup dokunulmuyor.
         _TR_KISALTMA_KELIME_GIBI = {
             'NATO','FETÖ','UEFA','FIFA','AFAD','ASELSAN','TUSAŞ','ROKETSAN','NASA',
+            'UNESCO','UNICEF','LIDAR','RADAR','SONAR','INTERPOL',
         }
         # Ardından kesme işaretiyle gelen bir ek varsa (ör. GPU'lar, NASA'nın) onu
         # da bu regex'e yakalatıyoruz -- yoksa ek, aşağıdaki genel güvenlik ağına

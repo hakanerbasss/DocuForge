@@ -35,6 +35,17 @@ cases = [
     ("NASA'nın verilerine göre.", "NASAnın verilerine göre."),
     ("GPU'lar ve TPU'lar yenileniyor.", "G P U lar ve T P U lar yenileniyor."),
     ("GPT-3'ün eğitimi uzun sürdü.", "G P T üçün eğitimi uzun sürdü."),
+    # "yeraltı_şehri" script'inde bulunan kalıplar (MS/MÖ, sıra sayı/yıl+nokta
+    # karışıklığı, Roma rakamlı hükümdar numaraları, kelime gibi okunan yeni
+    # kısaltmalar).
+    ("İmparator I. Justinianus tarafından MS 532'de yaptırıldı.",
+     "İmparator birinci Justinianus tarafından Milattan Sonra beş yüz otuz ikide yaptırıldı."),
+    ("Şehir MÖ 660'ta kuruldu.", "Şehir Milattan Önce altı yüz altmışta kuruldu."),
+    ("Yıl 330. Roma İmparatoru I. Konstantin, şehrini kurarken.",
+     "Yıl üç yüz otuz. Roma İmparatoru birinci Konstantin, şehrini kurarken."),
+    ("1453. İstanbul fethedildi.", "bin dört yüz elli üç. İstanbul fethedildi."),
+    ("13. yüzyılda yaşandı.", "on üçüncü yüzyılda yaşandı."),
+    ("LIDAR ve UNESCO değerlendiriyor.", "LIDAR ve UNESCO değerlendiriyor."),
 ]
 
 failures = []

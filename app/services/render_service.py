@@ -297,7 +297,7 @@ class RenderService:
                 f"afade=t=out:st={fade_start:.2f}:d={fade_duration:.2f}"
                 f"[music];"
                 f"[0:a][music]amix=inputs=2:duration=first:"
-                f"dropout_transition=0[aout]"
+                f"dropout_transition=0:normalize=0[aout]"
             ),
             "-map",
             "0:v",
