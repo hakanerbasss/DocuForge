@@ -53,7 +53,7 @@ class BuildRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
     language: str = Field(default="tr")
     content_type: str = Field(default="documentary")
-    target_duration_seconds: int = Field(default=600, ge=10, le=7200)
+    target_duration_seconds: int = Field(default=900, ge=10, le=7200)
     media_mode: str = Field(default="mixed")
     image_provider: str = Field(default="pexels")
     video_provider: str = Field(default="pexels")
@@ -311,8 +311,8 @@ button:disabled{opacity:.6;cursor:wait}
 </div>
 
 <label for="duration">Hedef S\u00fcre (saniye)</label>
-<input id="duration" type="number" value="600" min="10" max="7200">
-<div class="hint" id="durationHint">~10 dakika</div>
+<input id="duration" type="number" value="900" min="10" max="7200">
+<div class="hint" id="durationHint">~15 dakika</div>
 
 <h3>🎬 Medya</h3>
 <div class="row">
@@ -517,7 +517,7 @@ function onTypeChange(){
   if(t==="shorts"){d.value=60;r.value="vertical";h.textContent="~1 dakika";}
   else if(t==="news"){d.value=180;r.value="720p";h.textContent="~3 dakika";}
   else if(t==="informational"){d.value=300;r.value="720p";h.textContent="~5 dakika";}
-  else{d.value=600;r.value="720p";h.textContent="~10 dakika";}
+  else{d.value=900;r.value="720p";h.textContent="~15 dakika";}
   updateHint();
 }
 
