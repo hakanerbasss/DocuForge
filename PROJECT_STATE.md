@@ -341,6 +341,18 @@ Kullanıcı isteği: "altyazı srt formatının yanına txt formatı da koyalım
 
 ---
 
+## /new sayfasına AI konu önerisi özelliği
+
+Kullanıcı isteği: konu kutusunun yanına DeepSeek'in konu önereceği bir özellik eklensin, basınca listelesin, seçince konu başlığına gelsin — ama manuel konu yazma kısmı kaldırılmasın.
+
+- **Yeni agent:** `app/agents/topic.py` (`TopicSuggestionAgent`), diğer agent'larla aynı desen (`BaseAgent`, JSON parse-and-validate, 3 deneme, code-fence temizleme). Prompt (`app/prompts/topic_suggestions.txt`), seçili `content_type`/`language`'a göre 8 konu önerisi istiyor — her biri `title` (zorunlu), `hook` (tek cümlelik tıklama nedeni), `visual_left`/`visual_right` (opsiyonel, split-contrast kapak görseli için İngilizce kısa görsel ipucu — boş string olabilir) alanlarıyla, en yüksekten en düşük tıklama potansiyeline sıralı.
+- **Endpoint:** `POST /api/topic-suggestions` (`content_type`, `language` gövdede) — agent'ı çağırıp JSON'u aynen döndürüyor, hata durumunda 502 + Türkçe hata mesajı.
+- **`/new` sayfası:** Konu kutusunun hemen altına "💡 Konu Önerisi Al" butonu eklendi (manuel giriş kutusu dokunulmadan duruyor). Tıklayınca seçili içerik türü/dil ile isteği atıyor, sonuçları listeliyor — ilk 3 öneri 🥇🥈🥉 madalyalı ayrı bir "En yüksek tıklama potansiyeline sahip 3 konu" özet kutusunda, tüm liste altında (her satırda başlık + hook + varsa Sol/Sağ görsel ipucu) tıklanabilir kartlar halinde. Bir karta tıklayınca `#topic` input'u o başlıkla doluyor, öneri listesi kapanıyor.
+- **Bilinen hata düzeltildi (bu özellik eklenirken bulundu):** Eklenen "💡" butonuna ait metin dosyaya yanlışlıkla eşleşmemiş bir surrogate-pair kaçış dizisi (`💡`) olarak yazılmış, bu da `/new` sayfasını (daha önce bu proje tarihinde bir kere daha görülen "lone-surrogate crash" sınıfından) UTF-8 encode hatasıyla çökertiyordu. Python string literal'lerinde ayrık `\uXXXX` kaçışları otomatik olarak tek bir astral karaktere birleşmiyor -- gerçek UTF-8 emoji karakteriyle değiştirilerek düzeltildi. Dosyanın geri kalanındaki tüm diğer emoji zaten ham UTF-8 karakter olarak duruyordu, sadece bu tek nokta etkilenmişti.
+- **Test edildi:** `TopicSuggestionAgent`'ın sahte AI yanıtlarıyla (geçerli JSON, eksik/hatalı alanlar, code-fence'li yanıt, tamamen geçersiz JSON) doğru parse/validate/hata davranışı; `/api/topic-suggestions` endpoint'i FastAPI `TestClient` ile (başarılı, agent hatası → 502, varsayılan gövde); `/new` sayfasının hatasız render olduğu, manuel konu girişinin hâlâ zorunlu/çalışır durumda olduğu, iki `<script>` bloğunun da `node --check` ile sözdizimsel olarak geçerli olduğu doğrulandı.
+
+---
+
 ## Kilitli geliştirme sırası
 
 Yeni fikir eklenmeden şu sırayla ilerlenir:

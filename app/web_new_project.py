@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from app.agents.topic import TopicSuggestionAgent
 from app.pipeline.build_pipeline import (
     STEP_ALLOWED_OVERRIDES,
     BuildPipeline,
@@ -284,6 +285,8 @@ button:disabled{opacity:.6;cursor:wait}
 <h3>📝 \u0130\u00e7erik</h3>
 <label for="topic">Konu</label>
 <input id="topic" placeholder="\u00d6rnek: Kara Deliklerin S\u0131rr\u0131" required minlength="2" maxlength="200">
+<button type="button" id="topicSuggestBtn" onclick="fetchTopicSuggestions()" style="width:auto;min-height:38px;margin-top:8px;padding:0 16px;font-size:14px;font-weight:700;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">💡 Konu \u00d6nerisi Al</button>
+<div id="topicSuggestions" style="display:none;margin-top:12px"></div>
 
 <div class="row">
 <div>
@@ -525,6 +528,77 @@ function updateHint(){
     m>0?(sec>0?`~${m} dk ${sec} sn`:`~${m} dakika`):`${s} saniye`;
 }
 
+function escapeHtml(s){
+  const d=document.createElement("div");
+  d.textContent=s==null?"":String(s);
+  return d.innerHTML;
+}
+
+async function fetchTopicSuggestions(){
+  const btn=document.getElementById("topicSuggestBtn");
+  const box=document.getElementById("topicSuggestions");
+  btn.disabled=true;
+  btn.textContent="⏳ Öneriler hazırlanıyor…";
+  box.style.display="block";
+  box.innerHTML='<div class="hint">DeepSeek konu önerileri hazırlıyor, birkaç saniye sürebilir…</div>';
+  try{
+    const res=await fetch("/api/topic-suggestions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        content_type:document.getElementById("content_type").value,
+        language:document.getElementById("language").value,
+      }),
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||"Öneriler alınamadı.");
+    renderTopicSuggestions(data.suggestions||[]);
+  }catch(err){
+    box.innerHTML=`<div class="hint" style="color:#9f2020">Öneriler alınamadı: ${escapeHtml(err.message)}</div>`;
+  }finally{
+    btn.disabled=false;
+    btn.textContent="💡 Konu Önerisi Al";
+  }
+}
+
+function renderTopicSuggestions(suggestions){
+  const box=document.getElementById("topicSuggestions");
+  if(!suggestions.length){
+    box.innerHTML='<div class="hint">Öneri bulunamadı, tekrar dene.</div>';
+    return;
+  }
+  const medals=["🥇","🥈","🥉"];
+  const top3=suggestions.slice(0,3)
+    .map((s,i)=>`<div>${medals[i]} ${escapeHtml(s.title)}</div>`)
+    .join("");
+  const rows=suggestions.map((s,i)=>{
+    const medal=i<3?medals[i]+" ":"";
+    const hasVisual=s.visual_left||s.visual_right;
+    const visual=hasVisual
+      ? `<div class="hint" style="margin-top:3px">Sol: ${escapeHtml(s.visual_left||"—")} · Sağ: ${escapeHtml(s.visual_right||"—")}</div>`
+      : "";
+    const hook=s.hook?`<div class="hint" style="margin-top:3px">${escapeHtml(s.hook)}</div>`:"";
+    return `<div class="topic-suggestion" data-title="${escapeHtml(s.title)}" onclick="pickTopicSuggestion(this)"
+      style="padding:12px 14px;cursor:pointer;${i>0?"border-top:1px solid #eef1f6":""}"
+      onmouseover="this.style.background='#f5f8fd'" onmouseout="this.style.background=''"
+    >
+      <div style="font-weight:700">${medal}${escapeHtml(s.title)}</div>
+      ${hook}
+      ${visual}
+    </div>`;
+  }).join("");
+  box.innerHTML=`
+    <div class="hint" style="margin-bottom:8px;font-weight:700">🏆 En yüksek tıklama potansiyeline sahip 3 konu</div>
+    <div style="border:1px solid #dbe5f4;border-radius:12px;padding:10px 14px;margin-bottom:12px;background:#f8fbff">${top3}</div>
+    <div style="border:1px solid #dbe5f4;border-radius:12px;overflow:hidden">${rows}</div>
+  `;
+}
+
+function pickTopicSuggestion(el){
+  document.getElementById("topic").value=el.getAttribute("data-title");
+  document.getElementById("topicSuggestions").style.display="none";
+}
+
 function onMusicToggle(){
   const on=document.getElementById("background_music_enabled").checked;
   document.getElementById("musicProviderRow").style.display=on?"block":"none";
@@ -684,6 +758,26 @@ if ("serviceWorker" in navigator) {
 }
 </script>
 </body></html>""")
+
+
+class TopicSuggestionsRequest(BaseModel):
+    content_type: str = Field(default="documentary")
+    language: str = Field(default="tr")
+
+
+@router.post("/api/topic-suggestions")
+def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
+    try:
+        raw = TopicSuggestionAgent().run(
+            language=request.language,
+            content_type=request.content_type,
+        )
+        return json.loads(raw)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Konu önerileri alınamadı: {error}",
+        ) from error
 
 
 @router.post("/api/builds")
