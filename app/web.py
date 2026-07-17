@@ -777,6 +777,21 @@ def project_detail(slug: str) -> HTMLResponse:
                 'onclick="copyToClipboard(this)">📋 Kopyala</button>'
             )
 
+        def copy_element_button(element_id: str, label: str = "📋 Kopyala") -> str:
+            # Reads .textContent from a sibling element instead of an
+            # HTML attribute -- attributes are fine for a single short
+            # line (titles, tags), but the description has real \n\n
+            # paragraph/bullet breaks that need to survive exactly as
+            # typed, which textContent guarantees and an attribute value
+            # doesn't reliably.
+            return (
+                '<button type="button" class="button secondary" '
+                'style="min-height:34px;padding:0 12px;font-size:13px;'
+                'white-space:nowrap" '
+                f'onclick="copyElementText(\'{element_id}\',this)">'
+                f'{label}</button>'
+            )
+
         title_rows = "".join(
             f"""
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #edf1f6">
@@ -788,7 +803,10 @@ def project_detail(slug: str) -> HTMLResponse:
         ) if isinstance(titles, list) else ""
 
         tag_badges = "".join(
-            f'<span class="badge">{html.escape(str(tag))}</span>'
+            f'<span class="badge" style="cursor:pointer" '
+            f'data-copy="{html.escape(str(tag), quote=True)}" '
+            f'onclick="copyToClipboard(this)" '
+            f'title="Kopyalamak için tıkla">{html.escape(str(tag))} 📋</span>'
             for tag in tags
         ) if isinstance(tags, list) else ""
 
@@ -803,14 +821,16 @@ def project_detail(slug: str) -> HTMLResponse:
 
             <h3 style="font-size:15px;margin-bottom:6px">Açıklama</h3>
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px">
-                <p style="margin:0;flex:1">{html.escape(description)}</p>
-                {copy_button(description)}
+                <p id="seoDescription" style="margin:0;flex:1;white-space:pre-wrap">{html.escape(description)}</p>
+                {copy_element_button("seoDescription")}
             </div>
 
             <h3 style="font-size:15px;margin-bottom:6px">Etiketler</h3>
+            <p class="muted" style="margin:0 0 8px;font-size:13px">Tek bir etikete tıklayınca sadece o kopyalanır.</p>
             <div class="badges" style="margin-bottom:10px">{tag_badges}</div>
             <div class="buttons" style="margin-bottom:0">
                 {copy_button(tags_csv)}
+                <span class="muted" style="font-size:13px;align-self:center">← hepsini virgülle kopyala</span>
             </div>
 
             <div class="buttons">
@@ -1096,6 +1116,16 @@ def project_detail(slug: str) -> HTMLResponse:
 
     function copyToClipboard(btn) {{
         const text = btn.getAttribute("data-copy") || "";
+        navigator.clipboard.writeText(text).then(() => {{
+            const original = btn.textContent;
+            btn.textContent = "✓ Kopyalandı";
+            setTimeout(() => {{ btn.textContent = original; }}, 1500);
+        }}).catch(() => alert("Kopyalanamadı — panoya erişim engellendi olabilir."));
+    }}
+
+    function copyElementText(elementId, btn) {{
+        const el = document.getElementById(elementId);
+        const text = el ? el.textContent : "";
         navigator.clipboard.writeText(text).then(() => {{
             const original = btn.textContent;
             btn.textContent = "✓ Kopyalandı";

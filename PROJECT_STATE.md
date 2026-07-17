@@ -1,6 +1,6 @@
 # DocuForge — Proje Durumu
 
-Son güncelleme: 16 Temmuz 2026 (9. güncelleme aynı gün — üretim iptal özelliği + stale "başarısız" gösterge hatası düzeltmesi)
+Son güncelleme: 16 Temmuz 2026 (10. güncelleme aynı gün — tasarımsal SEO açıklaması + paragraf/emoji korunan kopyalama + etiket başına kopyalama)
 
 ## Ana hedef
 
@@ -291,6 +291,17 @@ Kullanıcı canlı bir üretimde şunu yaşadı: sunucuyu güncelleyip restart e
   - Backend: `CANCEL_EVENTS: dict[job_id, threading.Event]` (bellekte, JOBS gibi diske kalıcı değil — restart zaten eski thread'i öldürüyor, `_recover_jobs_from_disk` yeniden başlattığı işler için taze bir event oluşturuyor). Yeni `POST /api/builds/{job_id}/cancel` endpoint'i event'i set ediyor. İş `PipelineCancelled` ile biterse job durumu `"cancelled"` oluyor (`"failed"`'dan ayrı).
   - Frontend: `/new` sihirbazının durum kutusunda, hem `/new` hem ana sayfadaki "Devam eden üretim(ler)" kartlarında, proje detay sayfasında "Devam Et" yanında — hepsinde "⏹ İptal Et" butonu, onay diyaloglu, "mevcut adım bitince duracak" uyarısıyla.
 - **Test edildi:** stale-failed-step düzeltmesi (mock bir action'ın ÇALIŞMA SIRASINDA diskteki `failed_step`'in zaten `None` olduğu doğrulandı), tam pipeline'ın cancel_event set edilince doğru adımdan sonra durduğu (adımlar arası, adım ortasında değil), `/api/builds/{job_id}/cancel` endpoint'i (normal iptal, olmayan iş, zaten bitmiş iş), `_execute_build`'in `PipelineCancelled`'ı yakalayıp `"cancelled"` olarak işaretlediği ve `CANCEL_EVENTS`'ten temizlediği, tüm sayfaların JS sözdizimi.
+
+---
+
+## Tasarımsal SEO açıklaması + kopyalama düzeltmeleri
+
+Kullanıcı üç şey istedi: (1) açıklama metni maddeler/emoji/sembollerle daha "tasarımsal" ve Google'ın düz AI-metni algılamasını önleyecek şekilde yazılsın, (2) kopyalanınca paragraf/madde başları (boş satırlar) korunsun, (3) her etiket ayrı ayrı kopyalanabilsin.
+
+- **SEO prompt'u güncellendi** (`app/prompts/seo.txt`): açıklama artık düz tek paragraf değil — 1-2 cümlelik kanca, boş satır, bağlama uygun emojilerle başlayan 3-6 madde (🔍🌍⚡🎯📌🧠🔥⏳🧬 gibi, her satırda aynısı tekrarlanmadan), boş satır, kısa bir kapanış çağrısı, opsiyonel hashtag satırı — hepsi JSON string içinde gerçek `\n\n`/`\n` ile ayrılmış. Şablon gibi/genel AI diline karşı açık uyarı eklendi ("In this video, we explore..." tarzı klişeler yasak). Shorts için bu yapı atlanıyor (zaten çok kısa).
+- **Kopyalama mekanizması düzeltildi:** Açıklama artık `data-copy` HTML attribute'u yerine görünür `<p id="seoDescription" style="white-space:pre-wrap">` elemanının `.textContent`'inden okunuyor (`copyElementText()` yeni JS fonksiyonu) — bu, HTML attribute içine gömmenin kırılgan olabileceği çoklu satır/boş satırların TAM olarak korunmasını garantiliyor. Ayrıca `white-space:pre-wrap` sayesinde açıklama artık proje sayfasında da düz metin yerine gerçek madde/paragraf yapısıyla görünüyor (önceden tarayıcı boşlukları/satır sonlarını görsel olarak yutuyordu).
+- **Etiket başına kopyalama:** Her etiket rozeti artık tek başına tıklanabilir (kendi `data-copy` değeriyle `copyToClipboard`), üzerinde küçük 📋 ikonu var. Eski "hepsini virgülle kopyala" butonu da duruyor, kaldırılmadı — sadece ek olarak tekli kopyalama geldi.
+- **Test edildi:** çok satırlı/emoji'li bir description'ın `_parse_and_validate`'den (SEOAgent) bozulmadan geçtiği, proje sayfasında `white-space:pre-wrap` + `#seoDescription` elemanının doğru render edildiği, her etiketin kendi `data-copy` değerine sahip olduğu, "hepsini kopyala" butonunun hâlâ çalıştığı, yeni `copyElementText` fonksiyonunun JS sözdizimi ve tüm sayfaların hatasız render olduğu.
 
 ---
 

@@ -39,10 +39,32 @@ Language rules:
 
 Content type style:
 
-- documentary: intriguing, curiosity-driven titles. Description sets context and stakes, 2-4 paragraphs, ends with a soft call to action (subscribe/comment).
-- news: clear, factual, urgent titles. Description leads with the key fact in the first sentence, then supporting detail, 1-3 paragraphs.
-- shorts: short punchy titles under 60 characters. Description is 1-2 sentences plus a call to action, since Shorts descriptions are barely visible.
-- informational: benefit-driven titles ("How to...", "Why..."). Description explains what the viewer will learn, 2-3 paragraphs.
+- documentary: intriguing, curiosity-driven titles. Description sets context and stakes, ends with a soft call to action (subscribe/comment).
+- news: clear, factual, urgent titles. Description leads with the key fact in the first sentence, then supporting detail.
+- shorts: short punchy titles under 60 characters. Description is a short hook plus a call to action, since Shorts descriptions are barely visible -- skip the bullet section below for shorts, just 1-2 lines plus hashtags.
+- informational: benefit-driven titles ("How to...", "Why..."). Description explains what the viewer will learn.
+
+Description formatting (documentary/news/informational -- not shorts):
+
+Write it like a real creator would, not a wall of dense text. Structure it with actual
+line breaks (use \n\n between sections, \n between bullet lines, inside the JSON
+string) as:
+
+1. A 1-2 sentence hook (this is what shows before YouTube's "Show more" cutoff, must
+   stand alone).
+2. A blank line, then 3-6 short bullet lines, each starting with a fitting emoji
+   (pick naturally from context, e.g. 🔍 🌍 ⚡ 🎯 📌 🧠 🔥 ⏳ 🧬 depending on subject --
+   don't reuse the same one for every line), each highlighting one concrete fact,
+   moment, or question from the video. Keep each bullet under ~90 characters.
+3. A blank line, then a short closing call to action (subscribe/comment/share),
+   optionally with one more emoji.
+4. If relevant, a final line of 3-8 lowercase hashtags.
+
+Use emojis with intent, scattered naturally (roughly one per line/bullet, not stacked
+mid-sentence) -- this should read like a well-formatted human-written description, not
+a template. Avoid generic AI-sounding openers like "In this video, we explore..." or
+"Welcome to...". Vary sentence rhythm and word choice the way a real channel's writer
+would.
 
 Requirements:
 
@@ -51,7 +73,7 @@ Requirements:
 - Provide 10-20 relevant tags, ordered from most to least specific.
 - "thumbnail_hook" and "text_overlay" must be SHORT standalone phrases for overlaying on a thumbnail image -- never a full sentence, never identical to any title above.
 - Do not use Markdown code fences.
-- Do not include hashtags inside "description" unless the content_type is shorts.
+- Do not include hashtags inside "description" unless the content_type is shorts or you're adding the final hashtag line described above.
 
 Script:
 
