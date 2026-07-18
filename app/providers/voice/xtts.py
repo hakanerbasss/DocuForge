@@ -145,8 +145,12 @@ class XTTSVoiceProvider(VoiceProvider):
                         from TTS.api import TTS
                     except ImportError as error:
                         raise RuntimeError(
-                            "Coqui TTS is not installed. Run: "
-                            "pip install coqui-tts torch torchaudio"
+                            f"Coqui TTS could not be imported ({error}). "
+                            "If it's already installed, this is usually a "
+                            "dependency version mismatch, not a missing "
+                            "package -- check the real error above. "
+                            "Otherwise run: pip install coqui-tts torch "
+                            "torchaudio"
                         ) from error
 
                     import torch
