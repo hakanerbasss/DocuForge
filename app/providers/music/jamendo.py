@@ -74,20 +74,49 @@ class JamendoMusicProvider(MusicProvider):
         limit: int = 12,
     ) -> list[dict[str, Any]]:
         """Search Jamendo for candidate tracks without downloading --
-        used by the /new wizard's listen-and-pick music browser."""
+        used by the /new wizard's listen-and-pick music browser.
+
+        Jamendo's `tags` parameter only matches its own fixed, curated
+        tag vocabulary -- an AI-suggested mood word or anything typed
+        into the free-text search box very often isn't an exact tag in
+        that vocabulary, so a strict `tags` search came back empty far
+        more often than not. Tries three progressively looser
+        strategies and returns the first one that finds anything:
+        `fuzzytags` (approximate tag matching), then `search` (full-text
+        across track/artist/album names), then no filter at all (just
+        the most popular tracks) as a last resort so the browser is
+        essentially never empty.
+        """
 
         query = query.strip() or "cinematic background"
 
+        for extra_params in (
+            {"fuzzytags": query},
+            {"search": query},
+            {},
+        ):
+            tracks = self._fetch(extra_params, limit)
+
+            if tracks:
+                return tracks
+
+        return []
+
+    def _fetch(
+        self,
+        extra_params: dict[str, Any],
+        limit: int,
+    ) -> list[dict[str, Any]]:
         response = requests.get(
             self.API_URL,
             params={
                 "client_id": settings.jamendo_client_id,
                 "format": "json",
-                "tags": query,
                 "audioformat": "mp32",
                 "limit": limit,
                 "include": "musicinfo",
                 "order": "popularity_total",
+                **extra_params,
             },
             timeout=30,
         )

@@ -46,6 +46,14 @@ cases = [
     ("1453. İstanbul fethedildi.", "bin dört yüz elli üç. İstanbul fethedildi."),
     ("13. yüzyılda yaşandı.", "on üçüncü yüzyılda yaşandı."),
     ("LIDAR ve UNESCO değerlendiriyor.", "LIDAR ve UNESCO değerlendiriyor."),
+    # "airbnb_gizli_kamera" script'inde bulunan yabancı marka adı/kısaltma
+    # telaffuz hataları (Airbnb İngilizce imlayla yanlış okunuyordu, AI harf
+    # harf "A I" diye Türkçe harf isimleriyle okunuyordu).
+    ("Airbnb'de gizli kamera şikayetleri arttı.",
+     "Eyırbienbide gizli kamera şikayetleri arttı."),
+    ("AI destekli kameralar sadece hareket algıladığında kayıt yapar.",
+     "Yapay Zeka destekli kameralar sadece hareket algıladığında kayıt yapar."),
+    ("Wi-Fi ağ taraması yapın.", "Vayfay ağ taraması yapın."),
 ]
 
 failures = []

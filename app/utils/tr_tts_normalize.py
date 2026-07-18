@@ -209,6 +209,7 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             'AB': 'Avrupa Birliği',
             'MS': 'Milattan Sonra',
             'MÖ': 'Milattan Önce',
+            'AI': 'Yapay Zeka',
         }
         # Açılımın SON kelimesi ünlüyle bittiği için hal eki tampon 'n' ister
         # (Kurumu'ndan, Meclisi'nde gibi) — genel güvenlik ağı sadece apostrofu
@@ -225,6 +226,7 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             'Birliği':    {'dative':'Birliğine','locative':'Birliğinde','ablative':'Birliğinden','genitive':'Birliğinin'},
             'Sınavı':     {'dative':'Sınavına','locative':'Sınavında','ablative':'Sınavından','genitive':'Sınavının'},
             'Bakanlığı':  {'dative':'Bakanlığına','locative':'Bakanlığında','ablative':'Bakanlığından','genitive':'Bakanlığının'},
+            'Zeka':       {'dative':'Zekaya','locative':'Zekada','ablative':'Zekadan','genitive':'Zekanın'},
         }
         def _kisaltma_ek_bagla(acilim, raw_suffix):
             if not raw_suffix:
@@ -245,6 +247,22 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             # Bu kısaltmaların hiçbiri gerçek Türkçe kelimeyle çakışmadığı için
             # (ab/bm/yks vb. tek başına anlamlı kelime değil) risksiz.
             text = re.sub(rf'\b{re.escape(_kis)}\b' + _EKYAK_ERKEN, _repl, text, flags=re.IGNORECASE)
+
+        # Yabancı marka adları / teknoloji terimleri — Türkçe TTS motoru
+        # harf-ses eşlemesini İngilizce imlaya göre değil Türkçe imlaya göre
+        # yapıyor, bu yüzden "Airbnb", "Wi-Fi" gibi kelimeler olduğu gibi
+        # gönderilince yanlış/garip telaffuz ediliyor. Gerçek bir üretim
+        # transkriptinde (Airbnb gizli kamera videosu) doğrulanmış hatalar.
+        # Kesme işaretiyle gelen bir ek varsa (Airbnb'de gibi) buradaki
+        # regex ona dokunmuyor -- aşağıdaki genel kesme işareti güvenlik ağı
+        # (bu fonksiyonun sonunda) onu yeni yazılışa doğru şekilde bitiştiriyor.
+        _TR_YABANCI_TELAFFUZ = {
+            'Airbnb': 'Eyırbienbi',
+            'Wi-Fi': 'Vayfay',
+            'WiFi': 'Vayfay',
+        }
+        for _yab, _telaffuz in _TR_YABANCI_TELAFFUZ.items():
+            text = re.sub(rf'\b{re.escape(_yab)}\b', _telaffuz, text, flags=re.IGNORECASE)
 
         # Sayıya BİTİŞİK yazılan birim kısaltmalarının arasına boşluk sok
         # (5GB → 5 GB) — aşağıdaki birim regex'lerinin hepsi \b sınırına
