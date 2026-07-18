@@ -32,14 +32,15 @@ app.mount(
 
 PROJECTS_ROOT = Path("projects").resolve()
 
-# Turkish display names for the 4 rotating thumbnail templates -- keyed
-# off ThumbnailService.TEMPLATE_ORDER so thumbnail_1.png..thumbnail_4.png
+# Turkish display names for the rotating thumbnail templates -- keyed
+# off ThumbnailService.TEMPLATE_ORDER so thumbnail_1.png..thumbnail_N.png
 # always map to the right label even if that order ever changes.
 THUMBNAIL_TEMPLATE_LABELS: dict[str, str] = {
     "split_contrast": "Split Contrast",
     "mystery_focus": "Mystery Focus",
     "documentary_cinematic": "Documentary Cinematic",
     "breaking_discovery": "Breaking Discovery",
+    "headline_highlight": "Başlık Vurgulu",
 }
 
 
@@ -758,8 +759,8 @@ def project_detail(slug: str) -> HTMLResponse:
             """
 
         gallery_hint = (
-            """<p class="muted">
-                4 farklı tasarım otomatik üretildi -- birini seçip
+            f"""<p class="muted">
+                {len(ThumbnailService.TEMPLATE_ORDER)} farklı tasarım otomatik üretildi -- birini seçip
                 kapak olarak kullan.
             </p>"""
             if variant_cards

@@ -16,6 +16,7 @@ from app.pipeline.build_pipeline import (
     PipelineCancelled,
 )
 from app.services.project_service import ProjectService
+from app.services.thumbnail_service import ThumbnailService
 
 
 router = APIRouter()
@@ -425,8 +426,8 @@ Arka plan m\u00fczi\u011fi ekle
 </select>
 <div class="hint">Jamendo/Mubert/ElevenLabs/Freesound i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
 
-<label for="music_volume" style="margin-top:12px">M\u00fczik Sesi Seviyesi: <span id="musicVolumeLabel">%18</span></label>
-<input id="music_volume" type="range" min="0" max="50" step="5" value="18" oninput="document.getElementById('musicVolumeLabel').textContent='%'+this.value">
+<label for="music_volume" style="margin-top:12px">M\u00fczik Sesi Seviyesi (%)</label>
+<input id="music_volume" type="number" min="0" max="50" step="1" value="18">
 <div class="hint">Arka plan m\u00fczi\u011finin seslendirmeye g\u00f6re ses oran\u0131. D\u00fc\u015f\u00fck tut ki konu\u015fmay\u0131 bast\u0131rmas\u0131n (varsay\u0131lan %18 \u00f6nerilir).</div>
 
 <div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
@@ -1550,7 +1551,7 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
     }
 
 
-THUMBNAIL_VARIANTS = {"thumbnail_1.png", "thumbnail_2.png", "thumbnail_3.png", "thumbnail_4.png"}
+THUMBNAIL_VARIANTS = set(ThumbnailService.VARIANT_NAMES)
 
 
 class ThumbnailSelectRequest(BaseModel):

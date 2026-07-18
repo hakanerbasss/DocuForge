@@ -44,12 +44,13 @@ class ThumbnailService:
         Path("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
     )
 
-    # 1..4 in this order -- matches the brief's A/B/C/D template spec.
+    # 1..N in this order -- matches the brief's A/B/C/D/E template spec.
     TEMPLATE_ORDER: tuple[str, ...] = (
         "split_contrast",
         "mystery_focus",
         "documentary_cinematic",
         "breaking_discovery",
+        "headline_highlight",
     )
 
     DEFAULT_TEMPLATE_BY_CONTENT_TYPE: dict[str, str] = {
@@ -61,7 +62,7 @@ class ThumbnailService:
 
     THUMBNAIL_SOURCES = {"auto", "ai", "pexels", "scene"}
     VARIANT_NAMES = tuple(
-        f"thumbnail_{i}.png" for i in range(1, 5)
+        f"thumbnail_{i}.png" for i in range(1, len(TEMPLATE_ORDER) + 1)
     )
 
     def generate(self, project_path: str) -> Path:
@@ -915,6 +916,73 @@ class ThumbnailService:
                 anchor_xy=(int(width * 0.06), y_anchor),
                 align="left",
             )
+
+        return canvas
+
+    def _compose_headline_highlight(
+        self,
+        bg: Image.Image,
+        brief: dict[str, str],
+        width: int,
+        height: int,
+    ) -> Image.Image:
+        """Plain full-bleed photo, bold white headline lines, and the
+        LAST wrapped line punched out on a solid color bar -- a
+        creator-thumbnail convention (bold statement capped by one
+        high-contrast highlighted phrase) that reads clearly regardless
+        of the background photo's own contrast.
+        """
+
+        canvas = ImageEnhance.Contrast(bg).enhance(1.05)
+        draw = ImageDraw.Draw(canvas)
+
+        hook = self._turkish_upper(brief["hook"])
+        font, lines = self._fit_text_lines(
+            draw, hook, max_width=int(width * 0.82), max_lines=3,
+            base_size=int(height * 0.125),
+        )
+
+        if not lines:
+            return canvas
+
+        lead_lines, punch_line = lines[:-1], lines[-1]
+
+        x = int(width * 0.055)
+        y = int(height * 0.08)
+        stroke_width = max(4, int(height * 0.013))
+        shadow_offset = max(3, font.size // 16)
+        line_spacing = 1.16
+
+        for line in lead_lines:
+            draw.text(
+                (x + shadow_offset, y + shadow_offset),
+                line, font=font, fill=(0, 0, 0),
+            )
+            draw.text(
+                (x, y), line, font=font, fill=(255, 255, 255),
+                stroke_width=stroke_width, stroke_fill=(0, 0, 0),
+            )
+            bbox = draw.textbbox(
+                (0, 0), line, font=font, stroke_width=stroke_width
+            )
+            y += int((bbox[3] - bbox[1]) * line_spacing)
+
+        bbox = draw.textbbox((0, 0), punch_line, font=font)
+        line_w = bbox[2] - bbox[0]
+        line_h = bbox[3] - bbox[1]
+        pad_x = int(font.size * 0.32)
+        pad_y = int(font.size * 0.24)
+
+        box = (
+            x - pad_x,
+            y - pad_y,
+            x + line_w + pad_x,
+            y + line_h + pad_y,
+        )
+        draw.rectangle(box, fill=(255, 205, 0))
+        draw.text(
+            (x, y), punch_line, font=font, fill=(20, 16, 0),
+        )
 
         return canvas
 

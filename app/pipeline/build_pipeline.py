@@ -332,10 +332,7 @@ class BuildPipeline:
 
     def _clear_thumbnail_variants(self, project_dir: Path) -> None:
         for name in (
-            "thumbnail_1.png",
-            "thumbnail_2.png",
-            "thumbnail_3.png",
-            "thumbnail_4.png",
+            *ThumbnailService.VARIANT_NAMES,
             "thumbnail_vertical.jpg",
         ):
             path = project_dir / name
