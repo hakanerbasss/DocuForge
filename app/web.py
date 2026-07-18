@@ -1330,7 +1330,7 @@ def project_detail(slug: str) -> HTMLResponse:
                         <div style="font-size:12px;margin-top:2px">${{regenMusicLicenseBadge(t.license)}}</div>
                     </div>
                     <div style="display:flex;gap:6px">
-                        <button type="button" onclick="regenAddFavoriteFromResult(${{i}})" style="width:auto;min-height:32px;margin-top:0;padding:0 10px;font-size:12px;background:#fff7e0;color:#9f5a00;border:1px solid #f0dca0">⭐</button>
+                        <button type="button" onclick="regenAddFavoriteFromResult(this,${{i}})" style="width:auto;min-height:32px;margin-top:0;padding:0 10px;font-size:12px;background:#fff;color:#9f5a00;border:1px solid #e2e7ee">☆ Favorile</button>
                         <button type="button" class="regen-music-pick-btn" data-url="${{escapeHtmlLocal(t.download_url || "")}}" data-label="${{escapeHtmlLocal(label)}}" onclick="regenSelectMusicTrack(this)" style="width:auto;min-height:32px;margin-top:0;padding:0 12px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
                     </div>
                 </div>
@@ -1345,9 +1345,11 @@ def project_detail(slug: str) -> HTMLResponse:
         }});
     }}
 
-    async function regenAddFavoriteFromResult(index) {{
+    async function regenAddFavoriteFromResult(btn, index) {{
         const track = lastRegenMusicResults[index];
         if (!track) return;
+        btn.disabled = true;
+        btn.textContent = "⏳...";
         try {{
             const res = await fetch("/api/music-favorites", {{
                 method: "POST",
@@ -1358,10 +1360,16 @@ def project_detail(slug: str) -> HTMLResponse:
                 const err = await res.json().catch(() => ({{}}));
                 throw new Error(err.detail || "Favorilere eklenemedi.");
             }}
+            btn.textContent = "★ Favoride";
+            btn.style.background = "#fff7e0";
+            btn.style.color = "#9f5a00";
+            btn.style.border = "1px solid #f0dca0";
             if (document.getElementById("regenMusicFavoritesList").style.display === "block") {{
                 regenLoadFavorites();
             }}
         }} catch (e) {{
+            btn.disabled = false;
+            btn.textContent = "☆ Favorile";
             alert("Hata: " + e.message);
         }}
     }}

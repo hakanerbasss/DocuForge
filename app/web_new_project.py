@@ -638,8 +638,8 @@ function renderTopicSuggestions(suggestions){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button type="button" onclick="event.stopPropagation();markTopicDone(this)" data-title="${escapeHtml(s.title)}"
-          style="width:auto;min-height:30px;padding:0 10px;font-size:12px;font-weight:700;background:#eef7ef;color:#137a3a;border:1px solid #cfe8d4;border-radius:8px;cursor:pointer"
-        >✅ Bunu yaptım, bir daha önerme</button>
+          style="width:auto;min-height:30px;padding:0 10px;font-size:12px;font-weight:700;background:#f4f5f7;color:#4b5568;border:1px solid #e2e5ea;border-radius:8px;cursor:pointer"
+        >🚫 Bunu yaptım, bir daha önerme</button>
         ${hashtagList.length ? `<button type="button" onclick="event.stopPropagation();copyHashtags(this)" data-hashtags="${escapeHtml(hashtagText)}"
           style="width:auto;min-height:30px;padding:0 10px;font-size:12px;font-weight:700;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer"
         >📋 Etiketleri kopyala</button>` : ""}
@@ -816,7 +816,7 @@ function renderMusicResults(tracks){
           <div class="hint" style="margin-top:2px">${musicLicenseBadge(t.license)}</div>
         </div>
         <div style="display:flex;gap:6px">
-          <button type="button" onclick="addFavoriteFromResult(${i})" style="width:auto;min-height:36px;margin-top:0;padding:0 10px;font-size:13px;background:#fff7e0;color:#9f5a00;border:1px solid #f0dca0">⭐</button>
+          <button type="button" onclick="addFavoriteFromResult(this,${i})" style="width:auto;min-height:36px;margin-top:0;padding:0 10px;font-size:13px;background:#fff;color:#9f5a00;border:1px solid #e2e7ee">☆ Favorile</button>
           <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Bu parçayı seç</button>
         </div>
       </div>
@@ -831,9 +831,11 @@ function pauseOtherAudio(current){
   });
 }
 
-async function addFavoriteFromResult(index){
+async function addFavoriteFromResult(btn,index){
   const track=lastMusicResults[index];
   if(!track)return;
+  btn.disabled=true;
+  btn.textContent="⏳...";
   try{
     const res=await fetch("/api/music-favorites",{
       method:"POST",
@@ -844,10 +846,16 @@ async function addFavoriteFromResult(index){
       const err=await res.json().catch(()=>({}));
       throw new Error(err.detail||"Favorilere eklenemedi.");
     }
+    btn.textContent="★ Favoride";
+    btn.style.background="#fff7e0";
+    btn.style.color="#9f5a00";
+    btn.style.border="1px solid #f0dca0";
     if(document.getElementById("musicFavoritesList").style.display==="block"){
       loadFavorites();
     }
   }catch(e){
+    btn.disabled=false;
+    btn.textContent="☆ Favorile";
     alert("Hata: "+e.message);
   }
 }
