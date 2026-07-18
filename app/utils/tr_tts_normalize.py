@@ -260,6 +260,7 @@ def _clean_tts_text(text: str, lang: str = "tr") -> str:
             'Airbnb': 'Eyırbienbi',
             'Wi-Fi': 'Vayfay',
             'WiFi': 'Vayfay',
+            'Atacama': 'Atakama',
         }
         for _yab, _telaffuz in _TR_YABANCI_TELAFFUZ.items():
             text = re.sub(rf'\b{re.escape(_yab)}\b', _telaffuz, text, flags=re.IGNORECASE)

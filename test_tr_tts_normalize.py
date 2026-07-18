@@ -54,6 +54,12 @@ cases = [
     ("AI destekli kameralar sadece hareket algıladığında kayıt yapar.",
      "Yapay Zeka destekli kameralar sadece hareket algıladığında kayıt yapar."),
     ("Wi-Fi ağ taraması yapın.", "Vayfay ağ taraması yapın."),
+    # "atacama" script'inde bulunan yabancı yer adı telaffuz hatası (Atacama
+    # Türkçe imlayla yumuşak 'c' ile okunuyordu, doğrusu sert 'k' sesi).
+    ("Atacama Çölü dünyanın en kurak yeridir.",
+     "Atakama Çölü dünyanın en kurak yeridir."),
+    ("Atacama'da yıllık yağış çok azdır.",
+     "Atakamada yıllık yağış çok azdır."),
 ]
 
 failures = []
