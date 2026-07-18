@@ -44,5 +44,6 @@ projects/
 jobs/
 /models/
 /music_cache/
+/music_favorites.json
 __pycache__/
 *.pyc

@@ -440,6 +440,13 @@ Arka plan m\u00fczi\u011fi ekle
 <div id="musicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
 <div id="musicResults" style="margin-top:10px"></div>
 <div id="musicSelectedInfo" class="hint" style="display:none;margin-top:10px;font-weight:700;color:#08763a"></div>
+<div style="margin-top:10px;border-top:1px solid #dbe5f4;padding-top:10px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<strong style="font-size:13px">⭐ Favorilerim</strong>
+<button type="button" id="favoritesToggleBtn" onclick="toggleFavoritesList()" style="width:auto;min-height:28px;margin-top:0;padding:0 10px;font-size:12px">G\u00f6ster</button>
+</div>
+<div id="musicFavoritesList" style="display:none;margin-top:8px"></div>
+</div>
 </div>
 <input type="hidden" id="music_track" value="">
 </div>
@@ -707,6 +714,7 @@ async function searchMusic(){
   const contentType=document.getElementById("content_type").value;
   const provider=document.getElementById("music_provider").value;
   const isElevenLabs=provider==="elevenlabs";
+  lastMusicProvider=provider;
   btn.disabled=true;
   btn.textContent=isElevenLabs?"⏳ Üretiliyor…":"⏳ Aranıyor…";
   const catalogLabel=provider==="freesound"?"Freesound’da":"Jamendo’da";
@@ -736,7 +744,11 @@ function musicLicenseBadge(license){
   return `<span style="color:${color};font-weight:700">${icon} ${escapeHtml(license.label||"")}</span>`;
 }
 
+let lastMusicResults=[];
+let lastMusicProvider="jamendo";
+
 function renderMusicResults(tracks){
+  lastMusicResults=tracks;
   const box=document.getElementById("musicResults");
   if(!tracks.length){
     box.innerHTML='<div class="hint">Sonuç bulunamadı, farklı bir arama dene.</div>';
@@ -754,11 +766,106 @@ function renderMusicResults(tracks){
           <div class="hint">${escapeHtml(t.artist||"Bilinmeyen sanatçı")} · ${mins}:${secs}</div>
           <div class="hint" style="margin-top:2px">${musicLicenseBadge(t.license)}</div>
         </div>
-        <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Bu parçayı seç</button>
+        <div style="display:flex;gap:6px">
+          <button type="button" onclick="addFavoriteFromResult(${i})" style="width:auto;min-height:36px;margin-top:0;padding:0 10px;font-size:13px;background:#fff7e0;color:#9f5a00;border:1px solid #f0dca0">⭐</button>
+          <button type="button" class="music-pick-btn" data-url="${escapeHtml(t.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectMusicTrack(this)" style="width:auto;min-height:36px;margin-top:0;padding:0 14px;font-size:13px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Bu parçayı seç</button>
+        </div>
       </div>
-      <audio controls preload="none" src="${escapeHtml(t.preview_url||"")}" style="width:100%;margin-top:6px;height:34px"></audio>
+      <audio class="df-audio-preview" onplay="pauseOtherAudio(this)" controls preload="none" src="${escapeHtml(t.preview_url||"")}" style="width:100%;margin-top:6px;height:34px"></audio>
     </div>`;
   }).join("");
+}
+
+function pauseOtherAudio(current){
+  document.querySelectorAll("audio.df-audio-preview").forEach(a=>{
+    if(a!==current) a.pause();
+  });
+}
+
+async function addFavoriteFromResult(index){
+  const track=lastMusicResults[index];
+  if(!track)return;
+  try{
+    const res=await fetch("/api/music-favorites",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({provider:lastMusicProvider, ...track}),
+    });
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      throw new Error(err.detail||"Favorilere eklenemedi.");
+    }
+    if(document.getElementById("musicFavoritesList").style.display==="block"){
+      loadFavorites();
+    }
+  }catch(e){
+    alert("Hata: "+e.message);
+  }
+}
+
+function toggleFavoritesList(){
+  const box=document.getElementById("musicFavoritesList");
+  const btn=document.getElementById("favoritesToggleBtn");
+  const showing=box.style.display==="block";
+  box.style.display=showing?"none":"block";
+  btn.textContent=showing?"Göster":"Gizle";
+  if(!showing)loadFavorites();
+}
+
+async function loadFavorites(){
+  const box=document.getElementById("musicFavoritesList");
+  box.innerHTML='<div class="hint">Yükleniyor…</div>';
+  try{
+    const res=await fetch("/api/music-favorites");
+    const data=await res.json();
+    renderFavorites(data.favorites||[]);
+  }catch(e){
+    box.innerHTML='<div class="hint" style="color:#9f2020">Favoriler yüklenemedi.</div>';
+  }
+}
+
+function renderFavorites(favorites){
+  const box=document.getElementById("musicFavoritesList");
+  if(!favorites.length){
+    box.innerHTML='<div class="hint">Henüz favori yok -- sonuçların yanındaki ⭐ ile ekleyebilirsin.</div>';
+    return;
+  }
+  box.innerHTML=favorites.map(f=>{
+    const dur=parseInt(f.duration)||0;
+    const mins=Math.floor(dur/60);
+    const secs=String(dur%60).padStart(2,"0");
+    const label=`${f.name||"Untitled"} — ${f.artist||"Bilinmeyen sanatçı"}`;
+    return `<div style="padding:8px 0;border-top:1px solid #eef1f6">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px">${escapeHtml(f.name||"Untitled")}</div>
+          <div class="hint" style="font-size:12px">${escapeHtml(f.artist||"Bilinmeyen sanatçı")} · ${mins}:${secs} · ${escapeHtml(f.provider||"")}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="fav-select-btn" data-url="${escapeHtml(f.download_url||"")}" data-label="${escapeHtml(label)}" onclick="selectFavorite(this)" style="width:auto;min-height:30px;margin-top:0;padding:0 10px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
+          <button type="button" data-provider="${escapeHtml(f.provider||"")}" data-id="${escapeHtml(f.id||"")}" onclick="removeFavorite(this)" style="width:auto;min-height:30px;margin-top:0;padding:0 10px;font-size:12px;background:#fde8e8;color:#9f2020;border:1px solid #f3c9c9">🗑</button>
+        </div>
+      </div>
+      <audio class="df-audio-preview" onplay="pauseOtherAudio(this)" controls preload="none" src="${escapeHtml(f.preview_url||"")}" style="width:100%;margin-top:6px;height:32px"></audio>
+    </div>`;
+  }).join("");
+}
+
+function selectFavorite(btn){
+  document.getElementById("music_track").value=btn.dataset.url;
+  const info=document.getElementById("musicSelectedInfo");
+  info.style.display="block";
+  info.textContent="🎵 Seçilen parça: "+btn.dataset.label;
+}
+
+async function removeFavorite(btn){
+  try{
+    const res=await fetch(`/api/music-favorites/${encodeURIComponent(btn.dataset.provider)}/${encodeURIComponent(btn.dataset.id)}`,{method:"DELETE"});
+    if(!res.ok)throw new Error("Kaldırılamadı.");
+    loadFavorites();
+  }catch(e){
+    alert("Hata: "+e.message);
+  }
 }
 
 function selectMusicTrack(btn){
@@ -1041,6 +1148,46 @@ def music_search(
         ) from error
 
     return {"query": search_query, "tracks": tracks}
+
+
+class FavoriteTrackRequest(BaseModel):
+    provider: str
+    id: str
+    name: str = ""
+    artist: str = ""
+    duration: int = 0
+    preview_url: str = ""
+    download_url: str = ""
+    license: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/api/music-favorites")
+def get_music_favorites() -> dict[str, Any]:
+    from app.services.music_favorites import list_favorites
+
+    return {"favorites": list_favorites()}
+
+
+@router.post("/api/music-favorites")
+def post_music_favorite(request: FavoriteTrackRequest) -> dict[str, Any]:
+    from app.services.music_favorites import add_favorite
+
+    if not request.provider.strip() or not request.id.strip():
+        raise HTTPException(status_code=400, detail="Geçersiz parça bilgisi.")
+
+    entry = add_favorite(request.model_dump(), request.provider.strip())
+
+    return {"favorite": entry}
+
+
+@router.delete("/api/music-favorites/{provider}/{track_id}")
+def delete_music_favorite(provider: str, track_id: str) -> dict[str, Any]:
+    from app.services.music_favorites import remove_favorite
+
+    if not remove_favorite(provider, track_id):
+        raise HTTPException(status_code=404, detail="Favori bulunamadı.")
+
+    return {"removed": True}
 
 
 @router.get("/music-cache/elevenlabs/{filename}")

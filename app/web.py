@@ -1147,6 +1147,13 @@ def project_detail(slug: str) -> HTMLResponse:
                         <div id="regenMusicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
                         <div id="regenMusicResults" style="margin-top:10px;max-height:280px;overflow:auto"></div>
                         <div id="regenMusicSelectedInfo" class="muted" style="display:none;margin-top:8px;font-weight:700;font-size:12px;color:#08763a"></div>
+                        <div style="margin-top:10px;border-top:1px solid #dbe5f4;padding-top:10px">
+                            <div style="display:flex;align-items:center;justify-content:space-between">
+                                <strong style="font-size:13px">⭐ Favorilerim</strong>
+                                <button type="button" id="regenFavoritesToggleBtn" onclick="regenToggleFavoritesList()" style="width:auto;min-height:28px;margin-top:0;padding:0 10px;font-size:12px">Göster</button>
+                            </div>
+                            <div id="regenMusicFavoritesList" style="display:none;margin-top:8px;max-height:280px;overflow:auto"></div>
+                        </div>
                         </div>
                         <input type="hidden" data-field="music_track" id="regenMusicTrackValue" value="${{current ?? ""}}">`;
                     continue;
@@ -1260,6 +1267,7 @@ def project_detail(slug: str) -> HTMLResponse:
         const contentType = (currentRegenOpts && currentRegenOpts.content_type) || "documentary";
         const providerEl = document.querySelector('[data-field="music_provider"]');
         const provider = providerEl ? providerEl.value : "jamendo";
+        lastRegenMusicProvider = provider;
         const isElevenLabs = provider === "elevenlabs";
         btn.disabled = true;
         btn.textContent = isElevenLabs ? "⏳ Üretiliyor…" : "⏳ Aranıyor…";
@@ -1299,7 +1307,11 @@ def project_detail(slug: str) -> HTMLResponse:
         return `<span style="color:${{color}};font-weight:700">${{icon}} ${{escapeHtmlLocal(license.label || "")}}</span>`;
     }}
 
+    let lastRegenMusicResults = [];
+    let lastRegenMusicProvider = "jamendo";
+
     function regenRenderMusicResults(tracks) {{
+        lastRegenMusicResults = tracks;
         const box = document.getElementById("regenMusicResults");
         if (!tracks.length) {{
             box.innerHTML = '<div class="muted" style="font-size:13px">Sonuç bulunamadı, farklı bir arama dene.</div>';
@@ -1317,11 +1329,106 @@ def project_detail(slug: str) -> HTMLResponse:
                         <div class="muted" style="font-size:12px">${{escapeHtmlLocal(t.artist || "Bilinmeyen sanatçı")}} · ${{mins}}:${{secs}}</div>
                         <div style="font-size:12px;margin-top:2px">${{regenMusicLicenseBadge(t.license)}}</div>
                     </div>
-                    <button type="button" class="regen-music-pick-btn" data-url="${{escapeHtmlLocal(t.download_url || "")}}" data-label="${{escapeHtmlLocal(label)}}" onclick="regenSelectMusicTrack(this)" style="width:auto;min-height:32px;margin-top:0;padding:0 12px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
+                    <div style="display:flex;gap:6px">
+                        <button type="button" onclick="regenAddFavoriteFromResult(${{i}})" style="width:auto;min-height:32px;margin-top:0;padding:0 10px;font-size:12px;background:#fff7e0;color:#9f5a00;border:1px solid #f0dca0">⭐</button>
+                        <button type="button" class="regen-music-pick-btn" data-url="${{escapeHtmlLocal(t.download_url || "")}}" data-label="${{escapeHtmlLocal(label)}}" onclick="regenSelectMusicTrack(this)" style="width:auto;min-height:32px;margin-top:0;padding:0 12px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
+                    </div>
                 </div>
-                <audio controls preload="none" src="${{escapeHtmlLocal(t.preview_url || "")}}" style="width:100%;margin-top:6px;height:32px"></audio>
+                <audio class="df-audio-preview" onplay="pauseOtherAudio(this)" controls preload="none" src="${{escapeHtmlLocal(t.preview_url || "")}}" style="width:100%;margin-top:6px;height:32px"></audio>
             </div>`;
         }}).join("");
+    }}
+
+    function pauseOtherAudio(current) {{
+        document.querySelectorAll("audio.df-audio-preview").forEach(a => {{
+            if (a !== current) a.pause();
+        }});
+    }}
+
+    async function regenAddFavoriteFromResult(index) {{
+        const track = lastRegenMusicResults[index];
+        if (!track) return;
+        try {{
+            const res = await fetch("/api/music-favorites", {{
+                method: "POST",
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{provider: lastRegenMusicProvider, ...track}}),
+            }});
+            if (!res.ok) {{
+                const err = await res.json().catch(() => ({{}}));
+                throw new Error(err.detail || "Favorilere eklenemedi.");
+            }}
+            if (document.getElementById("regenMusicFavoritesList").style.display === "block") {{
+                regenLoadFavorites();
+            }}
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+        }}
+    }}
+
+    function regenToggleFavoritesList() {{
+        const box = document.getElementById("regenMusicFavoritesList");
+        const btn = document.getElementById("regenFavoritesToggleBtn");
+        const showing = box.style.display === "block";
+        box.style.display = showing ? "none" : "block";
+        btn.textContent = showing ? "Göster" : "Gizle";
+        if (!showing) regenLoadFavorites();
+    }}
+
+    async function regenLoadFavorites() {{
+        const box = document.getElementById("regenMusicFavoritesList");
+        box.innerHTML = '<div class="muted" style="font-size:13px">Yükleniyor…</div>';
+        try {{
+            const res = await fetch("/api/music-favorites");
+            const data = await res.json();
+            regenRenderFavorites(data.favorites || []);
+        }} catch (e) {{
+            box.innerHTML = '<div class="muted" style="font-size:13px;color:#9f2020">Favoriler yüklenemedi.</div>';
+        }}
+    }}
+
+    function regenRenderFavorites(favorites) {{
+        const box = document.getElementById("regenMusicFavoritesList");
+        if (!favorites.length) {{
+            box.innerHTML = '<div class="muted" style="font-size:13px">Henüz favori yok -- sonuçların yanındaki ⭐ ile ekleyebilirsin.</div>';
+            return;
+        }}
+        box.innerHTML = favorites.map(f => {{
+            const dur = parseInt(f.duration) || 0;
+            const mins = Math.floor(dur / 60);
+            const secs = String(dur % 60).padStart(2, "0");
+            const label = `${{f.name || "Untitled"}} — ${{f.artist || "Bilinmeyen sanatçı"}}`;
+            return `<div style="padding:8px 0;border-top:1px solid #eef1f6">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                    <div>
+                        <div style="font-weight:700;font-size:13px">${{escapeHtmlLocal(f.name || "Untitled")}}</div>
+                        <div class="muted" style="font-size:12px">${{escapeHtmlLocal(f.artist || "Bilinmeyen sanatçı")}} · ${{mins}}:${{secs}} · ${{escapeHtmlLocal(f.provider || "")}}</div>
+                    </div>
+                    <div style="display:flex;gap:6px">
+                        <button type="button" data-url="${{escapeHtmlLocal(f.download_url || "")}}" data-label="${{escapeHtmlLocal(label)}}" onclick="regenSelectFavorite(this)" style="width:auto;min-height:30px;margin-top:0;padding:0 10px;font-size:12px;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">Seç</button>
+                        <button type="button" data-provider="${{escapeHtmlLocal(f.provider || "")}}" data-id="${{escapeHtmlLocal(f.id || "")}}" onclick="regenRemoveFavorite(this)" style="width:auto;min-height:30px;margin-top:0;padding:0 10px;font-size:12px;background:#fde8e8;color:#9f2020;border:1px solid #f3c9c9">🗑</button>
+                    </div>
+                </div>
+                <audio class="df-audio-preview" onplay="pauseOtherAudio(this)" controls preload="none" src="${{escapeHtmlLocal(f.preview_url || "")}}" style="width:100%;margin-top:6px;height:32px"></audio>
+            </div>`;
+        }}).join("");
+    }}
+
+    function regenSelectFavorite(btn) {{
+        document.getElementById("regenMusicTrackValue").value = btn.dataset.url;
+        const info = document.getElementById("regenMusicSelectedInfo");
+        info.style.display = "block";
+        info.textContent = "🎵 Seçilen parça: " + btn.dataset.label;
+    }}
+
+    async function regenRemoveFavorite(btn) {{
+        try {{
+            const res = await fetch(`/api/music-favorites/${{encodeURIComponent(btn.dataset.provider)}}/${{encodeURIComponent(btn.dataset.id)}}`, {{method: "DELETE"}});
+            if (!res.ok) throw new Error("Kaldırılamadı.");
+            regenLoadFavorites();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+        }}
     }}
 
     function regenSelectMusicTrack(btn) {{
