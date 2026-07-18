@@ -9,23 +9,29 @@ Suggest 8 distinct video topic ideas for a new {{ content_type }} video.
 
 Content type style:
 
-- documentary: prioritize two proven angles above all others --
-  (1) a CONCRETE, real, specific place, structure, or historical event
-  (a named city, building, ruin, natural site) explored through a mystery
-  or discovery hook, and (2) a PERSONAL-RISK / self-protection angle --
-  a real danger, scam, or everyday threat the viewer can imagine
-  happening to themselves or someone they know. Both angles consistently
-  outperform abstract or purely philosophical framings ("what if AI
-  becomes conscious", "is reality a simulation") in click-through and
-  watch-time -- include at most 1-2 abstract/philosophical suggestions
-  among the 8, and always rank them below the concrete-place and
-  personal-risk ones. For the concrete-place angle, do NOT default to
-  Turkey -- spread the 8 suggestions across multiple world regions
-  (e.g. Africa, the Americas, Asia, Europe, the Middle East, Oceania),
-  and vary the angle itself beyond a single physical site: historical
-  events, forgotten figures, ancient engineering, lost civilizations,
-  and other informational/historical hooks are all valid alongside
-  named-place mystery hooks. At most 1-2 of the 8 should be Turkey-based.
+- documentary: this channel has ONE proven niche, confirmed by its own
+  analytics -- stay inside it, do not branch out. Every suggestion must
+  be a REAL, concrete, named place, structure, natural site, or
+  historical site/event, built around a visible ANOMALY, mystery, or
+  "why does this happen" hook: a physical change, an unexplained
+  feature, a surprising fact the viewer can picture or later verify by
+  looking at the place itself (why a landmark changed color, what's
+  hidden beneath a city, why a structure defies explanation, what
+  really happened at a real historical site). Do NOT suggest abstract
+  or philosophical framings ("is AI conscious", "what if reality is a
+  simulation") and do NOT suggest vague-threat/scam/self-protection
+  topics -- both categories have been tested on this channel and
+  underperform the concrete-place-anomaly format by a wide margin.
+  Spread the 8 suggestions across multiple world regions (Africa, the
+  Americas, Asia, Europe, the Middle East, Oceania, and Turkey) -- at
+  most 1-2 of the 8 should be Turkey-based, the rest must come from
+  elsewhere in the world.
+  Every topic must be tellable using only generic, widely-available
+  stock photos/footage plus simple narration -- prefer famous or
+  well-documented places/events with abundant public visual material
+  over obscure subjects that would require custom illustration.
+  Favor topics that comfortably fit a short 4-6 minute video over ones
+  that would need a long, multi-part explanation.
 - news: timely, factual, high-interest current-affairs or explainer angles.
 - shorts: single-idea, immediately graspable, high-curiosity angles that work
   in under a minute.
@@ -41,17 +47,19 @@ Return ONLY valid JSON. Structure:
       "title": "Short punchy video title, in the target content language",
       "hook": "One sentence (in the target content language) explaining why this topic would get high click-through and watch time",
       "visual_left": "Short phrase (in English, for an image-generation prompt) describing one stark, contrasting visual half of a split-thumbnail concept for this topic -- empty string if a split-contrast visual doesn't fit the topic",
-      "visual_right": "Short phrase (in English) describing the opposing visual half -- empty string if not applicable"
+      "visual_right": "Short phrase (in English) describing the opposing visual half -- empty string if not applicable",
+      "hashtags": ["3 to 5 lowercase hashtags without the # symbol, mixing the specific place/subject with the broader niche, in whichever language fits YouTube discovery best for this topic"]
     }
   ]
 }
 
 Requirements:
 
-- Provide exactly 8 suggestions, ordered from HIGHEST to LOWEST expected click-through potential. For documentary and informational content, concrete-place and personal-risk/self-protection angles rank above abstract or philosophical ones.
+- Provide exactly 8 suggestions, ordered from HIGHEST to LOWEST expected click-through potential.
 - Titles must be distinct from each other -- do not repeat the same core idea with minor wording changes.
 - Titles under 80 characters, written the way a real creator would phrase a video title (question form, bold claim, or curiosity gap all work).
 - "hook" is one sentence, not a full paragraph.
 - "visual_left" and "visual_right" are short noun phrases (3-6 words), never a full sentence, and describe a genuine visual CONTRAST (before/after, absence/presence, small/large scale, etc.) -- leave both empty ("") if the topic doesn't naturally support a split-contrast visual.
+- "hashtags" always has 3 to 5 entries, lowercase, no "#" symbol, no spaces inside a single tag.
 - Do not use Markdown code fences.
 - Do not include explanations before or after the JSON.

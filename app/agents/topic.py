@@ -97,6 +97,7 @@ Do not include explanations before or after the JSON.
                 "hook": self._optional_str(item.get("hook")),
                 "visual_left": self._optional_str(item.get("visual_left")),
                 "visual_right": self._optional_str(item.get("visual_right")),
+                "hashtags": self._optional_str_list(item.get("hashtags")),
             })
 
         return {"suggestions": cleaned}
@@ -112,6 +113,16 @@ Already covered -- do NOT suggest any of these again, and avoid close
 variants (same subject with slightly reworded title):
 {listed}
 """
+
+    def _optional_str_list(self, value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+
+        return [
+            item.strip()
+            for item in value
+            if isinstance(item, str) and item.strip()
+        ]
 
     def _optional_str(self, value: Any) -> str:
         if not isinstance(value, str):

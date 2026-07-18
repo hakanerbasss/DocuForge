@@ -619,6 +619,11 @@ function renderTopicSuggestions(suggestions){
       ? `<div class="hint" style="margin-top:3px">Sol: ${escapeHtml(s.visual_left||"—")} · Sağ: ${escapeHtml(s.visual_right||"—")}</div>`
       : "";
     const hook=s.hook?`<div class="hint" style="margin-top:3px">${escapeHtml(s.hook)}</div>`:"";
+    const hashtagList=Array.isArray(s.hashtags)?s.hashtags:[];
+    const hashtagText=hashtagList.map(h=>"#"+h).join(" ");
+    const hashtags=hashtagList.length
+      ? `<div class="hint" style="margin-top:3px;color:#2166f3">${escapeHtml(hashtagText)}</div>`
+      : "";
     return `<div class="topic-suggestion" data-title="${escapeHtml(s.title)}"
       style="padding:12px 14px;${i>0?"border-top:1px solid #eef1f6":""}"
       onmouseover="this.style.background='#f5f8fd'" onmouseout="this.style.background=''"
@@ -628,11 +633,17 @@ function renderTopicSuggestions(suggestions){
           <div style="font-weight:700">${medal}${escapeHtml(s.title)}</div>
           ${hook}
           ${visual}
+          ${hashtags}
         </div>
       </div>
-      <button type="button" onclick="event.stopPropagation();markTopicDone(this)" data-title="${escapeHtml(s.title)}"
-        style="width:auto;min-height:30px;margin-top:8px;padding:0 10px;font-size:12px;font-weight:700;background:#eef7ef;color:#137a3a;border:1px solid #cfe8d4;border-radius:8px;cursor:pointer"
-      >✅ Bunu yaptım, bir daha önerme</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" onclick="event.stopPropagation();markTopicDone(this)" data-title="${escapeHtml(s.title)}"
+          style="width:auto;min-height:30px;padding:0 10px;font-size:12px;font-weight:700;background:#eef7ef;color:#137a3a;border:1px solid #cfe8d4;border-radius:8px;cursor:pointer"
+        >✅ Bunu yaptım, bir daha önerme</button>
+        ${hashtagList.length ? `<button type="button" onclick="event.stopPropagation();copyHashtags(this)" data-hashtags="${escapeHtml(hashtagText)}"
+          style="width:auto;min-height:30px;padding:0 10px;font-size:12px;font-weight:700;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer"
+        >📋 Etiketleri kopyala</button>` : ""}
+      </div>
     </div>`;
   }).join("");
   box.innerHTML=`
@@ -640,6 +651,17 @@ function renderTopicSuggestions(suggestions){
     <div style="border:1px solid #dbe5f4;border-radius:12px;padding:10px 14px;margin-bottom:12px;background:#f8fbff">${top3}</div>
     <div style="border:1px solid #dbe5f4;border-radius:12px;overflow:hidden">${rows}</div>
   `;
+}
+
+function copyHashtags(btn){
+  const text=btn.getAttribute("data-hashtags");
+  navigator.clipboard.writeText(text).then(()=>{
+    const original=btn.textContent;
+    btn.textContent="✅ Kopyalandı";
+    setTimeout(()=>{btn.textContent=original;},1500);
+  }).catch(()=>{
+    alert(text);
+  });
 }
 
 function pickTopicSuggestion(el){
