@@ -5,6 +5,7 @@ Target content language:
 {{ language }}
 
 Suggest 8 distinct video topic ideas for a new {{ content_type }} video.
+{{ avoid_block }}
 
 Content type style:
 
@@ -18,7 +19,13 @@ Content type style:
   becomes conscious", "is reality a simulation") in click-through and
   watch-time -- include at most 1-2 abstract/philosophical suggestions
   among the 8, and always rank them below the concrete-place and
-  personal-risk ones.
+  personal-risk ones. For the concrete-place angle, do NOT default to
+  Turkey -- spread the 8 suggestions across multiple world regions
+  (e.g. Africa, the Americas, Asia, Europe, the Middle East, Oceania),
+  and vary the angle itself beyond a single physical site: historical
+  events, forgotten figures, ancient engineering, lost civilizations,
+  and other informational/historical hooks are all valid alongside
+  named-place mystery hooks. At most 1-2 of the 8 should be Turkey-based.
 - news: timely, factual, high-interest current-affairs or explainer angles.
 - shorts: single-idea, immediately graspable, high-curiosity angles that work
   in under a minute.

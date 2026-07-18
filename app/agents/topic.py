@@ -12,14 +12,17 @@ class TopicSuggestionAgent(BaseAgent):
         self,
         language: str = "tr",
         content_type: str = "documentary",
+        avoid_titles: list[str] | None = None,
     ) -> str:
         last_error: Exception | None = None
+        avoid_block = self._build_avoid_block(avoid_titles or [])
 
         for attempt in range(1, self.MAX_ATTEMPTS + 1):
             prompt = load_prompt(
                 "topic_suggestions",
                 language=language,
                 content_type=content_type,
+                avoid_block=avoid_block,
             )
 
             if attempt > 1:
@@ -97,6 +100,18 @@ Do not include explanations before or after the JSON.
             })
 
         return {"suggestions": cleaned}
+
+    def _build_avoid_block(self, avoid_titles: list[str]) -> str:
+        if not avoid_titles:
+            return ""
+
+        listed = "\n".join(f"- {title}" for title in avoid_titles)
+
+        return f"""
+Already covered -- do NOT suggest any of these again, and avoid close
+variants (same subject with slightly reworded title):
+{listed}
+"""
 
     def _optional_str(self, value: Any) -> str:
         if not isinstance(value, str):

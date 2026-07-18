@@ -619,13 +619,20 @@ function renderTopicSuggestions(suggestions){
       ? `<div class="hint" style="margin-top:3px">Sol: ${escapeHtml(s.visual_left||"—")} · Sağ: ${escapeHtml(s.visual_right||"—")}</div>`
       : "";
     const hook=s.hook?`<div class="hint" style="margin-top:3px">${escapeHtml(s.hook)}</div>`:"";
-    return `<div class="topic-suggestion" data-title="${escapeHtml(s.title)}" onclick="pickTopicSuggestion(this)"
-      style="padding:12px 14px;cursor:pointer;${i>0?"border-top:1px solid #eef1f6":""}"
+    return `<div class="topic-suggestion" data-title="${escapeHtml(s.title)}"
+      style="padding:12px 14px;${i>0?"border-top:1px solid #eef1f6":""}"
       onmouseover="this.style.background='#f5f8fd'" onmouseout="this.style.background=''"
     >
-      <div style="font-weight:700">${medal}${escapeHtml(s.title)}</div>
-      ${hook}
-      ${visual}
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer" onclick="pickTopicSuggestion(this.parentElement)">
+        <div style="min-width:0">
+          <div style="font-weight:700">${medal}${escapeHtml(s.title)}</div>
+          ${hook}
+          ${visual}
+        </div>
+      </div>
+      <button type="button" onclick="event.stopPropagation();markTopicDone(this)" data-title="${escapeHtml(s.title)}"
+        style="width:auto;min-height:30px;margin-top:8px;padding:0 10px;font-size:12px;font-weight:700;background:#eef7ef;color:#137a3a;border:1px solid #cfe8d4;border-radius:8px;cursor:pointer"
+      >✅ Bunu yaptım, bir daha önerme</button>
     </div>`;
   }).join("");
   box.innerHTML=`
@@ -639,6 +646,26 @@ function pickTopicSuggestion(el){
   document.getElementById("topic").value=el.getAttribute("data-title");
   document.getElementById("topicSuggestions").style.display="none";
   updateMusicMoodSuggestion();
+}
+
+async function markTopicDone(btn){
+  const title=btn.getAttribute("data-title");
+  btn.disabled=true;
+  btn.textContent="⏳...";
+  try{
+    const res=await fetch("/api/topic-history",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({title}),
+    });
+    if(!res.ok)throw new Error("İşaretlenemedi.");
+    const row=btn.closest(".topic-suggestion");
+    if(row)row.remove();
+  }catch(err){
+    btn.disabled=false;
+    btn.textContent="✅ Bunu yaptım, bir daha önerme";
+    alert("Hata: "+err.message);
+  }
 }
 
 function onMusicToggle(){
@@ -1055,10 +1082,13 @@ class TopicSuggestionsRequest(BaseModel):
 
 @router.post("/api/topic-suggestions")
 def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
+    from app.services.topic_history import get_avoid_titles
+
     try:
         raw = TopicSuggestionAgent().run(
             language=request.language,
             content_type=request.content_type,
+            avoid_titles=get_avoid_titles(),
         )
         return json.loads(raw)
     except Exception as error:
@@ -1066,6 +1096,20 @@ def topic_suggestions(request: TopicSuggestionsRequest) -> dict[str, Any]:
             status_code=502,
             detail=f"Konu önerileri alınamadı: {error}",
         ) from error
+
+
+class TopicHistoryRequest(BaseModel):
+    title: str
+
+
+@router.post("/api/topic-history")
+def mark_topic_done(request: TopicHistoryRequest) -> dict[str, Any]:
+    from app.services.topic_history import mark_done
+
+    try:
+        return mark_done(request.title)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.get("/api/music-mood")

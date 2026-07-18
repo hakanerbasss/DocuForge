@@ -35,7 +35,7 @@ class FreesoundMusicProvider(MusicProvider):
     provider_name = "Freesound (ücretsiz, CC lisanslı atmosfer/fon sesi)"
 
     API_URL = "https://freesound.org/apiv2/search/text/"
-    MIN_DURATION_SECONDS = 15
+    MIN_DURATION_SECONDS = 60
 
     def __init__(self) -> None:
         super().__init__()
