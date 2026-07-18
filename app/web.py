@@ -654,10 +654,19 @@ def project_detail(slug: str) -> HTMLResponse:
             else ""
         )
 
+        # Cache-busting: regenerating overwrites this exact filename, so
+        # without a query param that changes, browsers keep showing the
+        # old cached design even after a fresh regenerate + page reload.
+        variant_version = int(variant_path.stat().st_mtime)
+        variant_url = (
+            f"/files/{quote(project_dir.name)}/{variant_name}"
+            f"?v={variant_version}"
+        )
+
         variant_cards += f"""
         <div style="width:280px">
             <img
-                src="/files/{quote(project_dir.name)}/{variant_name}"
+                src="{variant_url}"
                 alt="{html.escape(label, quote=True)}"
                 style="width:100%;border-radius:12px;display:block;
                 border:{border}"
@@ -670,7 +679,7 @@ def project_detail(slug: str) -> HTMLResponse:
             <div class="buttons" style="margin-top:6px;gap:6px">
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/{variant_name}"
+                    href="{variant_url}"
                     download
                     style="font-size:13px;padding:0 10px;min-height:32px"
                 >
@@ -693,16 +702,21 @@ def project_detail(slug: str) -> HTMLResponse:
         # Older projects made before the multi-template rewrite only have
         # a single thumbnail.jpg -- still show it, just without the
         # variant-picker UI since there's nothing to pick between.
+        legacy_version = int(thumbnail_path.stat().st_mtime)
+        legacy_url = (
+            f"/files/{quote(project_dir.name)}/thumbnail.jpg"
+            f"?v={legacy_version}"
+        )
         legacy_card = f"""
         <div style="width:280px">
             <img
-                src="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                src="{legacy_url}"
                 alt="Kapak görseli"
                 style="width:100%;border-radius:12px;display:block"
             >
             <a
                 class="button secondary"
-                href="/files/{quote(project_dir.name)}/thumbnail.jpg"
+                href="{legacy_url}"
                 download
                 style="margin-top:6px;font-size:13px;padding:0 10px;
                 min-height:32px;display:inline-flex"
@@ -716,10 +730,15 @@ def project_detail(slug: str) -> HTMLResponse:
         vertical_card = ""
 
         if thumbnail_vertical_path.exists():
+            vertical_version = int(thumbnail_vertical_path.stat().st_mtime)
+            vertical_url = (
+                f"/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                f"?v={vertical_version}"
+            )
             vertical_card = f"""
             <div style="width:160px">
                 <img
-                    src="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                    src="{vertical_url}"
                     alt="Dikey kapak"
                     style="width:100%;border-radius:12px;display:block"
                 >
@@ -728,7 +747,7 @@ def project_detail(slug: str) -> HTMLResponse:
                 </div>
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/thumbnail_vertical.jpg"
+                    href="{vertical_url}"
                     download
                     style="margin-top:6px;font-size:13px;padding:0 10px;
                     min-height:32px;display:inline-flex"
