@@ -14,7 +14,7 @@ class RenderService:
     HEIGHT = 720
     FPS = 30
 
-    TRANSITION_DURATION_SECONDS = 0.5
+    TRANSITION_DURATION_SECONDS = 0.25
     TRANSITION_XFADE_MAP = {
         "crossfade": "fade",
         "fade_black": "fadeblack",
@@ -408,8 +408,11 @@ class RenderService:
         xfade_name: str,
         output_path: Path,
     ) -> list[float]:
-        """Chain adjacent clips with ffmpeg's xfade/acrossfade filters
-        instead of a hard cut.
+        """Chain adjacent clips with ffmpeg's xfade filter for video;
+        audio is trimmed+concatenated cleanly, NOT crossfaded (see the
+        comment at the filter string itself for why -- blending two
+        narration waveforms together audibly sounds like the speaker
+        repeating/stuttering, not a smooth transition).
 
         Merges are done ONE PAIR AT A TIME (the running combined clip
         so far + the next scene clip), never all N clips as simultaneous
@@ -459,6 +462,20 @@ class RenderService:
 
                 merged_path = tmp_dir / f"merge_{i:04d}.mp4"
 
+                # Audio deliberately does NOT crossfade (acrossfade
+                # blends the two waveforms together over `duration`,
+                # which -- unlike blending two video frames -- means
+                # briefly playing the tail of one sentence and the
+                # start of the next SIMULTANEOUSLY). TRANSITION_DURATION
+                # is short enough to fit inside each clip's trailing
+                # silence (AUDIO_PADDING_SECONDS), so instead audio just
+                # gets that same silent tail trimmed off clip A and
+                # cleanly concatenated with clip B's audio -- same
+                # shortened duration as the video's xfade output, zero
+                # waveform overlap. asetpts resets timestamps after the
+                # trim so concat sees a clean, monotonic stream.
+                audio_trim_end = max(0.0, current_duration - duration)
+
                 command = [
                     "ffmpeg",
                     "-y",
@@ -470,7 +487,9 @@ class RenderService:
                     (
                         f"[0:v][1:v]xfade=transition={xfade_name}:"
                         f"duration={duration:.3f}:offset={offset:.3f}[v];"
-                        f"[0:a][1:a]acrossfade=d={duration:.3f}[a]"
+                        f"[0:a]atrim=end={audio_trim_end:.3f},"
+                        f"asetpts=PTS-STARTPTS[a0t];"
+                        f"[a0t][1:a]concat=n=2:v=0:a=1[a]"
                     ),
                     "-map",
                     "[v]",
