@@ -31,6 +31,21 @@ Content type style:
 - shorts: hook in first 1-2 seconds, short punchy sentences, high tempo, single main idea, strong closing call-to-action.
 - informational: problem -> explanation -> examples -> summary, educational and clear tone.
 
+Closing (documentary, news, informational -- not shorts, which already has its
+own closing call-to-action above):
+
+- End the script with a short closing passage that does two things in the
+  same natural flow, not as two separate bolted-on parts: (1) a final
+  thematic sentence that resolves the story, and (2) a brief, natural
+  invitation to subscribe and keep watching more videos from the channel
+  (phrased naturally in the target language -- e.g. in Turkish something
+  like "Kanalımıza abone olmayı unutmayın, bizi izlemeye devam edin" said
+  in the creator's own voice, not a generic tacked-on line).
+- Keep this closing invitation short (one sentence) and place it as the
+  very last line of the script -- it should feel like the natural end of
+  the narrator's thought, not a jarring tone shift after the story has
+  already concluded.
+
 Script length guidelines based on target duration:
 
 - Up to 60 seconds: 100-150 words total. Very concise.
