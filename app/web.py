@@ -1263,9 +1263,10 @@ def project_detail(slug: str) -> HTMLResponse:
         const isElevenLabs = provider === "elevenlabs";
         btn.disabled = true;
         btn.textContent = isElevenLabs ? "⏳ Üretiliyor…" : "⏳ Aranıyor…";
+        const catalogLabel = provider === "freesound" ? "Freesound’da" : "Jamendo’da";
         box.innerHTML = isElevenLabs
             ? '<div class="muted" style="font-size:13px">ElevenLabs ile arka plan müziği üretiliyor, bu birkaç saniye sürebilir…</div>'
-            : '<div class="muted" style="font-size:13px">Jamendo’da telifsiz parçalar aranıyor…</div>';
+            : `<div class="muted" style="font-size:13px">${{catalogLabel}} telifsiz parçalar aranıyor…</div>`;
         try {{
             const params = new URLSearchParams({{query, content_type: contentType, provider}});
             const res = await fetch(`/api/music-search?${{params.toString()}}`);

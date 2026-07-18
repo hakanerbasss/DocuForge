@@ -101,6 +101,13 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "password",
         "...",
     ),
+    "freesound_api_key": (
+        "Freesound API Key",
+        "FREESOUND_API_KEY",
+        "Ücretsiz Creative Commons ses/atmosfer kütüphanesi araması için (freesound.org/apiv2/apply). Jamendo'dan farklı olarak çoğu içerik şarkı değil, doğrudan atmosfer/fon sesi kaydı.",
+        "password",
+        "...",
+    ),
     "closing_image": (
         "Belgesel Kapanış Görseli",
         "CLOSING_IMAGE",

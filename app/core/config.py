@@ -27,6 +27,7 @@ SECRET_FIELDS: dict[str, str] = {
     "MUBERT_COMPANY_ID": "mubert_company_id",
     "MUBERT_LICENSE_TOKEN": "mubert_license_token",
     "ELEVENLABS_API_KEY": "elevenlabs_api_key",
+    "FREESOUND_API_KEY": "freesound_api_key",
 }
 
 
@@ -144,6 +145,10 @@ class Settings:
 
     elevenlabs_api_key: str = _resolve_secret(
         "ELEVENLABS_API_KEY", "elevenlabs_api_key", _secrets
+    )
+
+    freesound_api_key: str = _resolve_secret(
+        "FREESOUND_API_KEY", "freesound_api_key", _secrets
     )
 
     def save_secret(self, secrets_key: str, value: str) -> None:

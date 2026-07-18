@@ -421,8 +421,9 @@ Arka plan m\u00fczi\u011fi ekle
 <option value="jamendo" selected>Jamendo (telifsiz)</option>
 <option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
 <option value="elevenlabs">ElevenLabs Music (yapay zeka, \u00fccretli)</option>
+<option value="freesound">Freesound (\u00fccretsiz, CC lisansl\u0131)</option>
 </select>
-<div class="hint">Jamendo/Mubert/ElevenLabs i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
+<div class="hint">Jamendo/Mubert/ElevenLabs/Freesound i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
 
 <label for="music_volume" style="margin-top:12px">M\u00fczik Sesi Seviyesi: <span id="musicVolumeLabel">%18</span></label>
 <input id="music_volume" type="range" min="0" max="50" step="5" value="18" oninput="document.getElementById('musicVolumeLabel').textContent='%'+this.value">
@@ -641,7 +642,7 @@ function onMusicToggle(){
 
 function onMusicProviderChange(){
   const p=document.getElementById("music_provider").value;
-  const isBrowsable=(p==="jamendo"||p==="elevenlabs")&&document.getElementById("background_music_enabled").checked;
+  const isBrowsable=(p==="jamendo"||p==="elevenlabs"||p==="freesound")&&document.getElementById("background_music_enabled").checked;
   document.getElementById("musicBrowseRow").style.display=isBrowsable?"block":"none";
   const btn=document.getElementById("musicSearchBtn");
   if(btn)btn.textContent=p==="elevenlabs"?"🎵 Üret":"🎧 Ara";
@@ -708,9 +709,10 @@ async function searchMusic(){
   const isElevenLabs=provider==="elevenlabs";
   btn.disabled=true;
   btn.textContent=isElevenLabs?"⏳ Üretiliyor…":"⏳ Aranıyor…";
+  const catalogLabel=provider==="freesound"?"Freesound’da":"Jamendo’da";
   box.innerHTML=isElevenLabs
     ? '<div class="hint">ElevenLabs ile arka plan müziği üretiliyor, bu birkaç saniye sürebilir…</div>'
-    : '<div class="hint">Jamendo’da telifsiz parçalar aranıyor…</div>';
+    : `<div class="hint">${catalogLabel} telifsiz parçalar aranıyor…</div>`;
   try{
     const params=new URLSearchParams({query, content_type: contentType, provider});
     const res=await fetch(`/api/music-search?${params.toString()}`);
@@ -1022,6 +1024,11 @@ def music_search(
             # A real, billed generation -- never more than the one
             # result search() already caps itself to.
             tracks = music_provider.search(search_query, limit=1)
+        elif provider_key == "freesound":
+            from app.providers.music.freesound import FreesoundMusicProvider
+
+            music_provider = FreesoundMusicProvider()
+            tracks = music_provider.search(search_query, limit=12)
         else:
             from app.providers.music.jamendo import JamendoMusicProvider
 

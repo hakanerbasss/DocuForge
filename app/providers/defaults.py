@@ -19,6 +19,7 @@ from app.providers.voice.espeak import EspeakVoiceProvider
 from app.providers.music.jamendo import JamendoMusicProvider
 from app.providers.music.mubert import MubertMusicProvider
 from app.providers.music.elevenlabs import ElevenLabsMusicProvider
+from app.providers.music.freesound import FreesoundMusicProvider
 
 
 def register_default_providers() -> None:
@@ -180,4 +181,12 @@ def register_default_providers() -> None:
             key="elevenlabs",
             name="ElevenLabs Music (AI, paid)",
             factory=ElevenLabsMusicProvider,
+        )
+
+    if ("music", "freesound") not in registered:
+        ProviderRegistry.register(
+            category="music",
+            key="freesound",
+            name="Freesound (free, CC-licensed)",
+            factory=FreesoundMusicProvider,
         )
