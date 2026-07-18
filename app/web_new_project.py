@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.agents.topic import TopicSuggestionAgent
@@ -420,8 +420,9 @@ Arka plan m\u00fczi\u011fi ekle
 <option value="local">Yerel (music/ klas\u00f6r\u00fc)</option>
 <option value="jamendo" selected>Jamendo (telifsiz)</option>
 <option value="mubert">Mubert (yapay zeka m\u00fczi\u011fi)</option>
+<option value="elevenlabs">ElevenLabs Music (yapay zeka, \u00fccretli)</option>
 </select>
-<div class="hint">Jamendo/Mubert i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
+<div class="hint">Jamendo/Mubert/ElevenLabs i\u00e7in <a href="/settings">Ayarlar</a> sayfas\u0131ndan API key girmen gerekir.</div>
 
 <label for="music_volume" style="margin-top:12px">M\u00fczik Sesi Seviyesi: <span id="musicVolumeLabel">%18</span></label>
 <input id="music_volume" type="range" min="0" max="50" step="5" value="18" oninput="document.getElementById('musicVolumeLabel').textContent='%'+this.value">
@@ -429,6 +430,7 @@ Arka plan m\u00fczi\u011fi ekle
 
 <div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
 <div class="hint" style="margin-bottom:8px">Ticari kullan\u0131ma kapal\u0131 (NC lisansl\u0131) par\u00e7alar listelenmiyor -- ama lisans\u0131 belirlenemeyenler ⚠️ ile i\u015faretli, y\u00fcklemeden \u00f6nce kontrol et.</div>
+<div id="musicCostHint" class="hint" style="display:none;margin-bottom:8px;color:#9f5a00">⚡ ElevenLabs her \u00fcretim i\u00e7in \u00fccret al\u0131r -- ayn\u0131 arama tekrarlan\u0131rsa yeniden \u00fcretmez (\u00f6nbelleklenir), ama farkl\u0131 her arama yeni bir \u00fcretim demektir.</div>
 <div style="display:flex;gap:8px">
 <input id="musicSearchQuery" placeholder="\u00d6rnek: cinematic ambient (bo\u015f b\u0131rak\u0131rsan i\u00e7erik t\u00fcr\u00fcne g\u00f6re aran\u0131r)" style="flex:1">
 <button type="button" id="musicSearchBtn" onclick="searchMusic()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🎧 Ara</button>
@@ -639,9 +641,13 @@ function onMusicToggle(){
 
 function onMusicProviderChange(){
   const p=document.getElementById("music_provider").value;
-  const isJamendo=p==="jamendo"&&document.getElementById("background_music_enabled").checked;
-  document.getElementById("musicBrowseRow").style.display=isJamendo?"block":"none";
-  if(!isJamendo){
+  const isBrowsable=(p==="jamendo"||p==="elevenlabs")&&document.getElementById("background_music_enabled").checked;
+  document.getElementById("musicBrowseRow").style.display=isBrowsable?"block":"none";
+  const btn=document.getElementById("musicSearchBtn");
+  if(btn)btn.textContent=p==="elevenlabs"?"🎵 Üret":"🎧 Ara";
+  const costHint=document.getElementById("musicCostHint");
+  if(costHint)costHint.style.display=p==="elevenlabs"?"block":"none";
+  if(!isBrowsable){
     document.getElementById("music_track").value="";
     document.getElementById("musicResults").innerHTML="";
     document.getElementById("musicSelectedInfo").style.display="none";
@@ -698,11 +704,15 @@ async function searchMusic(){
   const box=document.getElementById("musicResults");
   const query=document.getElementById("musicSearchQuery").value.trim();
   const contentType=document.getElementById("content_type").value;
+  const provider=document.getElementById("music_provider").value;
+  const isElevenLabs=provider==="elevenlabs";
   btn.disabled=true;
-  btn.textContent="⏳ Aranıyor…";
-  box.innerHTML='<div class="hint">Jamendo’da telifsiz parçalar aranıyor…</div>';
+  btn.textContent=isElevenLabs?"⏳ Üretiliyor…":"⏳ Aranıyor…";
+  box.innerHTML=isElevenLabs
+    ? '<div class="hint">ElevenLabs ile arka plan müziği üretiliyor, bu birkaç saniye sürebilir…</div>'
+    : '<div class="hint">Jamendo’da telifsiz parçalar aranıyor…</div>';
   try{
-    const params=new URLSearchParams({query, content_type: contentType});
+    const params=new URLSearchParams({query, content_type: contentType, provider});
     const res=await fetch(`/api/music-search?${params.toString()}`);
     const data=await res.json();
     if(!res.ok)throw new Error(data.detail||"Arama başarısız.");
@@ -711,7 +721,7 @@ async function searchMusic(){
     box.innerHTML=`<div class="hint" style="color:#9f2020">${escapeHtml(err.message)}</div>`;
   }finally{
     btn.disabled=false;
-    btn.textContent="🎧 Ara";
+    btn.textContent=isElevenLabs?"🎵 Üret":"🎧 Ara";
   }
 }
 
@@ -991,17 +1001,32 @@ def music_mood(topic: str = "", content_type: str = "documentary") -> dict[str, 
 
 
 @router.get("/api/music-search")
-def music_search(query: str = "", content_type: str = "documentary") -> dict[str, Any]:
-    from app.providers.music.jamendo import JamendoMusicProvider
+def music_search(
+    query: str = "",
+    content_type: str = "documentary",
+    provider: str = "jamendo",
+) -> dict[str, Any]:
     from app.services.render_service import RenderService
 
     search_query = query.strip() or RenderService()._build_music_query(
         {"content_type": content_type}
     )
 
+    provider_key = provider.strip().lower() or "jamendo"
+
     try:
-        provider = JamendoMusicProvider()
-        tracks = provider.search(search_query, limit=12)
+        if provider_key == "elevenlabs":
+            from app.providers.music.elevenlabs import ElevenLabsMusicProvider
+
+            music_provider = ElevenLabsMusicProvider()
+            # A real, billed generation -- never more than the one
+            # result search() already caps itself to.
+            tracks = music_provider.search(search_query, limit=1)
+        else:
+            from app.providers.music.jamendo import JamendoMusicProvider
+
+            music_provider = JamendoMusicProvider()
+            tracks = music_provider.search(search_query, limit=12)
     except Exception as error:
         raise HTTPException(
             status_code=502,
@@ -1009,6 +1034,19 @@ def music_search(query: str = "", content_type: str = "documentary") -> dict[str
         ) from error
 
     return {"query": search_query, "tracks": tracks}
+
+
+@router.get("/music-cache/elevenlabs/{filename}")
+def elevenlabs_music_cache_file(filename: str):
+    from app.providers.music.elevenlabs import ElevenLabsMusicProvider
+
+    cache_dir = ElevenLabsMusicProvider.CACHE_DIR.resolve()
+    requested = (cache_dir / filename).resolve()
+
+    if cache_dir not in requested.parents or not requested.is_file():
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı.")
+
+    return FileResponse(requested)
 
 
 @router.post("/api/builds")

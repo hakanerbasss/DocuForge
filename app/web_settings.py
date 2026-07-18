@@ -94,6 +94,13 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "password",
         "...",
     ),
+    "elevenlabs_api_key": (
+        "ElevenLabs API Key",
+        "ELEVENLABS_API_KEY",
+        "Yapay zeka ile arka plan/fon müziği üretimi için (elevenlabs.io -- anahtarı oluştururken sadece 'Music' erişimini aç). Her arama gerçek, ücretli bir üretim isteğidir -- Jamendo gibi ücretsiz bir katalog taraması değildir.",
+        "password",
+        "...",
+    ),
     "closing_image": (
         "Belgesel Kapanış Görseli",
         "CLOSING_IMAGE",

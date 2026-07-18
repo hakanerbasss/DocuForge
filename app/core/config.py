@@ -26,6 +26,7 @@ SECRET_FIELDS: dict[str, str] = {
     "JAMENDO_CLIENT_ID": "jamendo_client_id",
     "MUBERT_COMPANY_ID": "mubert_company_id",
     "MUBERT_LICENSE_TOKEN": "mubert_license_token",
+    "ELEVENLABS_API_KEY": "elevenlabs_api_key",
 }
 
 
@@ -139,6 +140,10 @@ class Settings:
 
     mubert_license_token: str = _resolve_secret(
         "MUBERT_LICENSE_TOKEN", "mubert_license_token", _secrets
+    )
+
+    elevenlabs_api_key: str = _resolve_secret(
+        "ELEVENLABS_API_KEY", "elevenlabs_api_key", _secrets
     )
 
     def save_secret(self, secrets_key: str, value: str) -> None:

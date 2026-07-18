@@ -18,6 +18,7 @@ from app.providers.video.fal import FalVideoProvider
 from app.providers.voice.espeak import EspeakVoiceProvider
 from app.providers.music.jamendo import JamendoMusicProvider
 from app.providers.music.mubert import MubertMusicProvider
+from app.providers.music.elevenlabs import ElevenLabsMusicProvider
 
 
 def register_default_providers() -> None:
@@ -171,4 +172,12 @@ def register_default_providers() -> None:
             key="mubert",
             name="Mubert (AI music)",
             factory=MubertMusicProvider,
+        )
+
+    if ("music", "elevenlabs") not in registered:
+        ProviderRegistry.register(
+            category="music",
+            key="elevenlabs",
+            name="ElevenLabs Music (AI, paid)",
+            factory=ElevenLabsMusicProvider,
         )

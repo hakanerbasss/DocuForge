@@ -43,5 +43,6 @@ output/
 projects/
 jobs/
 /models/
+/music_cache/
 __pycache__/
 *.pyc

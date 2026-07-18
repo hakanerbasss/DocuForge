@@ -1258,11 +1258,16 @@ def project_detail(slug: str) -> HTMLResponse:
         const box = document.getElementById("regenMusicResults");
         const query = document.getElementById("regenMusicQuery").value.trim();
         const contentType = (currentRegenOpts && currentRegenOpts.content_type) || "documentary";
+        const providerEl = document.querySelector('[data-field="music_provider"]');
+        const provider = providerEl ? providerEl.value : "jamendo";
+        const isElevenLabs = provider === "elevenlabs";
         btn.disabled = true;
-        btn.textContent = "⏳ Aranıyor…";
-        box.innerHTML = '<div class="muted" style="font-size:13px">Jamendo’da telifsiz parçalar aranıyor…</div>';
+        btn.textContent = isElevenLabs ? "⏳ Üretiliyor…" : "⏳ Aranıyor…";
+        box.innerHTML = isElevenLabs
+            ? '<div class="muted" style="font-size:13px">ElevenLabs ile arka plan müziği üretiliyor, bu birkaç saniye sürebilir…</div>'
+            : '<div class="muted" style="font-size:13px">Jamendo’da telifsiz parçalar aranıyor…</div>';
         try {{
-            const params = new URLSearchParams({{query, content_type: contentType}});
+            const params = new URLSearchParams({{query, content_type: contentType, provider}});
             const res = await fetch(`/api/music-search?${{params.toString()}}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || "Arama başarısız.");
@@ -1271,7 +1276,7 @@ def project_detail(slug: str) -> HTMLResponse:
             box.innerHTML = `<div class="muted" style="font-size:13px;color:#9f2020">${{escapeHtmlLocal(err.message)}}</div>`;
         }} finally {{
             btn.disabled = false;
-            btn.textContent = "🎧 Ara";
+            btn.textContent = isElevenLabs ? "🎵 Üret" : "🎧 Ara";
         }}
     }}
 
