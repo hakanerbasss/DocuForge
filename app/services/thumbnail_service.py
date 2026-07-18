@@ -109,6 +109,9 @@ class ThumbnailService:
                 )
                 composer = getattr(self, f"_compose_{key}")
                 image = composer(fitted, brief, self.WIDTH, self.HEIGHT)
+                image = self._apply_channel_logo(
+                    image, self.WIDTH, self.HEIGHT
+                )
                 image.convert("RGB").save(
                     project_dir / f"thumbnail_{index}.png",
                     format="PNG",
@@ -141,6 +144,9 @@ class ThumbnailService:
                     brief,
                     self.VERTICAL_WIDTH,
                     self.VERTICAL_HEIGHT,
+                )
+                vertical_image = self._apply_channel_logo(
+                    vertical_image, self.VERTICAL_WIDTH, self.VERTICAL_HEIGHT
                 )
                 vertical_image.convert("RGB").save(
                     project_dir / "thumbnail_vertical.jpg",
@@ -985,6 +991,62 @@ class ThumbnailService:
         )
 
         return canvas
+
+    def _apply_channel_logo(
+        self,
+        canvas: Image.Image,
+        width: int,
+        height: int,
+    ) -> Image.Image:
+        """Paste the configured channel logo (Settings) onto the bottom-
+        right corner of a composed thumbnail, if the feature is enabled.
+        Bottom-right is the one corner every template leaves clear --
+        the others are where each composer puts its own headline text
+        or (breaking_discovery's) emotional-trigger tag. Uploaded as-is,
+        so a transparent PNG blends in while a plain square just shows
+        as a square -- no automatic circular masking. Any read/decode/
+        paste failure falls back to the plain thumbnail rather than
+        failing the whole render over a cosmetic extra.
+        """
+
+        try:
+            if not settings.is_configured("channel_logo_enabled"):
+                return canvas
+
+            if not settings.is_configured("channel_logo"):
+                return canvas
+
+            logo_path = Path(settings.channel_logo)
+
+            if not logo_path.exists() or logo_path.stat().st_size == 0:
+                return canvas
+
+            with Image.open(logo_path) as raw_logo:
+                logo = raw_logo.convert("RGBA")
+
+            target = int(min(width, height) * 0.16)
+            scale = target / max(logo.width, logo.height)
+            logo = logo.resize(
+                (
+                    max(1, int(logo.width * scale)),
+                    max(1, int(logo.height * scale)),
+                ),
+                Image.LANCZOS,
+            )
+
+            margin = int(min(width, height) * 0.035)
+            x = width - logo.width - margin
+            y = height - logo.height - margin
+
+            result = canvas.convert("RGBA")
+            result.paste(logo, (x, y), logo)
+            return result.convert("RGB")
+        except Exception as error:
+            print(
+                f"  ⚠ Kanal logosu eklenemedi, logosuz devam ediliyor: "
+                f"{error}"
+            )
+            return canvas
 
     # ------------------------------------------------------------------
     # Misc

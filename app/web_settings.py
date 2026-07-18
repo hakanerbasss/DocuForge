@@ -11,6 +11,7 @@ XTTS_REFERENCE_DIR = Path("models/xtts")
 XTTS_REFERENCE_PATH = XTTS_REFERENCE_DIR / "reference.wav"
 
 CLOSING_IMAGE_DIR = Path("models/closing")
+CHANNEL_LOGO_DIR = Path("models/logo")
 
 
 router = APIRouter()
@@ -112,6 +113,13 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "Belgesel Kapanış Görseli",
         "CLOSING_IMAGE",
         "Belgesel türündeki videoların son sahnesinde otomatik üretilen kapanış çekimi yerine kullanılacak sabit bir görsel (ör. ChatGPT/DALL-E'de tasarladığın bir kapanış karesi). Anlatım sesi yine o sahnenin metniyle çalar, sadece görsel değişir. Yüklemek yetmez -- aşağıdaki 'Belgesellerin sonuna ekle' anahtarı da açık olmalı; kapalıyken (veya hiç yüklenmemişse) AI'ın kendi ürettiği kapanış çekimi kullanılır.",
+        "image",
+        "",
+    ),
+    "channel_logo": (
+        "Kanal Logosu",
+        "CHANNEL_LOGO",
+        "Üretilen tüm kapak (thumbnail) tasarımlarının sağ alt köşesine eklenecek küçük marka logosu. En iyi sonuç için arka planı şeffaf (PNG) ve yuvarlak/kare bir logo kullan -- yüklediğin görsel neyse aynen o şekliyle basılır, otomatik yuvarlatma yapılmaz. Yüklemek yetmez -- aşağıdaki 'Kapaklara ekle' anahtarı da açık olmalı.",
         "image",
         "",
     ),
@@ -224,12 +232,68 @@ def _render_closing_image_field() -> str:
     """
 
 
+def _render_channel_logo_field() -> str:
+    label, env_name, description, _input_type, _placeholder = FIELD_LABELS[
+        "channel_logo"
+    ]
+    configured = settings.is_configured("channel_logo")
+    current_path = Path(settings.channel_logo) if configured else None
+    enabled = settings.is_configured("channel_logo_enabled")
+
+    if configured and current_path is not None and current_path.exists():
+        checked = "checked" if enabled else ""
+        # Cache-busting: same filename gets overwritten on every re-upload,
+        # so without a query param that changes, browsers keep showing the
+        # old cached image at this exact URL even after a hard refresh.
+        image_version = int(current_path.stat().st_mtime)
+        body = f"""
+        <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
+            <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
+            <img src="/settings/channel_logo/file?v={image_version}" alt="Kanal logosu" style="max-width:140px;max-height:140px;border-radius:8px;display:block;margin-bottom:12px;background:repeating-conic-gradient(#eee 0% 25%,#fff 0% 50%) 50%/16px 16px">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:12px;cursor:pointer">
+                <input type="checkbox" id="channelLogoEnabledToggle" {checked} onchange="toggleChannelLogoEnabled(this)" style="width:auto;min-height:auto">
+                Kapaklara ekle
+            </label>
+            <div class="muted" style="font-size:12px;margin-bottom:10px">
+                Kapalıyken logo yüklü kalır ama kapak tasarımlarına basılmaz.
+            </div>
+            <form method="post" action="/settings/channel_logo/clear" style="margin:0">
+                <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
+            </form>
+        </div>
+        """
+    else:
+        body = """
+        <div>
+            <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Logo yükle</label>
+            <div style="display:flex;gap:8px">
+                <input type="file" id="channelLogoFileInput" accept="image/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
+                <button type="button" class="button" onclick="uploadChannelLogoFile()" style="white-space:nowrap">Yükle</button>
+            </div>
+        </div>
+        """
+
+    return f"""
+    <div style="padding:16px 0;border-bottom:1px solid #edf1f6">
+        <div style="font-weight:700;margin-bottom:2px">{html.escape(label)}</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">
+            {html.escape(description)}
+            (<code>{env_name}</code> ortam değişkeni ayarlıysa her zaman öncelikli olur ve buradan değiştirilemez.)
+        </div>
+        {body}
+    </div>
+    """
+
+
 def _render_field(field_key: str) -> str:
     if field_key == "xtts_reference_audio":
         return _render_xtts_field()
 
     if field_key == "closing_image":
         return _render_closing_image_field()
+
+    if field_key == "channel_logo":
+        return _render_channel_logo_field()
 
     label, env_name, description, input_type, placeholder = FIELD_LABELS[
         field_key
@@ -416,6 +480,50 @@ async function uploadClosingImageFile() {{
         alert("Hata: " + e.message);
     }}
 }}
+
+async function toggleChannelLogoEnabled(checkbox) {{
+    checkbox.disabled = true;
+    try {{
+        let r;
+        if (checkbox.checked) {{
+            const fd = new URLSearchParams();
+            fd.append("value", "1");
+            r = await fetch("/settings/channel_logo_enabled", {{
+                method: "POST",
+                headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
+                body: fd,
+            }});
+        }} else {{
+            r = await fetch("/settings/channel_logo_enabled/clear", {{method: "POST"}});
+        }}
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Kaydedilemedi.");
+        }}
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+        checkbox.checked = !checkbox.checked;
+    }} finally {{
+        checkbox.disabled = false;
+    }}
+}}
+
+async function uploadChannelLogoFile() {{
+    const input = document.getElementById("channelLogoFileInput");
+    if (!input.files || !input.files.length) {{ alert("Bir görsel seç."); return; }}
+    const fd = new FormData();
+    fd.append("file", input.files[0]);
+    try {{
+        const r = await fetch("/settings/channel_logo/upload", {{method: "POST", body: fd}});
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Yükleme başarısız.");
+        }}
+        location.href = "/settings";
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+    }}
+}}
 </script>
 <script>
 if ("serviceWorker" in navigator) {{
@@ -444,7 +552,7 @@ def save_setting(
     return RedirectResponse(url="/settings", status_code=303)
 
 
-FILE_BACKED_FIELDS = {"xtts_reference_audio", "closing_image"}
+FILE_BACKED_FIELDS = {"xtts_reference_audio", "closing_image", "channel_logo"}
 
 
 @router.post("/settings/{field_key}/clear")
@@ -572,6 +680,51 @@ async def upload_closing_image(
 
     settings.save_secret(
         "closing_image",
+        str(destination.resolve()),
+    )
+
+    return RedirectResponse(url="/settings", status_code=303)
+
+
+@router.get("/settings/channel_logo/file")
+def get_channel_logo() -> FileResponse:
+    if not settings.is_configured("channel_logo"):
+        raise HTTPException(status_code=404, detail="Kanal logosu ayarlı değil.")
+
+    path = Path(settings.channel_logo)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Kanal logosu dosyası bulunamadı.")
+
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/settings/channel_logo/upload")
+async def upload_channel_logo(
+    file: UploadFile = File(...),
+) -> RedirectResponse:
+    CHANNEL_LOGO_DIR.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename or "upload").suffix.lower()
+
+    if suffix not in (".jpg", ".jpeg", ".png", ".webp"):
+        suffix = ".png"
+
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Dosya boş.")
+
+    # Eski yüklemeden kalma farklı uzantılı bir dosya varsa (ör. önce .png
+    # yüklenip şimdi .jpg yükleniyorsa) karışıklık olmasın diye temizleniyor.
+    for old_file in CHANNEL_LOGO_DIR.glob("channel_logo.*"):
+        old_file.unlink(missing_ok=True)
+
+    destination = CHANNEL_LOGO_DIR / f"channel_logo{suffix}"
+    destination.write_bytes(content)
+
+    settings.save_secret(
+        "channel_logo",
         str(destination.resolve()),
     )
 

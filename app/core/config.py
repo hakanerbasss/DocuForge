@@ -23,6 +23,8 @@ SECRET_FIELDS: dict[str, str] = {
     "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
     "CLOSING_IMAGE": "closing_image",
     "CLOSING_IMAGE_ENABLED": "closing_image_enabled",
+    "CHANNEL_LOGO": "channel_logo",
+    "CHANNEL_LOGO_ENABLED": "channel_logo_enabled",
     "JAMENDO_CLIENT_ID": "jamendo_client_id",
     "MUBERT_COMPANY_ID": "mubert_company_id",
     "MUBERT_LICENSE_TOKEN": "mubert_license_token",
@@ -129,6 +131,14 @@ class Settings:
 
     closing_image_enabled: str = _resolve_secret(
         "CLOSING_IMAGE_ENABLED", "closing_image_enabled", _secrets
+    )
+
+    channel_logo: str = _resolve_secret(
+        "CHANNEL_LOGO", "channel_logo", _secrets
+    )
+
+    channel_logo_enabled: str = _resolve_secret(
+        "CHANNEL_LOGO_ENABLED", "channel_logo_enabled", _secrets
     )
 
     jamendo_client_id: str = _resolve_secret(
