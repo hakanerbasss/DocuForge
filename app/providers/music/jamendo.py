@@ -134,6 +134,18 @@ class JamendoMusicProvider(MusicProvider):
             if not download_url:
                 continue
 
+            license_info = self._parse_license(
+                str(track.get("license_ccurl") or "")
+            )
+
+            # Confirmed non-commercial (CC BY-NC/-SA/-ND) tracks would
+            # just be a licensing trap on a monetized channel -- no
+            # point listing them at all. commercial_ok is None (license
+            # couldn't be determined) still gets shown, since that's
+            # "unknown" rather than "confirmed not allowed."
+            if license_info["commercial_ok"] is False:
+                continue
+
             tracks.append({
                 "id": str(track.get("id", "")),
                 "name": str(track.get("name") or "Untitled"),
@@ -141,9 +153,7 @@ class JamendoMusicProvider(MusicProvider):
                 "duration": int(track.get("duration") or 0),
                 "preview_url": str(track.get("audio") or download_url),
                 "download_url": str(download_url),
-                "license": self._parse_license(
-                    str(track.get("license_ccurl") or "")
-                ),
+                "license": license_info,
             })
 
         return tracks

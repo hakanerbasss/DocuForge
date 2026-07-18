@@ -428,10 +428,11 @@ Arka plan m\u00fczi\u011fi ekle
 <div class="hint">Arka plan m\u00fczi\u011finin seslendirmeye g\u00f6re ses oran\u0131. D\u00fc\u015f\u00fck tut ki konu\u015fmay\u0131 bast\u0131rmas\u0131n (varsay\u0131lan %18 \u00f6nerilir).</div>
 
 <div id="musicBrowseRow" style="display:none;margin-top:12px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
-<div class="hint" style="margin-bottom:8px">Jamendo katalo\u011fu farkl\u0131 lisanslar i\u00e7eriyor -- her sonucun alt\u0131nda ✅/⚠️ ile ticari kullan\u0131ma uygunlu\u011fu g\u00f6steriliyor, YouTube’a y\u00fcklemeden \u00f6nce kontrol et.</div>
+<div class="hint" style="margin-bottom:8px">Ticari kullan\u0131ma kapal\u0131 (NC lisansl\u0131) par\u00e7alar listelenmiyor -- ama lisans\u0131 belirlenemeyenler ⚠️ ile i\u015faretli, y\u00fcklemeden \u00f6nce kontrol et.</div>
 <div style="display:flex;gap:8px">
 <input id="musicSearchQuery" placeholder="\u00d6rnek: cinematic ambient (bo\u015f b\u0131rak\u0131rsan i\u00e7erik t\u00fcr\u00fcne g\u00f6re aran\u0131r)" style="flex:1">
 <button type="button" id="musicSearchBtn" onclick="searchMusic()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🎧 Ara</button>
+<button type="button" onclick="clearMusicSearch()" style="width:auto;min-height:44px;margin-top:0;padding:0 16px;font-size:14px">🗑 Temizle</button>
 </div>
 <div id="musicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
 <div id="musicResults" style="margin-top:10px"></div>
@@ -681,6 +682,15 @@ function addMusicTag(btn){
     current.push(tag);
     input.value=current.join(" ");
   }
+}
+
+function clearMusicSearch(){
+  document.getElementById("musicSearchQuery").value="";
+  document.getElementById("musicResults").innerHTML="";
+  document.getElementById("music_track").value="";
+  const info=document.getElementById("musicSelectedInfo");
+  info.style.display="none";
+  info.textContent="";
 }
 
 async function searchMusic(){

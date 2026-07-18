@@ -1138,10 +1138,11 @@ def project_detail(slug: str) -> HTMLResponse:
                 if (field === "music_track") {{
                     fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
                         <div style="margin-top:6px;padding:12px;border:1px solid #dbe5f4;border-radius:12px;background:#f8fbff">
-                        <div class="muted" style="font-size:12px;margin-bottom:8px">Jamendo kataloğu farklı lisanslar içeriyor -- sonuçların altındaki ✅/⚠️ ticari kullanıma uygunluğu gösterir, YouTube'a yüklemeden önce kontrol et.</div>
+                        <div class="muted" style="font-size:12px;margin-bottom:8px">Ticari kullanıma kapalı (NC lisanslı) parçalar listelenmiyor -- ama lisansı belirlenemeyenler ⚠️ ile işaretli, yüklemeden önce kontrol et.</div>
                         <div style="display:flex;gap:8px">
                             <input type="text" id="regenMusicQuery" placeholder="Örnek: cinematic ambient (boş bırakırsan otomatik aranır)" style="flex:1;min-height:40px;border:1px solid #cbd6e5;border-radius:8px;padding:0 10px;font:inherit">
                             <button type="button" id="regenMusicSearchBtn" onclick="regenSearchMusic()" style="width:auto;min-height:40px;padding:0 14px;font-size:13px">🎧 Ara</button>
+                            <button type="button" onclick="regenClearMusicSearch()" style="width:auto;min-height:40px;padding:0 14px;font-size:13px">🗑 Temizle</button>
                         </div>
                         <div id="regenMusicMoodTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
                         <div id="regenMusicResults" style="margin-top:10px;max-height:280px;overflow:auto"></div>
@@ -1272,6 +1273,15 @@ def project_detail(slug: str) -> HTMLResponse:
             btn.disabled = false;
             btn.textContent = "🎧 Ara";
         }}
+    }}
+
+    function regenClearMusicSearch() {{
+        document.getElementById("regenMusicQuery").value = "";
+        document.getElementById("regenMusicResults").innerHTML = "";
+        document.getElementById("regenMusicTrackValue").value = "";
+        const info = document.getElementById("regenMusicSelectedInfo");
+        info.style.display = "none";
+        info.textContent = "";
     }}
 
     function regenMusicLicenseBadge(license) {{
