@@ -96,6 +96,7 @@ class RenderService:
         clip_files: list[Path] = []
         clip_durations: list[float] = []
         subtitle_segments: list[tuple[int, float, str | None]] = []
+        placeholder_scene_numbers: list[int] = []
 
         for index, scene_dir in enumerate(scene_dirs, start=1):
             scene_number = self._scene_number_from_dir(
@@ -203,9 +204,16 @@ class RenderService:
 
             else:
                 print(
-                    f"  ⚠ No usable media in {scene_dir}; skipped."
+                    f"  ⚠ No usable media in {scene_dir}; falling back "
+                    "to a placeholder background so the narration for "
+                    "this scene isn't lost."
                 )
-                continue
+                self._placeholder_to_clip(
+                    destination=clip_path,
+                    duration=scene_duration,
+                    audio_path=audio_path,
+                )
+                placeholder_scene_numbers.append(scene_number)
 
             clip_files.append(clip_path)
             clip_durations.append(scene_duration)
@@ -325,6 +333,23 @@ class RenderService:
 
             if project_data.get("subtitles_burn_in"):
                 self._burn_in_subtitles(output_path, srt_path)
+
+        warnings_path = render_dir / "media_warnings.json"
+
+        if placeholder_scene_numbers:
+            warnings_path.write_text(
+                json.dumps(
+                    {"placeholder_scenes": placeholder_scene_numbers},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        elif warnings_path.exists():
+            # A prior render (before a "Yeniden Üret" on media) may have
+            # left a stale warning behind -- clear it so a clean re-render
+            # doesn't keep showing an outdated alert.
+            warnings_path.unlink()
 
         return output_path
 
@@ -1205,6 +1230,85 @@ class RenderService:
                 f"fps={self.FPS},"
                 "setsar=1"
             ),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+
+        if audio_path is not None:
+            command.extend([
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-ar",
+                "48000",
+                "-ac",
+                "2",
+                "-af",
+                "apad",
+            ])
+        else:
+            command.extend([
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=48000:cl=stereo",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-shortest",
+            ])
+
+        command.extend([
+            "-movflags",
+            "+faststart",
+            str(destination),
+        ])
+
+        self._run(command)
+
+    def _placeholder_to_clip(
+        self,
+        destination: Path,
+        duration: float,
+        audio_path: Path | None,
+    ) -> None:
+        """Fallback clip for a scene whose image/video generation failed.
+
+        Narration audio must never be silently dropped just because the
+        visual side of a scene failed -- a plain dark background still
+        carries the spoken content, while skipping the scene entirely
+        (the previous behavior) cut the narration itself from the final
+        video with no warning. This is deliberately the last resort, not
+        a normal path -- real media should always be preferred.
+        """
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=0x14203a:s={self.WIDTH}x{self.HEIGHT}:"
+            f"d={duration:.3f}:r={self.FPS}",
+        ]
+
+        if audio_path is not None:
+            command.extend([
+                "-i",
+                str(audio_path),
+            ])
+
+        command.extend([
+            "-t",
+            f"{duration:.3f}",
             "-c:v",
             "libx264",
             "-preset",

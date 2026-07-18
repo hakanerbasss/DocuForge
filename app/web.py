@@ -778,6 +778,35 @@ def project_detail(slug: str) -> HTMLResponse:
         </section>
         """
 
+    media_warnings_path = project_dir / "render" / "media_warnings.json"
+    media_warning_section = ""
+
+    if media_warnings_path.exists():
+        try:
+            warning_data = json.loads(
+                media_warnings_path.read_text(encoding="utf-8")
+            )
+            placeholder_scenes = warning_data.get("placeholder_scenes", [])
+        except (OSError, json.JSONDecodeError):
+            placeholder_scenes = []
+
+        if placeholder_scenes:
+            scenes_text = ", ".join(
+                str(number) for number in placeholder_scenes
+            )
+            media_warning_section = f"""
+            <section class="card" style="border-color:#f0c96a;background:#fffaf0">
+                <h2 style="color:#8a5a00">⚠ Bazı sahnelerde görsel/video üretilemedi</h2>
+                <p class="muted">
+                    Sahne {html.escape(scenes_text)} için görsel veya video
+                    oluşturulamadığından o sahnelerde düz renkli bir arka plan
+                    kullanıldı -- anlatım sesi kaybolmadı, sadece görsel eksik.
+                    "📦 Medya İndirme" adımını Yeniden Üret ile tekrar
+                    denetebilir veya videoyu bu haliyle kullanabilirsin.
+                </p>
+            </section>
+            """
+
     subtitles_path = project_dir / "render" / "subtitles.srt"
     subtitles_txt_path = project_dir / "render" / "subtitles.txt"
     subtitles_section = ""
@@ -1046,6 +1075,7 @@ def project_detail(slug: str) -> HTMLResponse:
         <div id="actionStatus" class="muted" style="margin-top:10px"></div>
     </section>
 
+    {media_warning_section}
     {video_section}
     {thumbnail_section}
     {subtitles_section}
