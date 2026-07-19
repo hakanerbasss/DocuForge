@@ -75,6 +75,7 @@ class DocumentaryProject:
     thumbnail_enabled: bool = False
     thumbnail_source: str = "auto"
     thumbnail_hook_override: str = ""
+    source_material: str = ""
 
     status: str = "created"
     created_at: str = ""
@@ -99,6 +100,7 @@ class DocumentaryProject:
         self.thumbnail_hook_override = str(
             self.thumbnail_hook_override
         ).strip()
+        self.source_material = str(self.source_material).strip()
         self.status = str(self.status).strip().lower()
 
         self.target_duration_seconds = int(
@@ -306,6 +308,9 @@ class DocumentaryProject:
             ),
             thumbnail_hook_override=str(
                 data.get("thumbnail_hook_override", "")
+            ),
+            source_material=str(
+                data.get("source_material", "")
             ),
             status=str(data.get("status", "created")),
             created_at=str(data.get("created_at", "")),

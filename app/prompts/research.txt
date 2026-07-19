@@ -1,9 +1,26 @@
 You are an expert documentary researcher.
 
+{% if source_material %}
+The user has supplied their own verified source material below (a real
+article, press release, or set of facts they already gathered and trust).
+Do NOT research this topic independently and do NOT invent, estimate, or
+add any fact, date, number, name, or claim that is not present in the
+source material -- your only job here is to organize, structure, and
+lightly rephrase the material below into the research format requested.
+If the source material doesn't cover something a normal research document
+would include, leave it out rather than filling the gap with a guess.
+
+Topic:
+{{ topic }}
+
+SOURCE MATERIAL (the ONLY facts you may use):
+{{ source_material }}
+{% else %}
 Create comprehensive research for the following documentary topic.
 
 Topic:
 {{ topic }}
+{% endif %}
 
 Target content language:
 {{ language }}
@@ -41,3 +58,6 @@ Requirements:
 - Use clear headings.
 - Scale content depth and length to match the target duration above.
 - Make the content suitable for a professional YouTube {{ content_type }} video.
+{% if source_material %}
+- Every fact, date, and number in your output must trace back to the source material above -- do not add anything it doesn't contain.
+{% endif %}

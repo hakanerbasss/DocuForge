@@ -52,6 +52,7 @@ CANCEL_EVENTS: dict[str, threading.Event] = {}
 
 class BuildRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
+    source_material: str = Field(default="", max_length=8000)
     language: str = Field(default="tr")
     content_type: str = Field(default="documentary")
     target_duration_seconds: int = Field(default=900, ge=10, le=7200)
@@ -116,6 +117,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
         else:
             result_dir = BuildPipeline().run(
                 topic=req["topic"],
+                source_material=req.get("source_material", ""),
                 language=req["language"],
                 content_type=req["content_type"],
                 target_duration_seconds=req["target_duration_seconds"],
@@ -269,6 +271,7 @@ h3{margin:22px 0 6px;font-size:15px;color:#445;text-transform:uppercase;letter-s
 .muted{color:#66758c}
 label{display:block;margin-top:14px;margin-bottom:5px;font-weight:700;font-size:14px}
 input,select{width:100%;min-height:44px;padding:0 12px;border:1px solid #cbd6e5;border-radius:10px;background:white;color:#172033;font:inherit}
+textarea{width:100%;padding:10px 12px;border:1px solid #cbd6e5;border-radius:10px;background:white;color:#172033;font:inherit;resize:vertical}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .hint{font-size:12px;color:#8899aa;margin-top:3px}
 button{width:100%;min-height:50px;margin-top:20px;border:0;border-radius:13px;background:#2166f3;color:white;font-size:16px;font-weight:800;cursor:pointer}
@@ -294,6 +297,10 @@ button:disabled{opacity:.6;cursor:wait}
 <input id="topic" placeholder="\u00d6rnek: Kara Deliklerin S\u0131rr\u0131" required minlength="2" maxlength="200">
 <button type="button" id="topicSuggestBtn" onclick="fetchTopicSuggestions()" style="width:auto;min-height:38px;margin-top:8px;padding:0 16px;font-size:14px;font-weight:700;background:#eef3fc;color:#2166f3;border:1px solid #cbd6e5">💡 Konu \u00d6nerisi Al</button>
 <div id="topicSuggestions" style="display:none;margin-top:12px"></div>
+
+<label for="source_material" style="margin-top:12px">Kaynak Metin (opsiyonel)</label>
+<textarea id="source_material" rows="6" placeholder="Elinde zaten doğrulanmış, kaynak gösterilmiş bir haber/metin varsa buraya yapıştır -- araştırma adımı yeni tarih/rakam uydurmaz, sadece bu metni kullanır."></textarea>
+<div class="hint">Boş bırakırsan DocuForge konuyu kendi araştırıp yazar. Doldurursan (özellikle haber içeriklerinde) sadece buradaki bilgiler kullanılır, ekstra tarih/rakam eklenmez.</div>
 
 <div class="row">
 <div>
@@ -993,6 +1000,7 @@ async function startBuild(){
 
   const payload={
     topic,
+    source_material:document.getElementById("source_material").value.trim(),
     language:document.getElementById("language").value,
     content_type:document.getElementById("content_type").value,
     target_duration_seconds:parseInt(document.getElementById("duration").value),

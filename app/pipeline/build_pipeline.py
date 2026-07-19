@@ -28,7 +28,12 @@ console = Console()
 # Keeps "regenerate with different settings" from silently accepting an
 # override that a step's action doesn't actually read.
 STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
-    "research": {"language", "content_type", "target_duration_seconds"},
+    "research": {
+        "language",
+        "content_type",
+        "target_duration_seconds",
+        "source_material",
+    },
     "voice": {"voice_provider", "voice_name", "voice_speed"},
     "media": {"image_provider", "video_provider", "media_mode"},
     "render": {
@@ -64,6 +69,7 @@ class BuildPipeline:
     def run(
         self,
         topic: str,
+        source_material: str = "",
         language: str = "tr",
         content_type: str = "documentary",
         target_duration_seconds: int = 600,
@@ -103,6 +109,7 @@ class BuildPipeline:
 
         project = DocumentaryProject(
             title=topic,
+            source_material=source_material,
             language=language,
             content_type=resolved_content_type,
             target_duration_seconds=target_duration_seconds,
@@ -635,12 +642,18 @@ class BuildPipeline:
                 "storyboard",
                 "seo",
             }:
-                result = agent.run(
-                    agent_input,
-                    language=language,
-                    content_type=content_type,
-                    target_duration_seconds=target_duration_seconds,
-                )
+                step_kwargs: dict[str, Any] = {
+                    "language": language,
+                    "content_type": content_type,
+                    "target_duration_seconds": target_duration_seconds,
+                }
+
+                if step.key == "research":
+                    step_kwargs["source_material"] = str(
+                        project_data.get("source_material", "")
+                    )
+
+                result = agent.run(agent_input, **step_kwargs)
             else:
                 result = agent.run(agent_input)
 
