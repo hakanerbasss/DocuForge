@@ -1133,9 +1133,8 @@ class RenderService:
             "-vf",
             (
                 f"scale={self.WIDTH}:{self.HEIGHT}:"
-                "force_original_aspect_ratio=decrease,"
-                f"pad={self.WIDTH}:{self.HEIGHT}:"
-                "(ow-iw)/2:(oh-ih)/2,"
+                "force_original_aspect_ratio=increase,"
+                f"crop={self.WIDTH}:{self.HEIGHT},"
                 "setsar=1"
             ),
             "-r",
