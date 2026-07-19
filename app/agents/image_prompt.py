@@ -9,18 +9,45 @@ class ImagePromptAgent(BaseAgent):
     """Generate and validate image prompts from a storyboard."""
 
     def run(self, storyboard: str) -> str:
-        prompt = load_prompt(
-            "image",
-            storyboard=storyboard,
-        )
+        last_error: Exception | None = None
 
-        response = self.generate_with_retry(prompt)
-        data = self._parse_and_validate(response)
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            prompt = load_prompt(
+                "image",
+                storyboard=storyboard,
+            )
 
-        return json.dumps(
-            data,
-            ensure_ascii=False,
-            indent=2,
+            if attempt > 1:
+                prompt += """
+
+Your previous response was invalid.
+
+Return ONLY valid JSON.
+Do not use Markdown code fences.
+Do not include explanations before or after the JSON.
+"""
+
+            try:
+                response = self.generate_with_retry(prompt)
+                data = self._parse_and_validate(response)
+
+                return json.dumps(
+                    data,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            except (
+                json.JSONDecodeError,
+                ValueError,
+                TypeError,
+            ) as error:
+                last_error = error
+
+        raise ValueError(
+            "Image prompts could not be generated as valid JSON "
+            f"after {self.MAX_ATTEMPTS} attempts. "
+            f"Last error: {last_error}"
         )
 
     def _parse_and_validate(self, response: str) -> dict[str, Any]:
