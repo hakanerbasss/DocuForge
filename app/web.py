@@ -851,6 +851,26 @@ def project_detail(slug: str) -> HTMLResponse:
         </section>
         """
 
+    shorts_section = ""
+
+    if (project_dir / "script.md").exists():
+        shorts_section = """
+        <section class="card">
+            <h2>🎬 Uzun Videodan Shorts Üret</h2>
+            <p class="muted">
+                Bu videonun senaryosundan birbirinden bağımsız 10 kısa video
+                (Shorts) fikri çıkar -- her biri kendi başına izlenebilir,
+                kendi kancası olan ayrı bir video. Beğendiğini "Proje Olarak
+                Oluştur" ile /new sayfasına aktarabilirsin (dikey/yatay format
+                dahil tüm ayarları orada seçersin).
+            </p>
+            <button class="button" id="shortsSplitBtn" onclick="generateShortsSplit()">
+                🎬 10 Shorts Üret
+            </button>
+            <div id="shortsSplitResults" style="margin-top:14px"></div>
+        </section>
+        """
+
     seo_path = project_dir / "seo.json"
     seo_section = ""
 
@@ -1081,6 +1101,7 @@ def project_detail(slug: str) -> HTMLResponse:
     {thumbnail_section}
     {subtitles_section}
     {seo_section}
+    {shorts_section}
 
     <section
         class="grid"
@@ -1642,6 +1663,66 @@ def project_detail(slug: str) -> HTMLResponse:
     }}
 
     checkForActiveJob();
+    loadShortsSplit();
+
+    async function loadShortsSplit() {{
+        const box = document.getElementById("shortsSplitResults");
+        if (!box) return;
+        try {{
+            const r = await fetch(`/api/projects/{escaped_slug_js}/shorts-split`);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.shorts && data.shorts.length) renderShortsSplit(data.shorts);
+        }} catch (e) {{
+            // sessizce yut -- sayfanın geri kalanı çalışmaya devam etsin
+        }}
+    }}
+
+    async function generateShortsSplit() {{
+        const btn = document.getElementById("shortsSplitBtn");
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "⏳ Üretiliyor…";
+        try {{
+            const r = await fetch(`/api/projects/{escaped_slug_js}/shorts-split`, {{method: "POST"}});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Üretilemedi.");
+            renderShortsSplit(data.shorts || []);
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+        }} finally {{
+            btn.disabled = false;
+            btn.textContent = original;
+        }}
+    }}
+
+    function renderShortsSplit(shorts) {{
+        window.__shortsSplitData = shorts;
+        const box = document.getElementById("shortsSplitResults");
+        box.innerHTML = shorts.map((s, i) => `
+            <div style="padding:12px 0;${{i > 0 ? "border-top:1px solid #eef1f6" : ""}}">
+                <div style="font-weight:700">${{i + 1}}. ${{escapeHtmlLocal(s.title)}}</div>
+                <div class="muted" style="font-size:13px;margin-top:4px">${{escapeHtmlLocal(s.script)}}</div>
+                <button
+                    class="button secondary"
+                    style="margin-top:8px;min-height:34px;padding:0 12px;font-size:13px"
+                    onclick="createShortAsProject(${{i}})"
+                >
+                    ➕ Proje Olarak Oluştur
+                </button>
+            </div>
+        `).join("");
+    }}
+
+    function createShortAsProject(index) {{
+        const s = window.__shortsSplitData[index];
+        sessionStorage.setItem("docuforge_prefill", JSON.stringify({{
+            topic: s.title,
+            source_material: s.script,
+            content_type: "shorts",
+        }}));
+        window.location.href = "/new";
+    }}
 
     async function regenerateStep(slug, stepKey, btn) {{
         let overrides = {{}};

@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
+from app.agents.shorts_split import ShortsSplitAgent
 from app.agents.topic import TopicSuggestionAgent
 from app.pipeline.build_pipeline import (
     STEP_ALLOWED_OVERRIDES,
@@ -985,6 +986,18 @@ function onProviderChange(){
 document.getElementById("duration").addEventListener("input",updateHint);
 document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggestion);
 
+(function applyPendingPrefill(){
+  const raw=sessionStorage.getItem("docuforge_prefill");
+  if(!raw)return;
+  sessionStorage.removeItem("docuforge_prefill");
+  let prefill;
+  try{prefill=JSON.parse(raw);}catch(e){return;}
+  if(prefill.topic)document.getElementById("topic").value=prefill.topic;
+  if(prefill.source_material)document.getElementById("source_material").value=prefill.source_material;
+  if(prefill.content_type)document.getElementById("content_type").value=prefill.content_type;
+  onTypeChange();
+})();
+
 function deriveTopicFromSource(){
   const topicEl=document.getElementById("topic");
   if(topicEl.value.trim())return;
@@ -1571,6 +1584,77 @@ def step_options(slug: str, step_key: str) -> dict[str, Any]:
 
 
 THUMBNAIL_VARIANTS = set(ThumbnailService.VARIANT_NAMES)
+
+
+@router.get("/api/projects/{slug}/shorts-split")
+def get_shorts_split(slug: str) -> dict[str, Any]:
+    """Return previously-generated Shorts ideas for this project, if any
+    -- avoids re-triggering a paid AI call just from loading the page.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    cache_path = project_dir / "shorts_ideas.json"
+
+    if not cache_path.exists():
+        return {"shorts": []}
+
+    return load_json(cache_path) or {"shorts": []}
+
+
+@router.post("/api/projects/{slug}/shorts-split")
+def create_shorts_split(slug: str) -> dict[str, Any]:
+    """Repurpose this project's finished script into 10 independent
+    Shorts ideas -- lets a single long-form production also seed
+    several short-form uploads without writing new source material.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    script_path = project_dir / "script.md"
+
+    if not script_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Bu proje için senaryo henüz üretilmemiş.",
+        )
+
+    script = script_path.read_text(encoding="utf-8").strip()
+
+    if not script:
+        raise HTTPException(
+            status_code=400,
+            detail="Senaryo dosyası boş.",
+        )
+
+    project_data = load_json(project_dir / "project.json")
+    language = str(project_data.get("language", "tr")).strip().lower()
+
+    try:
+        raw = ShortsSplitAgent().run(
+            script=script,
+            language=language,
+            count=10,
+        )
+        data = json.loads(raw)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Shorts üretilemedi: {error}",
+        ) from error
+
+    (project_dir / "shorts_ideas.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return data
 
 
 class ThumbnailSelectRequest(BaseModel):
