@@ -299,7 +299,7 @@ button:disabled{opacity:.6;cursor:wait}
 <div id="topicSuggestions" style="display:none;margin-top:12px"></div>
 
 <label for="source_material" style="margin-top:12px">Kaynak Metin (opsiyonel)</label>
-<textarea id="source_material" rows="6" placeholder="Elinde zaten doğrulanmış, kaynak gösterilmiş bir haber/metin varsa buraya yapıştır -- araştırma adımı yeni tarih/rakam uydurmaz, sadece bu metni kullanır."></textarea>
+<textarea id="source_material" rows="6" placeholder="Elinde zaten doğrulanmış, kaynak gösterilmiş bir haber/metin varsa buraya yapıştır -- araştırma adımı yeni tarih/rakam uydurmaz, sadece bu metni kullanır." onblur="deriveTopicFromSource()"></textarea>
 <div class="hint">Boş bırakırsan DocuForge konuyu kendi araştırıp yazar. Doldurursan (özellikle haber içeriklerinde) sadece buradaki bilgiler kullanılır, ekstra tarih/rakam eklenmez.</div>
 
 <div class="row">
@@ -985,10 +985,21 @@ function onProviderChange(){
 document.getElementById("duration").addEventListener("input",updateHint);
 document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggestion);
 
+function deriveTopicFromSource(){
+  const topicEl=document.getElementById("topic");
+  if(topicEl.value.trim())return;
+  const src=document.getElementById("source_material").value.trim();
+  if(!src)return;
+  let firstLine=(src.split(String.fromCharCode(10)).find(l=>l.trim().length>0)||"").trim();
+  if(firstLine.length>120)firstLine=firstLine.slice(0,120).trim();
+  if(firstLine)topicEl.value=firstLine;
+}
+
 async function startBuild(){
   const btn=document.getElementById("startButton");
+  deriveTopicFromSource();
   const topic=document.getElementById("topic").value.trim();
-  if(!topic){alert("Konu giriniz.");return;}
+  if(!topic){alert("Konu giriniz (ya da Kaynak Metin kutusuna bir metin yapıştır, konu otomatik doldurulsun).");return;}
   btn.disabled=true;
   const statusBox=document.getElementById("statusBox");
   statusBox.style.display="block";
