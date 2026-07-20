@@ -22,6 +22,8 @@ SECRET_FIELDS: dict[str, str] = {
     "FAL_KEY": "fal_api_key",
     "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
     "XTTS_REFERENCE_AUDIO_2": "xtts_reference_audio_2",
+    "XTTS_REFERENCE_NAME": "xtts_reference_name",
+    "XTTS_REFERENCE_NAME_2": "xtts_reference_name_2",
     "XTTS_ACTIVE_REFERENCE": "xtts_active_reference",
     "CLOSING_IMAGE": "closing_image",
     "CLOSING_IMAGE_ENABLED": "closing_image_enabled",
@@ -129,6 +131,14 @@ class Settings:
 
     xtts_reference_audio_2: str = _resolve_secret(
         "XTTS_REFERENCE_AUDIO_2", "xtts_reference_audio_2", _secrets
+    )
+
+    xtts_reference_name: str = _resolve_secret(
+        "XTTS_REFERENCE_NAME", "xtts_reference_name", _secrets
+    )
+
+    xtts_reference_name_2: str = _resolve_secret(
+        "XTTS_REFERENCE_NAME_2", "xtts_reference_name_2", _secrets
     )
 
     xtts_active_reference: str = _resolve_secret(

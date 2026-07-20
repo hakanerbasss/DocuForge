@@ -140,6 +140,19 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
 }
 
 
+def _xtts_name_field_key(slot: int) -> str:
+    return "xtts_reference_name" if slot == 1 else "xtts_reference_name_2"
+
+
+def _xtts_ref_display_name(slot: int) -> str:
+    """The user's label for a reference, or a generic fallback."""
+
+    name = str(
+        getattr(settings, _xtts_name_field_key(slot), "") or ""
+    ).strip()
+    return name or f"Referans {slot}"
+
+
 def _render_xtts_slot(field_key: str, slot: int) -> str:
     """Render one XTTS reference slot (upload/record or the configured player)."""
 
@@ -148,6 +161,20 @@ def _render_xtts_slot(field_key: str, slot: int) -> str:
     ]
     configured = settings.is_configured(field_key)
     current_path = Path(getattr(settings, field_key)) if configured else None
+
+    name_field_key = _xtts_name_field_key(slot)
+    current_name = str(
+        getattr(settings, name_field_key, "") or ""
+    ).strip()
+
+    name_row = f"""
+    <div style="margin-bottom:10px">
+        <label style="display:block;margin-bottom:4px;font-weight:600;font-size:12px;color:#4a5568">Bu sesin ismi (kime ait?)</label>
+        <input type="text" id="{name_field_key}Input" value="{html.escape(current_name)}" placeholder="ör. Eşim, Ben, Sunucu"
+            onchange="setXttsRefName('{name_field_key}', this.value)"
+            style="width:100%;min-height:40px;padding:0 12px;border:1px solid #cbd6e5;border-radius:10px;font:inherit;box-sizing:border-box">
+    </div>
+    """
 
     if configured and current_path is not None and current_path.exists():
         audio_version = int(current_path.stat().st_mtime)
@@ -184,13 +211,19 @@ def _render_xtts_slot(field_key: str, slot: int) -> str:
         </div>
         """
 
+    display_name = current_name or f"Referans {slot}"
+
     return f"""
     <div style="margin-top:{'0' if slot == 1 else '18'}px">
-        <div style="font-weight:700;margin-bottom:2px;font-size:14px">{html.escape(label)}</div>
+        <div style="font-weight:700;margin-bottom:2px;font-size:14px">
+            {html.escape(display_name)}
+            <span class="muted" style="font-weight:400;font-size:12px">— {html.escape(label)}</span>
+        </div>
         <div class="muted" style="font-size:13px;margin-bottom:10px">
             {html.escape(description)}
             (<code>{env_name}</code> ortam değişkeni ayarlıysa her zaman öncelikli olur ve buradan değiştirilemez.)
         </div>
+        {name_row}
         {body}
     </div>
     """
@@ -219,16 +252,19 @@ def _render_xtts_active_selector() -> str:
     checked_1 = "checked" if active != "2" else ""
     checked_2 = "checked" if active == "2" else ""
 
+    name_1 = html.escape(_xtts_ref_display_name(1))
+    name_2 = html.escape(_xtts_ref_display_name(2))
+
     return f"""
     <div style="margin-top:18px;background:#eef5ff;border:1px solid #cfe0f7;border-radius:10px;padding:12px 14px">
         <div style="font-weight:700;font-size:13px;margin-bottom:8px">🎚 Kullanılacak referans ses</div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px">
             <input type="radio" name="xttsActiveRef" value="1" {checked_1} onchange="setActiveXttsReference('1')" style="width:auto;min-height:auto">
-            Referans 1
+            {name_1}
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="radio" name="xttsActiveRef" value="2" {checked_2} onchange="setActiveXttsReference('2')" style="width:auto;min-height:auto">
-            Referans 2
+            {name_2}
         </label>
         <div class="muted" style="font-size:12px;margin-top:8px">Klon ses üretiminde seçtiğin referans kullanılır.</div>
     </div>
@@ -529,6 +565,32 @@ async function setActiveXttsReference(value) {{
             const err = await r.json().catch(() => ({{}}));
             throw new Error(err.detail || "Kaydedilemedi.");
         }}
+    }} catch (e) {{
+        alert("Hata: " + e.message);
+    }}
+}}
+
+async function setXttsRefName(fieldKey, value) {{
+    const name = (value || "").trim();
+    try {{
+        let r;
+        if (name) {{
+            const fd = new URLSearchParams();
+            fd.append("value", name);
+            r = await fetch("/settings/" + fieldKey, {{
+                method: "POST",
+                headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
+                body: fd,
+            }});
+        }} else {{
+            r = await fetch("/settings/" + fieldKey + "/clear", {{method: "POST"}});
+        }}
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Kaydedilemedi.");
+        }}
+        // Refresh so the header + selector labels reflect the new name.
+        location.href = "/settings";
     }} catch (e) {{
         alert("Hata: " + e.message);
     }}
