@@ -1177,6 +1177,21 @@ def project_detail(slug: str) -> HTMLResponse:
         manual_upload_enabled: "Görselleri Elle Yükle",
         thumbnail_source: "Kapak Görseli Kaynağı",
         thumbnail_hook_override: "Kapak Üzerindeki Başlık",
+        music_volume: "Müzik Sesi Seviyesi (%)",
+    }};
+
+    // Mirrors /new's onProviderChange() voice-name choices exactly --
+    // voice_name has no free-form valid values, it's one of a fixed set
+    // per provider, so the regen form must offer a picker here too
+    // instead of a bare pre-filled text box (which is easy to leave
+    // untouched, or to mistype into an invalid value the chosen
+    // provider doesn't recognize).
+    const VOICE_NAME_OPTIONS = {{
+        supertonic: [["M1","M1"],["M2","M2"],["M3","M3"],["F1","F1"],["F2","F2"],["F3","F3"]],
+        xtts: [["clone","Klon Sesim"]],
+        piper: [["default","Varsayılan"]],
+        espeak: [["default","Varsayılan"]],
+        local_tts: [["default","Varsayılan"]],
     }};
 
     const STATIC_CHOICES = {{
@@ -1215,6 +1230,24 @@ def project_detail(slug: str) -> HTMLResponse:
             for (const field of opts.allowed_fields) {{
                 const label = FIELD_LABELS_TR[field] || field;
                 const current = opts.current[field];
+
+                if (field === "voice_name") {{
+                    const providerNow = opts.current["voice_provider"] || "supertonic";
+                    const nameOptions = VOICE_NAME_OPTIONS[providerNow] || VOICE_NAME_OPTIONS.supertonic;
+                    const options = nameOptions.map(([key, name]) =>
+                        `<option value="${{key}}" ${{key===current?"selected":""}}>${{name}}</option>`
+                    ).join("");
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <select data-field="voice_name" id="regenVoiceNameSelect" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">${{options}}</select>`;
+                    continue;
+                }}
+
+                if (field === "music_volume") {{
+                    const percent = Math.round((typeof current === "number" ? current : 0.18) * 100);
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <input type="number" min="0" max="50" step="1" data-field="music_volume" data-percent="1" value="${{percent}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">`;
+                    continue;
+                }}
 
                 if (field === "music_track") {{
                     fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
@@ -1285,12 +1318,30 @@ def project_detail(slug: str) -> HTMLResponse:
                 regenUpdateMusicMoodSuggestion();
             }}
 
+            // Voice name is a fixed set per provider (M1-M3/F1-F3 for
+            // Supertonic, "clone" for XTTS, "default" otherwise) -- when
+            // the provider dropdown is also in this form, changing it
+            // must refresh the name picker's options live, exactly like
+            // /new's onProviderChange(), or the submitted voice_name can
+            // end up invalid/stale for the newly chosen provider.
+            const regenVoiceProviderEl = box.querySelector('[data-field="voice_provider"]');
+            const regenVoiceNameEl = box.querySelector('#regenVoiceNameSelect');
+            if (regenVoiceProviderEl && regenVoiceNameEl) {{
+                regenVoiceProviderEl.addEventListener("change", () => {{
+                    const nameOptions = VOICE_NAME_OPTIONS[regenVoiceProviderEl.value] || VOICE_NAME_OPTIONS.supertonic;
+                    regenVoiceNameEl.innerHTML = nameOptions.map(([key, name]) =>
+                        `<option value="${{key}}">${{name}}</option>`
+                    ).join("");
+                }});
+            }}
+
             box.querySelector("#regenCancel").onclick = () => {{ overlay.remove(); resolve(null); }};
             box.querySelector("#regenSubmit").onclick = () => {{
                 const overrides = {{}};
                 box.querySelectorAll("[data-field]").forEach(el => {{
                     const field = el.dataset.field;
                     if (el.type === "checkbox") overrides[field] = el.checked;
+                    else if (el.dataset.percent === "1") overrides[field] = parseFloat(el.value) / 100;
                     else if (NUMERIC_FIELDS.has(field)) overrides[field] = parseFloat(el.value);
                     else overrides[field] = el.value;
                 }});
