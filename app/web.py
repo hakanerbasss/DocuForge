@@ -605,6 +605,14 @@ def project_detail(slug: str) -> HTMLResponse:
 
     if final_video.exists():
         video_size_mb = final_video.stat().st_size / (1024 * 1024)
+        # Cache-busting: the render always writes final_video.mp4 at the
+        # exact same path, so without a query param that changes, browsers
+        # (mobile Chrome especially) keep playing the OLD cached copy after
+        # a regenerate -- same class of bug already fixed for
+        # closing_image/channel_logo/xtts_reference_audio below, just
+        # missed here for the main output itself. This is what made a
+        # genuinely-changed voice/render look like "regenerate did nothing."
+        video_version = int(final_video.stat().st_mtime)
 
         video_section = f"""
         <section class="card">
@@ -612,7 +620,7 @@ def project_detail(slug: str) -> HTMLResponse:
 
             <video controls preload="metadata">
                 <source
-                    src="/files/{quote(project_dir.name)}/render/final_video.mp4"
+                    src="/files/{quote(project_dir.name)}/render/final_video.mp4?v={video_version}"
                     type="video/mp4"
                 >
             </video>
@@ -620,7 +628,7 @@ def project_detail(slug: str) -> HTMLResponse:
             <div class="buttons">
                 <a
                     class="button"
-                    href="/files/{quote(project_dir.name)}/render/final_video.mp4"
+                    href="/files/{quote(project_dir.name)}/render/final_video.mp4?v={video_version}"
                     download
                 >
                     Videoyu İndir ({video_size_mb:.1f} MB)
