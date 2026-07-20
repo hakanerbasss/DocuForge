@@ -117,6 +117,7 @@ Do not include explanations before or after the JSON.
             "visual_contrast": self._optional_str(data, "visual_contrast"),
             "text_overlay": self._optional_str(data, "text_overlay"),
             "avoid_elements": self._optional_str(data, "avoid_elements"),
+            "location": self._optional_str(data, "location"),
         }
 
     def _append_source_citation(

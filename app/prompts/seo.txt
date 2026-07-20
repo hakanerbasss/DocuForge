@@ -25,7 +25,8 @@ Structure:
   "emotional_trigger": "One or two words naming the emotion the thumbnail should provoke (e.g. shock, curiosity, awe, urgency, fear, hope)",
   "visual_contrast": "A short phrase describing a visual contrast or comparison the thumbnail could exploit (e.g. 'tiny vs. massive scale', 'before vs. after', 'light vs. darkness'); empty string if none fits",
   "text_overlay": "3-5 word alternate on-thumbnail phrase, a variation of thumbnail_hook",
-  "avoid_elements": "Short comma-separated list of visual elements the thumbnail image must NOT contain (e.g. 'text, logos, watermarks, collage, multiple unrelated subjects')"
+  "avoid_elements": "Short comma-separated list of visual elements the thumbnail image must NOT contain (e.g. 'text, logos, watermarks, collage, multiple unrelated subjects')",
+  "location": "The single most relevant real-world place this video is about (a city, country, region, or landmark name geocodable on a map, in English, e.g. 'Atacama Desert, Chile'); empty string if the video has no specific real-world location"
 }
 
 Language rules:
@@ -36,6 +37,7 @@ Language rules:
 - Write tags lowercase, without a leading # symbol.
 - Write "thumbnail_hook", "text_overlay", "emotional_trigger" and "visual_contrast" in the target content language.
 - Write "main_subject" and "avoid_elements" in English regardless of target language, since they feed an image-generation prompt.
+- Write "location" in English regardless of target language, as a geocodable place name -- leave it an empty string rather than guessing if the video isn't tied to one specific real place.
 
 Content type style:
 

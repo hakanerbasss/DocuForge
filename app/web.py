@@ -1149,6 +1149,8 @@ def project_detail(slug: str) -> HTMLResponse:
         music_provider: "Müzik Sağlayıcı",
         subtitles_enabled: "Altyazı (.srt) Üret",
         subtitles_burn_in: "Altyazıyı Videoya Göm",
+        ai_disclosure_enabled: "Yapay Zeka İbaresi Ekle",
+        location_map_enabled: "Konum Haritası Ekle",
         thumbnail_source: "Kapak Görseli Kaynağı",
         thumbnail_hook_override: "Kapak Üzerindeki Başlık",
     }};

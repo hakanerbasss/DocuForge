@@ -74,6 +74,7 @@ class BuildRequest(BaseModel):
     subtitles_enabled: bool = Field(default=False)
     subtitles_burn_in: bool = Field(default=False)
     ai_disclosure_enabled: bool = Field(default=False)
+    location_map_enabled: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
     thumbnail_source: str = Field(default="auto")
 
@@ -141,6 +142,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 subtitles_enabled=req["subtitles_enabled"],
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 ai_disclosure_enabled=req.get("ai_disclosure_enabled", False),
+                location_map_enabled=req.get("location_map_enabled", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
                 thumbnail_source=req.get("thumbnail_source", "auto"),
                 cancel_event=cancel_event,
@@ -485,6 +487,12 @@ Altyaz\u0131y\u0131 videoya g\u00f6m (burn-in)
 \U0001F916 "Yapay zeka destekli i\u00e7erik" ibaresi ekle
 </label>
 <div class="hint">Videonun ilk 6 saniyesine k\u00fc\u00e7\u00fck bir uyar\u0131 band\u0131 g\u00f6m\u00fcl\u00fcr. Sadece yapay zeka \u00fcretimi g\u00f6rsel/anlat\u0131m kulland\u0131\u011f\u0131n videolarda i\u015faretle -- her videoda yapay zeka kullanm\u0131yorsan bo\u015f b\u0131rak.</div>
+
+<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
+<input type="checkbox" id="location_map_enabled" style="width:auto;min-height:auto">
+\U0001F5FA Konum haritas\u0131 ekle
+</label>
+<div class="hint">Videonun konusu belirli bir yere (\u015fehir, \u00fclke, b\u00f6lge) ba\u011fl\u0131ysa erken bir sahneye o konumu g\u00f6steren bir harita eklenir. SEO analizinde net bir konum bulunamazsa harita eklenmeden devam edilir.</div>
 
 <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
 <input type="checkbox" id="thumbnail_enabled" style="width:auto;min-height:auto" onchange="onThumbnailToggle()">
@@ -1060,6 +1068,7 @@ async function startBuild(){
     subtitles_enabled:document.getElementById("subtitles_enabled").checked,
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     ai_disclosure_enabled:document.getElementById("ai_disclosure_enabled").checked,
+    location_map_enabled:document.getElementById("location_map_enabled").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
     thumbnail_source:document.getElementById("thumbnail_source").value,
   };

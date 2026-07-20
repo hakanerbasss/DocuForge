@@ -153,12 +153,30 @@ class RenderService:
                 is_last_scene=(index == len(scene_dirs)),
             )
 
+            location_map_path = None
+
+            if closing_image_path is None:
+                location_map_path = self._resolve_location_map(
+                    project_data,
+                    project_dir,
+                    is_target_scene=(
+                        index == 2 and len(scene_dirs) >= 3
+                    ),
+                )
+
             if closing_image_path is not None:
                 video_files = []
                 image_files = [closing_image_path]
                 print(
                     "  🎬 Yüklenmiş kapanış görseli kullanılıyor "
                     f"({closing_image_path.name})"
+                )
+            elif location_map_path is not None:
+                video_files = []
+                image_files = [location_map_path]
+                print(
+                    "  🗺️ Konum haritası kullanılıyor "
+                    f"({location_map_path.name})"
                 )
             else:
                 video_files = sorted(scene_dir.glob("*.mp4"))
@@ -788,6 +806,78 @@ class RenderService:
             print(
                 f"  ⚠ Kapanış görseli okunamadı, sahne kendi medyasını "
                 f"kullanacak: {error}"
+            )
+
+        return None
+
+    def _resolve_location_map(
+        self,
+        project_data: dict[str, Any],
+        project_dir: Path,
+        is_target_scene: bool,
+    ) -> Path | None:
+        """An optional map image, geocoded from the video's SEO-derived
+        "location" field, shown for one early scene so the viewer can
+        place a documentary's subject on a map. Requires the
+        "location_map_enabled" toggle and a usable content_type. Falls
+        back to the normal scene media on any problem (toggle off, no
+        location, geocoding/rendering failure) rather than failing the
+        render -- this is a nice-to-have visual, never worth losing a
+        scene's narration over."""
+
+        if not is_target_scene:
+            return None
+
+        if not project_data.get("location_map_enabled"):
+            return None
+
+        content_type = str(
+            project_data.get("content_type", "")
+        ).strip().lower()
+
+        if content_type not in {"documentary", "news", "informational"}:
+            return None
+
+        cached_path = project_dir / "location_map.png"
+
+        if cached_path.exists() and cached_path.stat().st_size > 0:
+            return cached_path
+
+        try:
+            seo_data: dict[str, Any] = {}
+            seo_path = project_dir / "seo.json"
+
+            if seo_path.exists():
+                seo_data = self._load_json(seo_path)
+
+            place_name = str(seo_data.get("location", "")).strip()
+
+            if not place_name:
+                return None
+
+            from app.services.map_service import MapService
+
+            map_service = MapService()
+            coordinates = map_service.geocode(place_name)
+
+            if coordinates is None:
+                return None
+
+            latitude, longitude = coordinates
+            map_service.render_map(
+                latitude,
+                longitude,
+                cached_path,
+                width=self.WIDTH,
+                height=self.HEIGHT,
+            )
+
+            if cached_path.exists() and cached_path.stat().st_size > 0:
+                return cached_path
+        except Exception as error:
+            print(
+                f"  ⚠ Konum haritası oluşturulamadı, sahne kendi "
+                f"medyasını kullanacak: {error}"
             )
 
         return None

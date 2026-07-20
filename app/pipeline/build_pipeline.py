@@ -47,6 +47,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "subtitles_enabled",
         "subtitles_burn_in",
         "ai_disclosure_enabled",
+        "location_map_enabled",
     },
     "thumbnail": {"thumbnail_source", "thumbnail_hook_override"},
     "seo": {"source_citation"},
@@ -93,6 +94,7 @@ class BuildPipeline:
         subtitles_enabled: bool = False,
         subtitles_burn_in: bool = False,
         ai_disclosure_enabled: bool = False,
+        location_map_enabled: bool = False,
         thumbnail_enabled: bool = False,
         thumbnail_source: str = "auto",
         template: str | None = None,
@@ -135,6 +137,7 @@ class BuildPipeline:
             subtitles_enabled=subtitles_enabled,
             subtitles_burn_in=subtitles_burn_in,
             ai_disclosure_enabled=ai_disclosure_enabled,
+            location_map_enabled=location_map_enabled,
             thumbnail_enabled=thumbnail_enabled,
             thumbnail_source=thumbnail_source,
         )
