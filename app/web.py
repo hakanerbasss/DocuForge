@@ -828,12 +828,18 @@ def project_detail(slug: str) -> HTMLResponse:
             else "Sahne bazlı zamanlamalı .srt dosyası (videoya gömülü değil, ayrı dosya)."
         )
 
+        # Cache-busting: regenerating render can rewrite these exact
+        # filenames, so without a query param that changes, browsers keep
+        # offering the old cached download at this exact URL.
+        subtitles_version = int(subtitles_path.stat().st_mtime)
+
         txt_button = ""
         if subtitles_txt_path.exists():
+            txt_version = int(subtitles_txt_path.stat().st_mtime)
             txt_button = f"""
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/render/subtitles.txt"
+                    href="/files/{quote(project_dir.name)}/render/subtitles.txt?v={txt_version}"
                     download
                 >
                     subtitles.txt İndir
@@ -849,7 +855,7 @@ def project_detail(slug: str) -> HTMLResponse:
             <div class="buttons">
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/render/subtitles.srt"
+                    href="/files/{quote(project_dir.name)}/render/subtitles.srt?v={subtitles_version}"
                     download
                 >
                     subtitles.srt İndir
@@ -978,7 +984,7 @@ def project_detail(slug: str) -> HTMLResponse:
             <div class="buttons">
                 <a
                     class="button secondary"
-                    href="/files/{quote(project_dir.name)}/seo.json"
+                    href="/files/{quote(project_dir.name)}/seo.json?v={int(seo_path.stat().st_mtime)}"
                     download
                 >
                     seo.json İndir
