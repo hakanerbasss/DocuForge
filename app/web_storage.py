@@ -238,6 +238,7 @@ h1{{margin:0 0 8px;font-size:clamp(26px,6vw,38px)}}
 <body>
 <header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
 <a class="back" href="/">← Projelere dön</a>
+<a class="button secondary" href="/voice-test" style="min-height:34px;padding:0 12px;font-size:13px">🎤 Ses Testi</a>
 <a class="button secondary" href="/settings" style="min-height:34px;padding:0 12px;font-size:13px">⚙ Ayarlar</a>
 </div></header>
 <main>

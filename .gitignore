@@ -46,5 +46,6 @@ jobs/
 /music_cache/
 /music_favorites.json
 /topic_history.json
+/voice_test_cache/
 __pycache__/
 *.pyc
