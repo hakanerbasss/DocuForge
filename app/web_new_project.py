@@ -1456,6 +1456,20 @@ def manual_media_status(slug: str) -> dict[str, Any]:
     builder = MediaBuilder()
     prompts = builder._load_image_prompts_by_scene(project_dir)
 
+    # Per-scene copyright/authenticity flag from ImagePromptAgent, so the card
+    # can nudge the user to hand-supply a real image for sensitive scenes.
+    sensitive_by_scene: dict[int, str] = {}
+    image_prompts_raw = load_json(project_dir / "image_prompts.json")
+    for item in image_prompts_raw.get("images", []) or []:
+        if not isinstance(item, dict):
+            continue
+        scene_no = item.get("scene")
+        if isinstance(scene_no, int) and bool(item.get("sensitive")):
+            reason = item.get("sensitive_reason")
+            sensitive_by_scene[scene_no] = (
+                reason.strip() if isinstance(reason, str) else ""
+            )
+
     scenes: list[dict[str, Any]] = []
 
     if isinstance(scenes_raw, list):
@@ -1479,6 +1493,8 @@ def manual_media_status(slug: str) -> dict[str, Any]:
                 "title": title,
                 "prompt": prompts.get(scene_number, ""),
                 "uploaded": uploaded is not None,
+                "sensitive": scene_number in sensitive_by_scene,
+                "sensitive_reason": sensitive_by_scene.get(scene_number, ""),
                 "url": (
                     f"/files/{slug}/media/"
                     f"scene_{scene_number:03d}/{uploaded.name}"

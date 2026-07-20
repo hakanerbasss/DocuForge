@@ -33,6 +33,21 @@ Rules:
 - No logo.
 - No watermark.
 
+Copyright rules (never violate):
+
+- Do NOT depict real, identifiable brands, logos, trademarks, packaging or product designs.
+- Do NOT depict copyrighted characters, mascots, artworks, or fictional franchises.
+- Do NOT depict identifiable living real people or specific celebrity likenesses.
+- Real places, nature, landscapes, wildlife, and historical architecture are fine to depict.
+
+Authenticity rules (this is a documentary -- never fabricate "evidence"):
+
+- Do NOT fabricate realistic footage of a specific real event as if it were authentic news, archival, or eyewitness video.
+- Do NOT make a shot look like a real document, screenshot, headline, or quote that presents invented facts as real.
+- Prefer clearly representative, illustrative, symbolic, or atmospheric shots that support the narration WITHOUT pretending to be authentic proof of a specific claim.
+- Generic, anonymous people and generic settings shown representatively are fine.
+- When a scene is about a specific real modern person, brand, or news event that cannot be shown safely, use a generic/symbolic/atmospheric stand-in instead of a fake realistic depiction of the actual thing.
+
 The prompts must work well with:
 
 - Google Veo 3

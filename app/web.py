@@ -1722,12 +1722,16 @@ def project_detail(slug: str) -> HTMLResponse:
             const preview = (done && s.url)
                 ? `<img src="${{s.url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:8px">`
                 : "";
+            const sensitive = s.sensitive
+                ? `<div style="margin-top:8px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:6px 8px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas — gerçek/temsili görseli elle yüklemen önerilir${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
+                : "";
             return `
-            <div style="border:1px solid ${{done ? '#bfe3c6' : '#dbe5f4'}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}}">
+            <div style="border:1px solid ${{s.sensitive && !done ? '#ffd8a8' : (done ? '#bfe3c6' : '#dbe5f4')}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}}">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                    <strong>Sahne ${{s.scene}}</strong>
+                    <strong>Sahne ${{s.scene}}${{s.sensitive ? ' ⚠' : ''}}</strong>
                     <span style="font-size:12px">${{done ? '✅ Yüklendi' : '⬆ Bekliyor'}}</span>
                 </div>
+                ${{sensitive}}
                 <div style="font-size:12px;color:#4a5568;margin-top:6px;max-height:90px;overflow:auto;white-space:pre-wrap">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
                 <div style="display:flex;gap:6px;margin-top:8px">
                     <button type="button" onclick="copyManualPrompt(this, ${{s.scene}})" style="flex:1;min-height:32px;font-size:12px">📋 Prompt'u Kopyala</button>
