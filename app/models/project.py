@@ -72,6 +72,7 @@ class DocumentaryProject:
     music_volume: float = 0.18
     subtitles_enabled: bool = False
     subtitles_burn_in: bool = False
+    ai_disclosure_enabled: bool = False
     thumbnail_enabled: bool = False
     thumbnail_source: str = "auto"
     thumbnail_hook_override: str = ""
@@ -301,6 +302,9 @@ class DocumentaryProject:
             ),
             subtitles_burn_in=bool(
                 data.get("subtitles_burn_in", False)
+            ),
+            ai_disclosure_enabled=bool(
+                data.get("ai_disclosure_enabled", False)
             ),
             thumbnail_enabled=bool(
                 data.get("thumbnail_enabled", False)

@@ -14,6 +14,9 @@ class RenderService:
     HEIGHT = 720
     FPS = 30
 
+    AI_DISCLOSURE_SECONDS = 6.0
+    AI_DISCLOSURE_TEXT = "Bu videoda yapay zeka destekli görsel/anlatım kullanılmıştır"
+
     TRANSITION_DURATION_SECONDS = 0.25
     TRANSITION_XFADE_MAP = {
         "crossfade": "fade",
@@ -333,6 +336,17 @@ class RenderService:
 
             if project_data.get("subtitles_burn_in"):
                 self._burn_in_subtitles(output_path, srt_path)
+
+        if project_data.get("ai_disclosure_enabled"):
+            try:
+                self._burn_ai_disclosure(output_path)
+            except Exception as error:
+                # Same tolerance as the music mix above -- a disclosure
+                # banner failing to burn in shouldn't cost the whole render.
+                print(
+                    f"  ⚠ Yapay zeka ibaresi eklenemedi, ibaresiz devam "
+                    f"ediliyor: {error}"
+                )
 
         warnings_path = render_dir / "media_warnings.json"
 
@@ -1104,6 +1118,62 @@ class RenderService:
         burned_path.replace(video_path)
 
         print("  ✅ Subtitles burned into video")
+
+    def _burn_ai_disclosure(self, video_path: Path) -> None:
+        """Burn a brief on-screen disclosure banner into the opening
+        seconds of the video ("this video uses AI-assisted visuals/
+        narration"). YouTube's synthetic-content guidance only requires
+        this to appear once near the start, not throughout -- a short
+        banner is enough and stays far less intrusive than a persistent
+        watermark. Opt-in per project (not every video uses AI-generated
+        media), toggled separately from the Studio-side "altered or
+        synthetic content" disclosure the creator sets per upload.
+        """
+
+        escaped_text = (
+            self.AI_DISCLOSURE_TEXT
+            .replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "’")
+        )
+
+        burned_path = video_path.with_name(
+            "final_video_disclosure.mp4"
+        )
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-vf",
+            (
+                f"drawtext=text='{escaped_text}':"
+                "fontsize=22:fontcolor=white:"
+                "box=1:boxcolor=black@0.55:boxborderw=10:"
+                "x=(w-text_w)/2:y=h-th-40:"
+                f"enable='between(t,0,{self.AI_DISCLOSURE_SECONDS:.1f})'"
+            ),
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(burned_path),
+        ]
+
+        self._run(command)
+
+        if (
+            not burned_path.exists()
+            or burned_path.stat().st_size == 0
+        ):
+            raise RuntimeError(
+                f"AI disclosure burn-in failed: {burned_path}"
+            )
+
+        burned_path.replace(video_path)
+
+        print("  ✅ AI disclosure banner burned into video")
 
     def _video_to_clip(
         self,

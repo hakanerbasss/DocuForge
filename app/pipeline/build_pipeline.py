@@ -46,6 +46,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "music_volume",
         "subtitles_enabled",
         "subtitles_burn_in",
+        "ai_disclosure_enabled",
     },
     "thumbnail": {"thumbnail_source", "thumbnail_hook_override"},
     "seo": {"source_citation"},
@@ -91,6 +92,7 @@ class BuildPipeline:
         music_volume: float = 0.18,
         subtitles_enabled: bool = False,
         subtitles_burn_in: bool = False,
+        ai_disclosure_enabled: bool = False,
         thumbnail_enabled: bool = False,
         thumbnail_source: str = "auto",
         template: str | None = None,
@@ -132,6 +134,7 @@ class BuildPipeline:
             music_volume=music_volume,
             subtitles_enabled=subtitles_enabled,
             subtitles_burn_in=subtitles_burn_in,
+            ai_disclosure_enabled=ai_disclosure_enabled,
             thumbnail_enabled=thumbnail_enabled,
             thumbnail_source=thumbnail_source,
         )
