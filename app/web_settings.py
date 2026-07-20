@@ -166,11 +166,12 @@ def _render_xtts_slot(field_key: str, slot: int) -> str:
         body = f"""
         <div style="display:flex;flex-direction:column;gap:14px">
             <div>
-                <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Dosya yükle</label>
+                <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Ses veya video dosyası yükle</label>
                 <div style="display:flex;gap:8px">
-                    <input type="file" id="xttsFileInput{slot}" accept="audio/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
+                    <input type="file" id="xttsFileInput{slot}" accept="audio/*,video/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
                     <button type="button" class="button" onclick="uploadXttsFile({slot})" style="white-space:nowrap">Yükle</button>
                 </div>
+                <div class="muted" style="font-size:12px;margin-top:6px">Video de yükleyebilirsin — sesi otomatik çıkarılır (mp4, mov, m4a, wav, mp3…).</div>
             </div>
             <div>
                 <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Veya mikrofonla kaydet (20-30 sn, sessiz ortamda doğal konuş)</label>
@@ -747,6 +748,9 @@ async def _store_xtts_reference(
                 "-y",
                 "-i",
                 str(temp_path),
+                # Drop any video stream and keep only mono 24kHz audio, so a
+                # phone video (mp4/mov) works as a reference just like a wav.
+                "-vn",
                 "-ar",
                 "24000",
                 "-ac",
