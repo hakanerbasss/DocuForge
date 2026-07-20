@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,8 @@ from app.pipeline.build_pipeline import (
     BuildPipeline,
     PipelineCancelled,
 )
+from app.pipeline.exceptions import PipelineAwaitingUpload
+from app.services.media_builder import MediaBuilder
 from app.services.project_service import ProjectService
 from app.services.thumbnail_service import ThumbnailService
 
@@ -158,6 +160,13 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
             JOBS[job_id].update({
                 "status": "cancelled",
                 "error": str(error),
+            })
+    except PipelineAwaitingUpload as awaiting:
+        with JOBS_LOCK:
+            JOBS[job_id].update({
+                "status": "awaiting_upload",
+                "awaiting_scenes": list(awaiting.missing_scenes),
+                "error": str(awaiting),
             })
     except Exception as error:
         with JOBS_LOCK:
@@ -363,13 +372,14 @@ button:disabled{opacity:.6;cursor:wait}
 <div class="row">
 <div>
 <label for="image_provider">G\u00f6rsel Sa\u011flay\u0131c\u0131</label>
-<select id="image_provider">
+<select id="image_provider" onchange="onImageProviderChange()">
 <option value="pexels" selected>Pexels (\u00fccretsiz stok)</option>
 <option value="pixabay">Pixabay (\u00fccretsiz stok)</option>
 <option value="unsplash">Unsplash (\u00fccretsiz stok)</option>
 <option value="dalle">DALL-E / OpenAI (AI \u00fcretim, \u00fccretli)</option>
 <option value="google_imagen">Google Imagen (AI \u00fcretim, \u00fccretli)</option>
 <option value="fal">fal.ai / Flux (AI \u00fcretim, \u00fccretli)</option>
+<option value="manual">Elle Y\u00fckleme (ChatGPT g\u00f6rselleri \u2014 \u00fccretsiz)</option>
 </select>
 </div>
 <div>
@@ -383,6 +393,7 @@ button:disabled{opacity:.6;cursor:wait}
 </div>
 </div>
 <div class="hint">AI \u00fcretim sa\u011flay\u0131c\u0131lar\u0131 ilgili API anahtar\u0131n\u0131 (.env) gerektirir: OPENAI_API_KEY, GOOGLE_API_KEY, FAL_KEY, PIXABAY_API_KEY, UNSPLASH_ACCESS_KEY.</div>
+<div id="manualProviderHint" class="hint" style="display:none;background:#eef5ff;border:1px solid #cfe0f7;border-radius:10px;padding:10px 12px;margin-top:8px">Elle y\u00fckleme: sistem her sahne i\u00e7in bir g\u00f6rsel prompt'u \u00fcretir, \u00fcretim medya ad\u0131m\u0131nda <b>durur</b>. Prompt'lar\u0131 ChatGPT'de \u00fcretip g\u00f6rselleri proje sayfas\u0131ndan ilgili sahnelere y\u00fckler, sonra "Devam Et"e basars\u0131n. Video sa\u011flay\u0131c\u0131 bu modda kullan\u0131lmaz (sadece g\u00f6rseller).</div>
 
 <label for="fps">Kare H\u0131z\u0131 (FPS)</label>
 <select id="fps">
@@ -591,6 +602,12 @@ function onTypeChange(){
   else if(t==="informational"){d.value=300;r.value="720p";h.textContent="~5 dakika";}
   else{d.value=900;r.value="720p";h.textContent="~15 dakika";}
   updateHint();
+}
+
+function onImageProviderChange(){
+  const manual=document.getElementById("image_provider").value==="manual";
+  document.getElementById("manualProviderHint").style.display=manual?"block":"none";
+  if(manual){document.getElementById("media_mode").value="image";}
 }
 
 function updateHint(){
@@ -1007,6 +1024,7 @@ function onProviderChange(){
 
 document.getElementById("duration").addEventListener("input",updateHint);
 document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggestion);
+onImageProviderChange();
 
 (function applyPendingPrefill(){
   const raw=sessionStorage.getItem("docuforge_prefill");
@@ -1406,6 +1424,144 @@ def resume_project(slug: str) -> dict[str, Any]:
     thread.start()
 
     return {"job_id": job_id, "status": "queued", "project_slug": slug}
+
+
+@router.get("/api/projects/{slug}/manual-media")
+def manual_media_status(slug: str) -> dict[str, Any]:
+    """List each scene's image prompt + whether a manual image is uploaded.
+
+    Drives the "elle yükleme" card on the project page: the user reads each
+    prompt, generates the image (e.g. in ChatGPT), uploads it, then resumes.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    project_data = load_json(project_dir / "project.json")
+    is_manual = (
+        str(project_data.get("image_provider", "")).strip().lower()
+        == MediaBuilder.MANUAL_PROVIDER_KEY
+    )
+
+    storyboard = load_json(project_dir / "storyboard.json")
+    scenes_raw = (
+        storyboard.get("scenes") if isinstance(storyboard, dict) else None
+    )
+
+    builder = MediaBuilder()
+    prompts = builder._load_image_prompts_by_scene(project_dir)
+
+    scenes: list[dict[str, Any]] = []
+
+    if isinstance(scenes_raw, list):
+        for index, scene in enumerate(scenes_raw, start=1):
+            scene_number = (
+                scene.get("scene", index)
+                if isinstance(scene, dict)
+                else index
+            )
+            scene_dir = (
+                project_dir / "media" / f"scene_{scene_number:03d}"
+            )
+            uploaded = builder.find_manual_upload(scene_dir)
+
+            title = ""
+            if isinstance(scene, dict):
+                title = str(scene.get("title") or "")
+
+            scenes.append({
+                "scene": scene_number,
+                "title": title,
+                "prompt": prompts.get(scene_number, ""),
+                "uploaded": uploaded is not None,
+                "url": (
+                    f"/files/{slug}/media/"
+                    f"scene_{scene_number:03d}/{uploaded.name}"
+                    if uploaded is not None
+                    else None
+                ),
+            })
+
+    all_uploaded = bool(scenes) and all(
+        item["uploaded"] for item in scenes
+    )
+
+    final_video = project_dir / "render" / "final_video.mp4"
+    render_done = (
+        final_video.exists() and final_video.stat().st_size > 0
+    )
+
+    return {
+        "manual": is_manual,
+        "scenes": scenes,
+        "all_uploaded": all_uploaded,
+        "render_done": render_done,
+    }
+
+
+@router.post("/api/projects/{slug}/manual-media/{scene}/upload")
+async def manual_media_upload(
+    slug: str,
+    scene: int,
+    file: UploadFile,
+) -> dict[str, Any]:
+    """Save a hand-supplied image for one scene (manual image provider)."""
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    extension_by_type = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+
+    extension = extension_by_type.get((file.content_type or "").lower())
+
+    if extension is None:
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix in (".jpg", ".jpeg", ".png", ".webp"):
+            extension = ".jpg" if suffix == ".jpeg" else suffix
+
+    if extension is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Sadece JPG, PNG veya WEBP görsel yükleyebilirsin.",
+        )
+
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="Boş dosya.")
+
+    if len(data) > 20_000_000:
+        raise HTTPException(
+            status_code=400,
+            detail="Görsel çok büyük (en fazla 20 MB).",
+        )
+
+    scene_dir = project_dir / "media" / f"scene_{scene:03d}"
+    scene_dir.mkdir(parents=True, exist_ok=True)
+
+    # Replace any earlier upload for this scene, whatever its extension.
+    for known_extension in MediaBuilder.MANUAL_IMAGE_EXTENSIONS:
+        old = scene_dir / f"manual{known_extension}"
+        if old.exists():
+            old.unlink()
+
+    destination = scene_dir / f"manual{extension}"
+    destination.write_bytes(data)
+
+    return {
+        "ok": True,
+        "scene": scene,
+        "url": f"/files/{slug}/media/scene_{scene:03d}/{destination.name}",
+    }
 
 
 @router.post("/api/projects/{slug}/regenerate/{step_key}")

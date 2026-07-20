@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.pipeline.exceptions import PipelineAwaitingUpload
 from app.providers.defaults import register_default_providers
 from app.providers.registry import ProviderRegistry
 from app.providers.shared.downloader import MediaDownloader
@@ -10,6 +11,9 @@ from app.providers.shared.models import MediaAsset
 
 class MediaBuilder:
     """Download or generate suitable media for every storyboard scene."""
+
+    MANUAL_PROVIDER_KEY = "manual"
+    MANUAL_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
     def build(self, project_path: str) -> Path:
         project_dir = Path(project_path)
@@ -41,6 +45,17 @@ class MediaBuilder:
         media_mode = str(project_data.get("media_mode", "mixed")).lower()
         image_provider_key = str(project_data.get("image_provider", "pexels"))
         video_provider_key = str(project_data.get("video_provider", "pexels"))
+
+        # Manual upload provider: the user hand-supplies each scene's image
+        # (e.g. generated in ChatGPT from the per-scene prompt). No API call
+        # -- we only collect what has been uploaded and pause the pipeline
+        # until every scene has one.
+        if image_provider_key.strip().lower() == self.MANUAL_PROVIDER_KEY:
+            return self._build_manual(
+                project_dir,
+                media_dir,
+                storyboard,
+            )
 
         video_provider = ProviderRegistry.create(
             category="video",
@@ -180,6 +195,92 @@ class MediaBuilder:
             ),
             encoding="utf-8",
         )
+
+        return manifest_path
+
+    def find_manual_upload(self, scene_dir: Path) -> Path | None:
+        """Return the hand-uploaded image for a scene, if one exists.
+
+        The upload endpoint saves to `<scene_dir>/manual.<ext>`; we accept
+        any of the common image extensions and require a non-empty file.
+        """
+
+        for extension in self.MANUAL_IMAGE_EXTENSIONS:
+            candidate = scene_dir / f"manual{extension}"
+
+            if candidate.exists() and candidate.stat().st_size > 0:
+                return candidate
+
+        return None
+
+    def _build_manual(
+        self,
+        project_dir: Path,
+        media_dir: Path,
+        storyboard: dict[str, Any],
+    ) -> Path:
+        """Collect hand-uploaded scene images; pause if any are missing."""
+
+        manifest_items: list[dict[str, Any]] = []
+        missing_scenes: list[int] = []
+
+        for index, scene in enumerate(storyboard["scenes"], start=1):
+            scene_number = scene.get("scene", index)
+            scene_dir = media_dir / f"scene_{scene_number:03d}"
+            scene_dir.mkdir(parents=True, exist_ok=True)
+
+            uploaded = self.find_manual_upload(scene_dir)
+            search_query = self._build_query(scene)
+
+            if uploaded is None:
+                missing_scenes.append(scene_number)
+                manifest_item = {
+                    "scene": scene_number,
+                    "status": "awaiting_upload",
+                    "query": search_query,
+                    "error": "Elle yükleme bekleniyor.",
+                }
+            else:
+                manifest_item = {
+                    "scene": scene_number,
+                    "status": "completed",
+                    "query": search_query,
+                    "media_type": "image",
+                    "provider": self.MANUAL_PROVIDER_KEY,
+                    "asset_id": uploaded.stem,
+                    "local_path": str(uploaded),
+                    "download_url": str(uploaded),
+                    "metadata": {"manual_upload": True},
+                }
+
+            self._write_scene_asset(scene_dir, manifest_item)
+            manifest_items.append(manifest_item)
+
+        completed_count = sum(
+            item["status"] == "completed" for item in manifest_items
+        )
+
+        manifest_path = media_dir / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "project": str(project_dir),
+                    "scene_count": len(storyboard["scenes"]),
+                    "completed_count": completed_count,
+                    "failed_count": 0,
+                    "awaiting_upload_count": len(missing_scenes),
+                    "scenes": manifest_items,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        if missing_scenes:
+            # Cooperative pause: stop before render so the user can upload
+            # the remaining scene images, then resume.
+            raise PipelineAwaitingUpload(missing_scenes)
 
         return manifest_path
 

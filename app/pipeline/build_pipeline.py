@@ -14,6 +14,7 @@ from app.pipeline.definitions import (
     get_agent_definition,
     get_default_pipeline_steps,
 )
+from app.pipeline.exceptions import PipelineAwaitingUpload
 from app.services.media_builder import MediaBuilder
 from app.services.narration_builder import NarrationBuilder
 from app.services.project_service import ProjectService, load_project
@@ -809,6 +810,22 @@ class BuildPipeline:
                 f"[cyan]⏱ Step time: "
                 f"{elapsed:.2f} seconds[/cyan]\n"
             )
+
+        except PipelineAwaitingUpload as awaiting:
+            # A cooperative pause, not a failure: mark the run as awaiting
+            # manual uploads (distinct from "failed") and re-raise so the
+            # web layer can surface the upload UI. The next resume() picks
+            # up right here once every scene image is in place.
+            state["status"] = "awaiting_upload"
+            state["failed_step"] = None
+            state["awaiting_scenes"] = list(awaiting.missing_scenes)
+            self._save_state(project_dir, state)
+
+            console.print(
+                "[bold yellow]⏸ Elle görsel yüklemesi bekleniyor: "
+                f"{awaiting.missing_scenes}[/bold yellow]"
+            )
+            raise
 
         except Exception as error:
             self._record_failure_and_raise(

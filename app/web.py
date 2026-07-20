@@ -871,6 +871,28 @@ def project_detail(slug: str) -> HTMLResponse:
         </section>
         """
 
+    manual_media_section = ""
+
+    if str(
+        project.get("image_provider", "")
+    ).strip().lower() == "manual":
+        manual_media_section = """
+        <section class="card" id="manualMediaCard" style="display:none">
+            <h2>🖼 Sahne Görsellerini Yükle (Elle)</h2>
+            <p class="muted">
+                Her sahne için aşağıdaki prompt'u ChatGPT'de (veya istediğin
+                görsel aracında) üret, çıkan görseli ilgili sahnenin kutusuna
+                yükle. Tüm sahneler yüklendiğinde "Devam Et"e bas — üretim
+                medya adımından itibaren kaldığı yerden sürer.
+            </p>
+            <div id="manualMediaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:14px"></div>
+            <div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <button class="button" id="manualContinueBtn" disabled onclick="manualContinue(this)">▶ Devam Et</button>
+                <span id="manualMediaStatus" class="muted"></span>
+            </div>
+        </section>
+        """
+
     seo_path = project_dir / "seo.json"
     seo_section = ""
 
@@ -1104,6 +1126,7 @@ def project_detail(slug: str) -> HTMLResponse:
     {thumbnail_section}
     {subtitles_section}
     {seo_section}
+    {manual_media_section}
     {shorts_section}
 
     <section
@@ -1669,6 +1692,109 @@ def project_detail(slug: str) -> HTMLResponse:
 
     checkForActiveJob();
     loadShortsSplit();
+    loadManualMedia();
+
+    async function loadManualMedia() {{
+        const card = document.getElementById("manualMediaCard");
+        if (!card) return;
+        try {{
+            const r = await fetch(`/api/projects/{escaped_slug_js}/manual-media`);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (!data.manual || data.render_done || !data.scenes || !data.scenes.length) {{
+                card.style.display = "none";
+                return;
+            }}
+            renderManualMedia(data);
+            card.style.display = "";
+        }} catch (e) {{
+            // sessizce yut
+        }}
+    }}
+
+    function renderManualMedia(data) {{
+        const grid = document.getElementById("manualMediaGrid");
+        window.__manualPrompts = {{}};
+        data.scenes.forEach(s => {{ window.__manualPrompts[s.scene] = s.prompt || ""; }});
+        grid.innerHTML = data.scenes.map(s => {{
+            const done = s.uploaded;
+            const preview = (done && s.url)
+                ? `<img src="${{s.url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:8px">`
+                : "";
+            return `
+            <div style="border:1px solid ${{done ? '#bfe3c6' : '#dbe5f4'}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}}">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <strong>Sahne ${{s.scene}}</strong>
+                    <span style="font-size:12px">${{done ? '✅ Yüklendi' : '⬆ Bekliyor'}}</span>
+                </div>
+                <div style="font-size:12px;color:#4a5568;margin-top:6px;max-height:90px;overflow:auto;white-space:pre-wrap">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
+                <div style="display:flex;gap:6px;margin-top:8px">
+                    <button type="button" onclick="copyManualPrompt(this, ${{s.scene}})" style="flex:1;min-height:32px;font-size:12px">📋 Prompt'u Kopyala</button>
+                    <label style="flex:1;min-height:32px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
+                        ${{done ? '🔄 Değiştir' : '⬆ Yükle'}}
+                        <input type="file" accept="image/*" style="display:none" onchange="uploadManualScene(${{s.scene}}, this)">
+                    </label>
+                </div>
+                ${{preview}}
+            </div>`;
+        }}).join("");
+        const btn = document.getElementById("manualContinueBtn");
+        const status = document.getElementById("manualMediaStatus");
+        const uploaded = data.scenes.filter(s => s.uploaded).length;
+        btn.disabled = !data.all_uploaded;
+        status.textContent = `${{uploaded}} / ${{data.scenes.length}} sahne görseli yüklendi`;
+    }}
+
+    function escapeHtmlJs(s) {{
+        const d = document.createElement("div");
+        d.textContent = s == null ? "" : String(s);
+        return d.innerHTML;
+    }}
+
+    async function copyManualPrompt(btn, scene) {{
+        const p = (window.__manualPrompts || {{}})[scene] || "";
+        try {{
+            await navigator.clipboard.writeText(p);
+            const o = btn.textContent;
+            btn.textContent = "✅ Kopyalandı";
+            setTimeout(() => {{ btn.textContent = o; }}, 1200);
+        }} catch (e) {{
+            alert("Kopyalanamadı: " + e.message);
+        }}
+    }}
+
+    async function uploadManualScene(scene, input) {{
+        if (!input.files || !input.files[0]) return;
+        const fd = new FormData();
+        fd.append("file", input.files[0]);
+        const status = document.getElementById("manualMediaStatus");
+        status.textContent = `Sahne ${{scene}} yükleniyor…`;
+        try {{
+            const r = await fetch(`/api/projects/{escaped_slug_js}/manual-media/${{scene}}/upload`, {{method: "POST", body: fd}});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Yüklenemedi.");
+            await loadManualMedia();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            status.textContent = "";
+        }}
+    }}
+
+    async function manualContinue(btn) {{
+        btn.disabled = true;
+        btn.textContent = "⏳ Devam ediliyor…";
+        try {{
+            const r = await fetch(`/api/projects/{escaped_slug_js}/resume`, {{method: "POST"}});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Devam edilemedi.");
+            document.getElementById("manualMediaCard").style.display = "none";
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = "▶ Devam Et";
+        }}
+    }}
 
     async function loadShortsSplit() {{
         const box = document.getElementById("shortsSplitResults");
