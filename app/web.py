@@ -1717,7 +1717,18 @@ def project_detail(slug: str) -> HTMLResponse:
         const grid = document.getElementById("manualMediaGrid");
         window.__manualPrompts = {{}};
         data.scenes.forEach(s => {{ window.__manualPrompts[s.scene] = s.prompt || ""; }});
-        grid.innerHTML = data.scenes.map(s => {{
+
+        // Scenes free stock (Pexels) reliably covers don't need the user's
+        // attention -- sort them to the end and render them collapsed, so
+        // the card highlights only what actually needs a decision:
+        // sensitive scenes first, then ordinary/non-stock scenes, then
+        // stock-friendly ones last.
+        const sorted = data.scenes.slice().sort((a, b) => {{
+            const rank = s => s.sensitive ? 0 : (s.stock_friendly ? 2 : 1);
+            return rank(a) - rank(b);
+        }});
+
+        grid.innerHTML = sorted.map(s => {{
             const done = s.uploaded;
             const preview = (done && s.url)
                 ? `<img src="${{s.url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:8px">`
@@ -1725,13 +1736,18 @@ def project_detail(slug: str) -> HTMLResponse:
             const sensitive = s.sensitive
                 ? `<div style="margin-top:8px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:6px 8px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas — gerçek/temsili görseli elle yüklemen önerilir${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
                 : "";
+            const stockNote = (s.stock_friendly && !s.sensitive && !done)
+                ? `<div style="margin-top:8px;background:#eef9f0;border:1px solid #bfe3c6;border-radius:8px;padding:6px 8px;font-size:12px;color:#0f6b2e">🟢 Bu sahne muhtemelen ücretsiz stokta (Pexels) hazır bulunur — dokunmana gerek yok, otomatik denenir.</div>`
+                : "";
+            const muted = (s.stock_friendly && !s.sensitive && !done);
             return `
-            <div style="border:1px solid ${{s.sensitive && !done ? '#ffd8a8' : (done ? '#bfe3c6' : '#dbe5f4')}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}}">
+            <div style="border:1px solid ${{s.sensitive && !done ? '#ffd8a8' : (done ? '#bfe3c6' : '#dbe5f4')}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}};opacity:${{muted ? '0.75' : '1'}}">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <strong>Sahne ${{s.scene}}${{s.sensitive ? ' ⚠' : ''}}</strong>
-                    <span style="font-size:12px">${{done ? '✅ Yüklendi' : '⬆ Bekliyor'}}</span>
+                    <span style="font-size:12px">${{done ? '✅ Yüklendi' : (muted ? '🟢 Otomatik' : '⬆ Bekliyor')}}</span>
                 </div>
                 ${{sensitive}}
+                ${{stockNote}}
                 <div style="font-size:12px;color:#4a5568;margin-top:6px;max-height:90px;overflow:auto;white-space:pre-wrap">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
                 <div style="display:flex;gap:6px;margin-top:8px">
                     <button type="button" onclick="copyManualPrompt(this, ${{s.scene}})" style="flex:1;min-height:32px;font-size:12px">📋 Prompt'u Kopyala</button>
@@ -1745,9 +1761,11 @@ def project_detail(slug: str) -> HTMLResponse:
         }}).join("");
         const status = document.getElementById("manualMediaStatus");
         const uploaded = data.scenes.filter(s => s.uploaded).length;
+        const stockAuto = data.scenes.filter(s => s.stock_friendly && !s.sensitive && !s.uploaded).length;
         const auto = data.scenes.length - uploaded;
         status.textContent = `${{uploaded}} / ${{data.scenes.length}} sahne elle yüklendi`
-            + (auto > 0 ? ` — kalan ${{auto}} sahne otomatik üretilecek` : "");
+            + (auto > 0 ? ` — kalan ${{auto}} sahne otomatik üretilecek` : "")
+            + (stockAuto > 0 ? ` (${{stockAuto}}'i muhtemelen ücretsiz stokta bulunur)` : "");
     }}
 
     function escapeHtmlJs(s) {{

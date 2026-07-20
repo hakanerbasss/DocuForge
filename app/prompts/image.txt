@@ -11,6 +11,7 @@ Structure:
     {
       "scene": 1,
       "prompt": "...",
+      "stock_friendly": true,
       "sensitive": false,
       "sensitive_reason": ""
     }
@@ -50,6 +51,7 @@ Authenticity rules (this is a documentary -- never fabricate "evidence"):
 
 For each image also set:
 
+- "stock_friendly": true when the scene's subject is a well-known, concrete, real thing that royalty-free stock libraries (Pexels, Pixabay, Unsplash) reliably have plenty of -- famous landmarks and sites (e.g. Nazca lines, Machu Picchu, pyramids), nature, landscapes, wildlife, weather, cities, common objects, and generic everyday activities. False when the shot is abstract, conceptual, symbolic, or so specific to this narrative that stock is unlikely to carry it (e.g. "a symbolic representation of collapsing time", a very particular staged moment). This lets the app skip asking the creator to hand-make images that free stock already covers.
 - "sensitive": true when the scene's subject is a specific real modern person, brand, product, artwork, or recent news event that you had to genericize to stay safe -- i.e. a scene the creator may want to hand-supply a real, cleared image for instead. Otherwise false.
 - "sensitive_reason": a short phrase (in the storyboard's language) explaining why, when sensitive is true; empty string otherwise.
 
