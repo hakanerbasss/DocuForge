@@ -1331,6 +1331,17 @@ def project_detail(slug: str) -> HTMLResponse:
                     continue;
                 }}
 
+                if (field === "thumbnail_hook_override") {{
+                    const suggestions = (opts.choices[field] || []).filter(c => c.key);
+                    const chipsHtml = suggestions.map(c =>
+                        `<button type="button" class="regen-thumb-chip" onclick="document.getElementById('regenThumbnailHookInput').value=this.textContent" style="width:auto;min-height:30px;margin-top:0;padding:4px 10px;font-size:12px;background:#eef3fb;color:#1e3a62;border-radius:999px;border:1px solid #dbe5f4;cursor:pointer">${{escapeHtmlLocal(c.name)}}</button>`
+                    ).join("");
+                    fieldsHtml += `<label style="display:block;margin-top:14px;font-weight:700;font-size:13px">${{label}}</label>
+                        <input type="text" data-field="thumbnail_hook_override" id="regenThumbnailHookInput" placeholder="Boş bırakırsan SEO önerisi kullanılır" value="${{escapeHtmlLocal(current ?? "")}}" style="width:100%;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:0 10px;font:inherit">
+                        ${{suggestions.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${{chipsHtml}}</div><div class="muted" style="font-size:11px;margin-top:6px">Önerilerden birine dokun, ya da kendi başlığını yaz.</div>` : ""}}`;
+                    continue;
+                }}
+
                 const providerChoices = opts.choices[field];
                 const staticChoices = STATIC_CHOICES[field];
 
