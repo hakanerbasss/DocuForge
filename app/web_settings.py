@@ -170,9 +170,12 @@ def _render_xtts_slot(field_key: str, slot: int) -> str:
     name_row = f"""
     <div style="margin-bottom:10px">
         <label style="display:block;margin-bottom:4px;font-weight:600;font-size:12px;color:#4a5568">Bu sesin ismi (kime ait?)</label>
-        <input type="text" id="{name_field_key}Input" value="{html.escape(current_name)}" placeholder="ör. Eşim, Ben, Sunucu"
-            onchange="setXttsRefName('{name_field_key}', this.value)"
-            style="width:100%;min-height:40px;padding:0 12px;border:1px solid #cbd6e5;border-radius:10px;font:inherit;box-sizing:border-box">
+        <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" id="{name_field_key}Input" value="{html.escape(current_name)}" placeholder="ör. Eşim, Ben, Sunucu"
+                onchange="setXttsRefName('{name_field_key}', this.value)"
+                style="flex:1;min-height:40px;padding:0 12px;border:1px solid #cbd6e5;border-radius:10px;font:inherit;box-sizing:border-box">
+            <span id="{name_field_key}Saved" class="muted" style="font-size:12px;white-space:nowrap"></span>
+        </div>
     </div>
     """
 
@@ -571,7 +574,12 @@ async function setActiveXttsReference(value) {{
 }}
 
 async function setXttsRefName(fieldKey, value) {{
+    // Save silently WITHOUT reloading -- a reload here would wipe a file the
+    // user had already picked in the upload box, making the next "Yükle"
+    // report "Dosya seçilmedi". The header/selector labels pick up the new
+    // name on the next natural reload (e.g. after an upload).
     const name = (value || "").trim();
+    const saved = document.getElementById(fieldKey + "Saved");
     try {{
         let r;
         if (name) {{
@@ -589,9 +597,13 @@ async function setXttsRefName(fieldKey, value) {{
             const err = await r.json().catch(() => ({{}}));
             throw new Error(err.detail || "Kaydedilemedi.");
         }}
-        // Refresh so the header + selector labels reflect the new name.
-        location.href = "/settings";
+        if (saved) {{
+            saved.textContent = "✓ kaydedildi";
+            saved.style.color = "#087a38";
+            setTimeout(() => {{ saved.textContent = ""; }}, 2000);
+        }}
     }} catch (e) {{
+        if (saved) {{ saved.textContent = ""; }}
         alert("Hata: " + e.message);
     }}
 }}
