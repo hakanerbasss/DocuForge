@@ -21,6 +21,8 @@ SECRET_FIELDS: dict[str, str] = {
     "GOOGLE_API_KEY": "google_api_key",
     "FAL_KEY": "fal_api_key",
     "XTTS_REFERENCE_AUDIO": "xtts_reference_audio",
+    "XTTS_REFERENCE_AUDIO_2": "xtts_reference_audio_2",
+    "XTTS_ACTIVE_REFERENCE": "xtts_active_reference",
     "CLOSING_IMAGE": "closing_image",
     "CLOSING_IMAGE_ENABLED": "closing_image_enabled",
     "CHANNEL_LOGO": "channel_logo",
@@ -123,6 +125,14 @@ class Settings:
 
     xtts_reference_audio: str = _resolve_secret(
         "XTTS_REFERENCE_AUDIO", "xtts_reference_audio", _secrets
+    )
+
+    xtts_reference_audio_2: str = _resolve_secret(
+        "XTTS_REFERENCE_AUDIO_2", "xtts_reference_audio_2", _secrets
+    )
+
+    xtts_active_reference: str = _resolve_secret(
+        "XTTS_ACTIVE_REFERENCE", "xtts_active_reference", _secrets
     )
 
     closing_image: str = _resolve_secret(

@@ -112,6 +112,21 @@ class XTTSVoiceProvider(VoiceProvider):
                 f"XTTS reference audio not found: {candidate}"
             )
 
+        # Two reference voices can be configured (e.g. two different people);
+        # the "active" selection picks which one narrations use. If slot 2 is
+        # selected but empty/missing, fall back to slot 1 rather than failing.
+        active = str(
+            getattr(settings, "xtts_active_reference", "") or ""
+        ).strip()
+
+        if active == "2":
+            second_value = str(
+                getattr(settings, "xtts_reference_audio_2", "") or ""
+            ).strip()
+
+            if second_value and Path(second_value).exists():
+                return Path(second_value)
+
         configured_value = settings.xtts_reference_audio.strip()
 
         if configured_value:

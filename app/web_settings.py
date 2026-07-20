@@ -9,6 +9,13 @@ from app.core.config import SECRET_FIELDS, settings
 
 XTTS_REFERENCE_DIR = Path("models/xtts")
 XTTS_REFERENCE_PATH = XTTS_REFERENCE_DIR / "reference.wav"
+XTTS_REFERENCE_PATH_2 = XTTS_REFERENCE_DIR / "reference2.wav"
+
+# Which reference slot (field key) each upload target writes to.
+XTTS_SLOTS: dict[str, Path] = {
+    "xtts_reference_audio": XTTS_REFERENCE_PATH,
+    "xtts_reference_audio_2": XTTS_REFERENCE_PATH_2,
+}
 
 CLOSING_IMAGE_DIR = Path("models/closing")
 CHANNEL_LOGO_DIR = Path("models/logo")
@@ -74,6 +81,13 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
         "text",
         "/root/projects/DocuForge/models/xtts/reference.wav",
     ),
+    "xtts_reference_audio_2": (
+        "XTTS Referans Ses 2 (opsiyonel)",
+        "XTTS_REFERENCE_AUDIO_2",
+        "İkinci bir klon ses referansı (ör. farklı bir kişi). Yüklersen aşağıdan hangisinin kullanılacağını seçebilirsin.",
+        "text",
+        "/root/projects/DocuForge/models/xtts/reference2.wav",
+    ),
     "jamendo_client_id": (
         "Jamendo Client ID",
         "JAMENDO_CLIENT_ID",
@@ -126,12 +140,14 @@ FIELD_LABELS: dict[str, tuple[str, str, str, str, str]] = {
 }
 
 
-def _render_xtts_field() -> str:
+def _render_xtts_slot(field_key: str, slot: int) -> str:
+    """Render one XTTS reference slot (upload/record or the configured player)."""
+
     label, env_name, description, _input_type, _placeholder = FIELD_LABELS[
-        "xtts_reference_audio"
+        field_key
     ]
-    configured = settings.is_configured("xtts_reference_audio")
-    current_path = Path(settings.xtts_reference_audio) if configured else None
+    configured = settings.is_configured(field_key)
+    current_path = Path(getattr(settings, field_key)) if configured else None
 
     if configured and current_path is not None and current_path.exists():
         audio_version = int(current_path.stat().st_mtime)
@@ -139,9 +155,9 @@ def _render_xtts_field() -> str:
         <div style="background:#e7f9ee;border:1px solid #b9e6c9;border-radius:10px;padding:12px 14px">
             <div style="color:#087a38;font-weight:700;margin-bottom:8px">✓ Yapılandırılmış</div>
             <audio controls preload="metadata" style="width:100%;margin-bottom:10px">
-                <source src="/settings/xtts_reference_audio/file?v={audio_version}" type="audio/wav">
+                <source src="/settings/{field_key}/file?v={audio_version}" type="audio/wav">
             </audio>
-            <form method="post" action="/settings/xtts_reference_audio/clear" style="margin:0">
+            <form method="post" action="/settings/{field_key}/clear" style="margin:0">
                 <button class="button secondary" type="submit" style="min-height:34px;padding:0 12px;font-size:13px">Değiştir</button>
             </form>
         </div>
@@ -152,29 +168,78 @@ def _render_xtts_field() -> str:
             <div>
                 <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Dosya yükle</label>
                 <div style="display:flex;gap:8px">
-                    <input type="file" id="xttsFileInput" accept="audio/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
-                    <button type="button" class="button" onclick="uploadXttsFile()" style="white-space:nowrap">Yükle</button>
+                    <input type="file" id="xttsFileInput{slot}" accept="audio/*" style="flex:1;min-height:42px;border:1px solid #cbd6e5;border-radius:10px;padding:8px">
+                    <button type="button" class="button" onclick="uploadXttsFile({slot})" style="white-space:nowrap">Yükle</button>
                 </div>
             </div>
             <div>
                 <label style="display:block;margin-bottom:6px;font-weight:700;font-size:13px">Veya mikrofonla kaydet (20-30 sn, sessiz ortamda doğal konuş)</label>
                 <div style="display:flex;align-items:center;gap:10px">
-                    <button type="button" id="xttsStartRecord" class="button" onclick="startXttsRecording()">🎙 Kaydı Başlat</button>
-                    <button type="button" id="xttsStopRecord" class="button secondary" style="display:none" onclick="stopXttsRecording()">⏹ Durdur ve Yükle</button>
-                    <span id="xttsRecordStatus" class="muted" style="font-size:13px"></span>
+                    <button type="button" id="xttsStartRecord{slot}" class="button" onclick="startXttsRecording({slot})">🎙 Kaydı Başlat</button>
+                    <button type="button" id="xttsStopRecord{slot}" class="button secondary" style="display:none" onclick="stopXttsRecording({slot})">⏹ Durdur ve Yükle</button>
+                    <span id="xttsRecordStatus{slot}" class="muted" style="font-size:13px"></span>
                 </div>
             </div>
         </div>
         """
 
     return f"""
-    <div style="padding:16px 0;border-bottom:1px solid #edf1f6">
-        <div style="font-weight:700;margin-bottom:2px">{html.escape(label)}</div>
+    <div style="margin-top:{'0' if slot == 1 else '18'}px">
+        <div style="font-weight:700;margin-bottom:2px;font-size:14px">{html.escape(label)}</div>
         <div class="muted" style="font-size:13px;margin-bottom:10px">
             {html.escape(description)}
             (<code>{env_name}</code> ortam değişkeni ayarlıysa her zaman öncelikli olur ve buradan değiştirilemez.)
         </div>
         {body}
+    </div>
+    """
+
+
+def _render_xtts_active_selector() -> str:
+    """A radio selector for which configured reference narrations should use.
+
+    Only shown when both slots hold a usable file -- with a single reference
+    there is nothing to choose between.
+    """
+
+    has_1 = (
+        settings.is_configured("xtts_reference_audio")
+        and Path(settings.xtts_reference_audio).exists()
+    )
+    has_2 = (
+        settings.is_configured("xtts_reference_audio_2")
+        and Path(settings.xtts_reference_audio_2).exists()
+    )
+
+    if not (has_1 and has_2):
+        return ""
+
+    active = str(settings.xtts_active_reference or "1").strip() or "1"
+    checked_1 = "checked" if active != "2" else ""
+    checked_2 = "checked" if active == "2" else ""
+
+    return f"""
+    <div style="margin-top:18px;background:#eef5ff;border:1px solid #cfe0f7;border-radius:10px;padding:12px 14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">🎚 Kullanılacak referans ses</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px">
+            <input type="radio" name="xttsActiveRef" value="1" {checked_1} onchange="setActiveXttsReference('1')" style="width:auto;min-height:auto">
+            Referans 1
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="xttsActiveRef" value="2" {checked_2} onchange="setActiveXttsReference('2')" style="width:auto;min-height:auto">
+            Referans 2
+        </label>
+        <div class="muted" style="font-size:12px;margin-top:8px">Klon ses üretiminde seçtiğin referans kullanılır.</div>
+    </div>
+    """
+
+
+def _render_xtts_field() -> str:
+    return f"""
+    <div style="padding:16px 0;border-bottom:1px solid #edf1f6">
+        {_render_xtts_slot("xtts_reference_audio", 1)}
+        {_render_xtts_slot("xtts_reference_audio_2", 2)}
+        {_render_xtts_active_selector()}
     </div>
     """
 
@@ -289,6 +354,11 @@ def _render_field(field_key: str) -> str:
     if field_key == "xtts_reference_audio":
         return _render_xtts_field()
 
+    if field_key == "xtts_reference_audio_2":
+        # Rendered together with slot 1 inside _render_xtts_field(); skip the
+        # standalone text-field rendering the generic path would produce.
+        return ""
+
     if field_key == "closing_image":
         return _render_closing_image_field()
 
@@ -380,15 +450,21 @@ code{{background:#eef3fb;padding:1px 5px;border-radius:5px;font-size:12px}}
 let xttsRecorder = null;
 let xttsChunks = [];
 
-async function uploadXttsFile() {{
-    const input = document.getElementById("xttsFileInput");
+function xttsUploadUrl(slot) {{
+    return slot === 2
+        ? "/settings/xtts_reference_audio_2/upload"
+        : "/settings/xtts_reference_audio/upload";
+}}
+
+async function uploadXttsFile(slot) {{
+    const input = document.getElementById("xttsFileInput" + slot);
     if (!input.files || !input.files.length) {{ alert("Bir ses dosyası seç."); return; }}
     const fd = new FormData();
     fd.append("file", input.files[0]);
-    await submitXttsUpload(fd);
+    await submitXttsUpload(fd, slot);
 }}
 
-async function startXttsRecording() {{
+async function startXttsRecording(slot) {{
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
         alert("Tarayıcı mikrofon erişimine izin vermiyor. Bu genellikle sitenin HTTPS olmamasından kaynaklanır (mikrofon sadece güvenli bağlantıda çalışır) — bunun yerine dosya yükleme kullan.");
         return;
@@ -399,17 +475,17 @@ async function startXttsRecording() {{
         xttsRecorder = new MediaRecorder(stream);
         xttsRecorder.ondataavailable = e => {{ if (e.data.size > 0) xttsChunks.push(e.data); }};
         xttsRecorder.start();
-        document.getElementById("xttsStartRecord").style.display = "none";
-        document.getElementById("xttsStopRecord").style.display = "inline-flex";
-        document.getElementById("xttsRecordStatus").textContent = "🔴 Kayıt yapılıyor...";
+        document.getElementById("xttsStartRecord" + slot).style.display = "none";
+        document.getElementById("xttsStopRecord" + slot).style.display = "inline-flex";
+        document.getElementById("xttsRecordStatus" + slot).textContent = "🔴 Kayıt yapılıyor...";
     }} catch (e) {{
         alert("Mikrofona erişilemedi: " + e.message);
     }}
 }}
 
-async function stopXttsRecording() {{
-    document.getElementById("xttsRecordStatus").textContent = "⏳ Yükleniyor...";
-    document.getElementById("xttsStopRecord").style.display = "none";
+async function stopXttsRecording(slot) {{
+    document.getElementById("xttsRecordStatus" + slot).textContent = "⏳ Yükleniyor...";
+    document.getElementById("xttsStopRecord" + slot).style.display = "none";
 
     const blob = await new Promise(resolve => {{
         xttsRecorder.onstop = () => resolve(new Blob(xttsChunks, {{type: "audio/webm"}}));
@@ -419,12 +495,12 @@ async function stopXttsRecording() {{
 
     const fd = new FormData();
     fd.append("file", blob, "recorded_reference.webm");
-    await submitXttsUpload(fd);
+    await submitXttsUpload(fd, slot);
 }}
 
-async function submitXttsUpload(formData) {{
+async function submitXttsUpload(formData, slot) {{
     try {{
-        const r = await fetch("/settings/xtts_reference_audio/upload", {{method: "POST", body: formData}});
+        const r = await fetch(xttsUploadUrl(slot), {{method: "POST", body: formData}});
         if (!r.ok) {{
             const err = await r.json().catch(() => ({{}}));
             throw new Error(err.detail || "Yükleme başarısız.");
@@ -432,8 +508,28 @@ async function submitXttsUpload(formData) {{
         location.href = "/settings";
     }} catch (e) {{
         alert("Hata: " + e.message);
-        document.getElementById("xttsRecordStatus").textContent = "";
-        document.getElementById("xttsStartRecord").style.display = "inline-flex";
+        const status = document.getElementById("xttsRecordStatus" + slot);
+        if (status) status.textContent = "";
+        const start = document.getElementById("xttsStartRecord" + slot);
+        if (start) start.style.display = "inline-flex";
+    }}
+}}
+
+async function setActiveXttsReference(value) {{
+    const fd = new URLSearchParams();
+    fd.append("value", value);
+    try {{
+        const r = await fetch("/settings/xtts_active_reference", {{
+            method: "POST",
+            headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
+            body: fd,
+        }});
+        if (!r.ok) {{
+            const err = await r.json().catch(() => ({{}}));
+            throw new Error(err.detail || "Kaydedilemedi.");
+        }}
+    }} catch (e) {{
+        alert("Hata: " + e.message);
     }}
 }}
 
@@ -552,7 +648,12 @@ def save_setting(
     return RedirectResponse(url="/settings", status_code=303)
 
 
-FILE_BACKED_FIELDS = {"xtts_reference_audio", "closing_image", "channel_logo"}
+FILE_BACKED_FIELDS = {
+    "xtts_reference_audio",
+    "xtts_reference_audio_2",
+    "closing_image",
+    "channel_logo",
+}
 
 
 @router.post("/settings/{field_key}/clear")
@@ -574,12 +675,31 @@ def clear_setting(field_key: str) -> RedirectResponse:
     return RedirectResponse(url="/settings", status_code=303)
 
 
+def _xtts_field_key_for_slot(slot: int) -> str:
+    if slot == 1:
+        return "xtts_reference_audio"
+    if slot == 2:
+        return "xtts_reference_audio_2"
+    raise HTTPException(status_code=404, detail="Geçersiz referans slotu.")
+
+
 @router.get("/settings/xtts_reference_audio/file")
 def get_xtts_reference_audio() -> FileResponse:
-    if not settings.is_configured("xtts_reference_audio"):
+    return _serve_xtts_reference(1)
+
+
+@router.get("/settings/xtts_reference_audio_2/file")
+def get_xtts_reference_audio_2() -> FileResponse:
+    return _serve_xtts_reference(2)
+
+
+def _serve_xtts_reference(slot: int) -> FileResponse:
+    field_key = _xtts_field_key_for_slot(slot)
+
+    if not settings.is_configured(field_key):
         raise HTTPException(status_code=404, detail="Referans ses ayarlı değil.")
 
-    path = Path(settings.xtts_reference_audio)
+    path = Path(getattr(settings, field_key))
 
     if not path.exists():
         raise HTTPException(status_code=404, detail="Referans ses dosyası bulunamadı.")
@@ -591,10 +711,27 @@ def get_xtts_reference_audio() -> FileResponse:
 async def upload_xtts_reference_audio(
     file: UploadFile = File(...),
 ) -> RedirectResponse:
+    return await _store_xtts_reference(1, file)
+
+
+@router.post("/settings/xtts_reference_audio_2/upload")
+async def upload_xtts_reference_audio_2(
+    file: UploadFile = File(...),
+) -> RedirectResponse:
+    return await _store_xtts_reference(2, file)
+
+
+async def _store_xtts_reference(
+    slot: int,
+    file: UploadFile,
+) -> RedirectResponse:
+    field_key = _xtts_field_key_for_slot(slot)
+    destination = XTTS_SLOTS[field_key]
+
     XTTS_REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
 
     suffix = Path(file.filename or "upload").suffix or ".webm"
-    temp_path = XTTS_REFERENCE_DIR / f"_upload{suffix}"
+    temp_path = XTTS_REFERENCE_DIR / f"_upload{slot}{suffix}"
 
     content = await file.read()
 
@@ -614,7 +751,7 @@ async def upload_xtts_reference_audio(
                 "24000",
                 "-ac",
                 "1",
-                str(XTTS_REFERENCE_PATH),
+                str(destination),
             ],
             check=True,
             capture_output=True,
@@ -633,10 +770,7 @@ async def upload_xtts_reference_audio(
     finally:
         temp_path.unlink(missing_ok=True)
 
-    settings.save_secret(
-        "xtts_reference_audio",
-        str(XTTS_REFERENCE_PATH.resolve()),
-    )
+    settings.save_secret(field_key, str(destination.resolve()))
 
     return RedirectResponse(url="/settings", status_code=303)
 
