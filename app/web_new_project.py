@@ -1707,6 +1707,357 @@ def manual_media_continue(slug: str) -> dict[str, Any]:
     return {"job_id": job_id, "status": "queued", "project_slug": slug}
 
 
+SCENE_MEDIA_EXTENSION_BY_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "video/mp4": ".mp4",
+}
+
+
+def _provider_search_capable(category: str, key: str) -> bool:
+    """Whether this configured provider supports browsing multiple
+    results (stock search) vs. only ever producing one fresh AI
+    generation per call. Any failure to even construct the provider
+    (e.g. missing API key) is treated as "not browsable" -- the review
+    UI just hides the browse button rather than erroring.
+    """
+
+    try:
+        from app.providers.defaults import register_default_providers
+        from app.providers.registry import ProviderRegistry
+
+        register_default_providers()
+        provider = ProviderRegistry.create(category=category, key=key)
+        return hasattr(provider, "search")
+    except Exception:
+        return False
+
+
+@router.get("/api/projects/{slug}/scene-media")
+def scene_media_status(slug: str) -> dict[str, Any]:
+    """Per-scene current media + prompt/guidance for the always-available
+    "Sahne Medyasını Düzenle" review UI.
+
+    Unlike /manual-media (which only shows while the media step is
+    paused, pre-render, waiting on optional hand-uploads), this works any
+    time after the media step has produced something -- including after
+    the final video is already rendered -- so a single mismatched scene
+    (e.g. a stock search returning an irrelevant clip) can be reviewed
+    and fixed without redoing the whole build.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    media_dir = project_dir / "media"
+    manifest_path = media_dir / "manifest.json"
+
+    if not manifest_path.exists():
+        return {"available": False, "scenes": []}
+
+    storyboard = load_json(project_dir / "storyboard.json")
+    scenes_raw = (
+        storyboard.get("scenes") if isinstance(storyboard, dict) else None
+    )
+
+    builder = MediaBuilder()
+    image_prompts = builder._load_image_prompts_by_scene(project_dir)
+    video_prompts = builder._load_video_prompts_by_scene(project_dir)
+
+    guidance_by_scene: dict[int, dict[str, Any]] = {}
+    image_prompts_raw = load_json(project_dir / "image_prompts.json")
+
+    for item in image_prompts_raw.get("images", []) or []:
+        if not isinstance(item, dict):
+            continue
+
+        scene_no = item.get("scene")
+
+        if not isinstance(scene_no, int):
+            continue
+
+        guidance_by_scene[scene_no] = {
+            "visual_summary": str(
+                item.get("visual_summary") or ""
+            ).strip(),
+            "generation_goal": str(
+                item.get("generation_goal") or ""
+            ).strip(),
+            "recommended_source": str(
+                item.get("recommended_source") or "stock"
+            ).strip().lower(),
+            "recommendation_reason": str(
+                item.get("recommendation_reason") or ""
+            ).strip(),
+            "authenticity_note": str(
+                item.get("authenticity_note") or ""
+            ).strip(),
+            "sensitive": bool(item.get("sensitive")),
+            "sensitive_reason": str(
+                item.get("sensitive_reason") or ""
+            ).strip(),
+        }
+
+    manifest = load_json(manifest_path)
+    manifest_by_scene: dict[int, dict[str, Any]] = {}
+
+    for item in manifest.get("scenes", []) or []:
+        if isinstance(item, dict) and isinstance(item.get("scene"), int):
+            manifest_by_scene[item["scene"]] = item
+
+    project_data = load_json(project_dir / "project.json")
+
+    image_search_capable = _provider_search_capable(
+        "image", str(project_data.get("image_provider", "pexels"))
+    )
+    video_search_capable = _provider_search_capable(
+        "video", str(project_data.get("video_provider", "pexels"))
+    )
+
+    scenes: list[dict[str, Any]] = []
+
+    if isinstance(scenes_raw, list):
+        for index, scene in enumerate(scenes_raw, start=1):
+            scene_number = (
+                scene.get("scene", index)
+                if isinstance(scene, dict)
+                else index
+            )
+            scene_dir = media_dir / f"scene_{scene_number:03d}"
+            title = (
+                str(scene.get("title") or "")
+                if isinstance(scene, dict)
+                else ""
+            )
+
+            current_path = builder.current_scene_asset(scene_dir)
+            manifest_entry = manifest_by_scene.get(scene_number, {})
+
+            current_media_type = None
+            current_url = None
+
+            if current_path is not None:
+                current_media_type = (
+                    "video"
+                    if current_path.suffix.lower() == ".mp4"
+                    else "image"
+                )
+                current_url = (
+                    f"/files/{slug}/media/"
+                    f"scene_{scene_number:03d}/{current_path.name}"
+                )
+
+            current_provider = manifest_entry.get("provider")
+            guidance = guidance_by_scene.get(scene_number, {})
+
+            scenes.append({
+                "scene": scene_number,
+                "title": title,
+                "image_prompt": image_prompts.get(scene_number, ""),
+                "video_prompt": video_prompts.get(scene_number, ""),
+                "visual_summary": guidance.get("visual_summary", ""),
+                "generation_goal": guidance.get("generation_goal", ""),
+                "recommended_source": guidance.get(
+                    "recommended_source", "stock"
+                ),
+                "recommendation_reason": guidance.get(
+                    "recommendation_reason", ""
+                ),
+                "authenticity_note": guidance.get(
+                    "authenticity_note", ""
+                ),
+                "sensitive": bool(guidance.get("sensitive", False)),
+                "sensitive_reason": guidance.get("sensitive_reason", ""),
+                "current_media_type": current_media_type,
+                "current_url": current_url,
+                "current_provider": current_provider,
+                "current_query": manifest_entry.get("query", ""),
+                "is_manual": current_provider == "manual",
+            })
+
+    return {
+        "available": True,
+        "image_search_capable": image_search_capable,
+        "video_search_capable": video_search_capable,
+        "scenes": scenes,
+    }
+
+
+@router.post("/api/projects/{slug}/scene-media/{scene}/upload")
+async def scene_media_upload(
+    slug: str,
+    scene: int,
+    file: UploadFile,
+) -> dict[str, Any]:
+    """Replace one scene's media with a hand-supplied image or video --
+    e.g. an AI image generated (in ChatGPT or elsewhere) from the
+    scene's own prompt, or any other file the user picked -- without
+    touching any other scene. This is the "Yeniden Üret" fix flow, not
+    the pre-build manual-upload pause: it works after the video is
+    already rendered too.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    extension = SCENE_MEDIA_EXTENSION_BY_TYPE.get(
+        (file.content_type or "").lower()
+    )
+
+    if extension is None:
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix in (".jpg", ".jpeg", ".png", ".webp", ".mp4"):
+            extension = ".jpg" if suffix == ".jpeg" else suffix
+
+    if extension is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Sadece JPG, PNG, WEBP görsel veya MP4 video yükleyebilirsin.",
+        )
+
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="Boş dosya.")
+
+    max_size = 200_000_000 if extension == ".mp4" else 20_000_000
+
+    if len(data) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dosya çok büyük (en fazla {max_size // 1_000_000} MB).",
+        )
+
+    builder = MediaBuilder()
+
+    try:
+        asset, path = builder.save_manual_scene_media(
+            str(project_dir), scene, data, extension
+        )
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {
+        "ok": True,
+        "scene": scene,
+        "media_type": asset.media_type,
+        "url": f"/files/{slug}/media/scene_{scene:03d}/{path.name}",
+    }
+
+
+@router.post("/api/projects/{slug}/scene-media/{scene}/regenerate")
+def scene_media_regenerate(slug: str, scene: int) -> dict[str, Any]:
+    """Automatically try a different pick for one scene -- stock search
+    excludes the currently-used result, AI generation is naturally
+    different each call. The "Otomatik Başka Dene" action.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    builder = MediaBuilder()
+
+    try:
+        asset, path = builder.regenerate_scene(str(project_dir), scene)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return {
+        "ok": True,
+        "scene": scene,
+        "media_type": asset.media_type,
+        "provider": asset.provider,
+        "url": f"/files/{slug}/media/scene_{scene:03d}/{path.name}",
+    }
+
+
+@router.get("/api/projects/{slug}/scene-media/{scene}/alternatives")
+def scene_media_alternatives(
+    slug: str,
+    scene: int,
+    media_type: str = "image",
+) -> dict[str, Any]:
+    """List alternate stock candidates for one scene -- the "Başka Stok
+    Seç" browse action. Only meaningful for search-based providers.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    builder = MediaBuilder()
+
+    try:
+        results = builder.search_scene_alternatives(
+            str(project_dir), scene, media_type, limit=6
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return {"scene": scene, "media_type": media_type, "results": results}
+
+
+class SceneMediaSelectRequest(BaseModel):
+    asset_id: str
+    provider: str
+    media_type: str
+    download_url: str
+    preview_url: str | None = None
+    page_url: str | None = None
+    author: str | None = None
+    license: str | None = None
+    width: float | None = None
+    height: float | None = None
+    duration: float | None = None
+
+
+@router.post("/api/projects/{slug}/scene-media/{scene}/select")
+def scene_media_select(
+    slug: str,
+    scene: int,
+    request: SceneMediaSelectRequest,
+) -> dict[str, Any]:
+    """Download a candidate the user picked from the alternatives list
+    and make it this scene's canonical asset.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    builder = MediaBuilder()
+
+    try:
+        asset, path = builder.select_scene_alternative(
+            str(project_dir), scene, request.model_dump()
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return {
+        "ok": True,
+        "scene": scene,
+        "media_type": asset.media_type,
+        "url": f"/files/{slug}/media/scene_{scene:03d}/{path.name}",
+    }
+
+
 @router.post("/api/projects/{slug}/regenerate/{step_key}")
 def regenerate_project_step(
     slug: str,

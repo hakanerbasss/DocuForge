@@ -951,6 +951,29 @@ def project_detail(slug: str) -> HTMLResponse:
         </section>
         """
 
+    scene_media_section = ""
+
+    if (project_dir / "media" / "manifest.json").exists():
+        scene_media_section = """
+        <section class="card" id="sceneMediaCard" style="display:none">
+            <h2>🎬 Sahne Medyasını Düzenle</h2>
+            <p class="muted">
+                Bir sahnede yanlış veya alakasız bir görsel/video mı var? (Örn.
+                "flamingo ayağı" yerine tamamen ilgisiz bir stok video gelmesi
+                gibi.) Komple videoyu baştan üretmek yerine sadece o sahnenin
+                medyasını burada değiştir -- kendi görsel/videonu yükle, farklı
+                bir stok sonucu seç, ya da otomatik başka bir tane dene. Sonra
+                en alttaki "Videoyu Yeniden Oluştur"a bas; sadece render (ve
+                sonrasındaki adımlar) yeniden çalışır.
+            </p>
+            <div id="sceneMediaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px"></div>
+            <div style="margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid #edf1f6;padding-top:16px">
+                <button class="button" id="sceneMediaRebuildBtn" onclick="rebuildVideoAfterSceneMediaFix(this)">🎬 Videoyu Yeniden Oluştur</button>
+                <span id="sceneMediaStatus" class="muted"></span>
+            </div>
+        </section>
+        """
+
     seo_path = project_dir / "seo.json"
     seo_section = ""
 
@@ -1185,6 +1208,7 @@ def project_detail(slug: str) -> HTMLResponse:
     {subtitles_section}
     {seo_section}
     {manual_media_section}
+    {scene_media_section}
     {shorts_section}
 
     <section
@@ -1814,6 +1838,7 @@ def project_detail(slug: str) -> HTMLResponse:
     checkForActiveJob();
     loadShortsSplit();
     loadManualMedia();
+    loadSceneMedia();
 
     async function loadManualMedia() {{
         const card = document.getElementById("manualMediaCard");
@@ -2001,6 +2026,233 @@ def project_detail(slug: str) -> HTMLResponse:
             alert("Hata: " + e.message);
             btn.disabled = false;
             btn.textContent = "▶ Devam Et (kalanları otomatik üret)";
+        }}
+    }}
+
+    async function loadSceneMedia() {{
+        const card = document.getElementById("sceneMediaCard");
+        if (!card) return;
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-media`);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (!data.available || !data.scenes || !data.scenes.length) {{
+                card.style.display = "none";
+                return;
+            }}
+            renderSceneMedia(data);
+            card.style.display = "";
+        }} catch (e) {{
+            // sessizce yut
+        }}
+    }}
+
+    function sceneMediaTypeBadge(mediaType) {{
+        if (mediaType === "video") {{
+            return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#1f5ea8;background:#eaf2fb">🎥 Video</span>';
+        }}
+        if (mediaType === "image") {{
+            return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#1f7a4d;background:#eaf8f0">🖼 Görsel</span>';
+        }}
+        return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#8a5a00;background:#fff4e5">❓ Yok</span>';
+    }}
+
+    function renderSceneMedia(data) {{
+        const grid = document.getElementById("sceneMediaGrid");
+
+        grid.innerHTML = data.scenes.map(s => {{
+            const preview = s.current_url
+                ? (s.current_media_type === "video"
+                    ? `<video src="${{s.current_url}}?t=${{Date.now()}}" controls style="width:100%;border-radius:8px;margin-top:10px;background:#000"></video>`
+                    : `<img src="${{s.current_url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:10px">`)
+                : '<div class="muted" style="margin-top:10px;font-size:13px">Bu sahne için henüz medya yok.</div>';
+
+            const manualBadge = s.is_manual
+                ? '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#6b3fa0;background:#f3ecfb;margin-left:6px">✋ Elle yüklendi</span>'
+                : "";
+
+            const sensitive = s.sensitive
+                ? `<div style="margin-top:10px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
+                : "";
+
+            const summary = s.visual_summary
+                ? `<div style="margin-top:10px"><strong>Görselde ne olacak?</strong><div style="margin-top:4px;color:#334155">${{escapeHtmlJs(s.visual_summary)}}</div></div>`
+                : "";
+
+            const promptText = [s.image_prompt, s.video_prompt].filter(Boolean).join("\\n\\n---\\n\\n");
+
+            const promptBlock = promptText
+                ? `<details style="margin-top:12px">
+                    <summary style="cursor:pointer;font-weight:700;color:#245ec7">Tam üretim promptunu göster</summary>
+                    <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">${{escapeHtmlJs(promptText)}}</div>
+                </details>`
+                : "";
+
+            const browseButtons = [];
+            if (data.image_search_capable) {{
+                browseButtons.push(`<button type="button" onclick="browseSceneAlternatives(${{s.scene}}, 'image')" style="flex:1;min-height:34px;font-size:12px">🔍 Farklı Görsel Seç</button>`);
+            }}
+            if (data.video_search_capable) {{
+                browseButtons.push(`<button type="button" onclick="browseSceneAlternatives(${{s.scene}}, 'video')" style="flex:1;min-height:34px;font-size:12px">🔍 Farklı Video Seç</button>`);
+            }}
+
+            return `
+            <div style="border:1px solid #dbe5f4;border-radius:12px;padding:14px;background:#ffffff">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+                    <strong>Sahne ${{s.scene}}${{s.title ? ' — ' + escapeHtmlJs(s.title) : ''}}</strong>
+                    <div>${{sceneMediaTypeBadge(s.current_media_type)}}${{manualBadge}}</div>
+                </div>
+
+                ${{sensitive}}
+                ${{summary}}
+                ${{promptBlock}}
+
+                <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+                    <label style="flex:1;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
+                        ⬆ Kendi Görsel/Video Yükle
+                        <input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadSceneMedia(${{s.scene}}, this)">
+                    </label>
+                    <button type="button" onclick="regenerateSceneMedia(${{s.scene}}, this)" style="flex:1;min-height:34px;font-size:12px">
+                        🔄 Otomatik Başka Dene
+                    </button>
+                </div>
+                ${{browseButtons.length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${{browseButtons.join("")}}</div>` : ""}}
+
+                <div id="sceneMediaAlternatives_${{s.scene}}" style="display:none;margin-top:10px;max-height:280px;overflow:auto"></div>
+
+                ${{preview}}
+            </div>`;
+        }}).join("");
+    }}
+
+    async function uploadSceneMedia(scene, input) {{
+        if (!input.files || !input.files[0]) return;
+        const fd = new FormData();
+        fd.append("file", input.files[0]);
+        const status = document.getElementById("sceneMediaStatus");
+        status.textContent = `Sahne ${{scene}} yükleniyor…`;
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-media/${{scene}}/upload`, {{method: "POST", body: fd}});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Yüklenemedi.");
+            status.textContent = `Sahne ${{scene}} güncellendi — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
+            await loadSceneMedia();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            status.textContent = "";
+        }}
+    }}
+
+    async function regenerateSceneMedia(scene, btn) {{
+        const status = document.getElementById("sceneMediaStatus");
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Deneniyor…";
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-media/${{scene}}/regenerate`, {{method: "POST"}});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Denenemedi.");
+            status.textContent = `Sahne ${{scene}} için yeni bir medya bulundu — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
+            await loadSceneMedia();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+        }} finally {{
+            btn.disabled = false;
+            btn.textContent = original;
+        }}
+    }}
+
+    async function browseSceneAlternatives(scene, mediaType) {{
+        const box = document.getElementById(`sceneMediaAlternatives_${{scene}}`);
+        if (!box) return;
+
+        if (box.style.display !== "none" && box.dataset.mediaType === mediaType) {{
+            box.style.display = "none";
+            return;
+        }}
+
+        box.dataset.mediaType = mediaType;
+        box.style.display = "";
+        box.innerHTML = '<div class="muted" style="font-size:12px">Aranıyor…</div>';
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-media/${{scene}}/alternatives?media_type=${{mediaType}}`);
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Aranamadı.");
+
+            if (!data.results || !data.results.length) {{
+                box.innerHTML = '<div class="muted" style="font-size:12px">Sonuç bulunamadı.</div>';
+                return;
+            }}
+
+            window.__sceneMediaAlternatives = window.__sceneMediaAlternatives || {{}};
+            window.__sceneMediaAlternatives[scene] = data.results;
+
+            box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">${{
+                data.results.map((asset, index) => {{
+                    const thumb = mediaType === "video"
+                        ? `<video src="${{asset.preview_url}}" muted style="width:100%;height:80px;object-fit:cover;border-radius:6px;background:#000"></video>`
+                        : `<img src="${{asset.preview_url}}" style="width:100%;height:80px;object-fit:cover;border-radius:6px">`;
+                    return `<button type="button" onclick="selectSceneAlternative(${{scene}}, ${{index}}, this)" style="padding:4px;border:1px solid #dbe5f4;border-radius:8px;background:white;cursor:pointer">
+                        ${{thumb}}
+                        <div style="font-size:10px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${{escapeHtmlJs(asset.author || asset.provider || "")}}</div>
+                    </button>`;
+                }}).join("")
+            }}</div>`;
+        }} catch (e) {{
+            box.innerHTML = `<div style="color:#b91c1c;font-size:12px">Hata: ${{escapeHtmlJs(e.message)}}</div>`;
+        }}
+    }}
+
+    async function selectSceneAlternative(scene, index, btn) {{
+        const status = document.getElementById("sceneMediaStatus");
+        const asset = (window.__sceneMediaAlternatives || {{}})[scene]?.[index];
+        if (!asset) return;
+
+        btn.disabled = true;
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-media/${{scene}}/select`, {{
+                method: "POST",
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify(asset),
+            }});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Seçilemedi.");
+            status.textContent = `Sahne ${{scene}} güncellendi — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
+            await loadSceneMedia();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+        }}
+    }}
+
+    async function rebuildVideoAfterSceneMediaFix(btn) {{
+        if (!confirm(
+            "Videoyu güncellenen sahne medyalarıyla yeniden oluşturmak istediğine emin misin? " +
+            "Render sonrasındaki adımlar (kapak gibi) da yeniden çalışabilir."
+        )) return;
+
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Video yeniden oluşturuluyor…";
+        document.getElementById("actionStatus").textContent = "render yeniden üretiliyor...";
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/regenerate/render`, {{
+                method: "POST",
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{overrides: {{}}}}),
+            }});
+            const res = await r.json();
+            if (!r.ok) throw new Error(res.detail || "Başlatılamadı.");
+            await pollUntilDone(res.job_id);
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
+            document.getElementById("actionStatus").textContent = "";
         }}
     }}
 
