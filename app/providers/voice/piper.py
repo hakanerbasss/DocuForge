@@ -1,4 +1,6 @@
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -63,8 +65,10 @@ class PiperVoiceProvider(VoiceProvider):
             options.get("volume", 1.0)
         )
 
+        piper_binary = self._resolve_piper_binary()
+
         command = [
-            "piper",
+            piper_binary,
             "--model",
             str(model_path),
             "--config",
@@ -89,7 +93,10 @@ class PiperVoiceProvider(VoiceProvider):
             )
         except FileNotFoundError as error:
             raise RuntimeError(
-                "Piper is not installed or not available in PATH."
+                f"Piper could not be run ({piper_binary} not executable). "
+                "It's usually installed but not reachable from the "
+                "service's PATH -- see PiperVoiceProvider._resolve_piper_"
+                "binary() docstring for the fix."
             ) from error
         except subprocess.CalledProcessError as error:
             raise RuntimeError(
@@ -107,3 +114,47 @@ class PiperVoiceProvider(VoiceProvider):
             )
 
         return output_path
+
+    def _resolve_piper_binary(self) -> str:
+        """Locate the `piper` CLI, tolerating the most common deploy gap.
+
+        `pip install piper-tts` drops a `piper` console script into the
+        *current interpreter's* bin directory (e.g. a venv's bin/). That's
+        on PATH in an interactive shell where you ran the install, but a
+        systemd service often runs with a different, minimal PATH -- so
+        `subprocess.run(["piper", ...])` raises FileNotFoundError even
+        though Piper is genuinely installed.
+
+        Fix order:
+        1. `piper` already on PATH -- use it as-is.
+        2. A `piper` script next to the current Python interpreter
+           (covers "installed in this venv, PATH just doesn't include it").
+        3. Otherwise raise -- the caller's error message points at this
+           docstring; the real fix is either adding that directory to the
+           systemd unit's PATH (Environment="PATH=...") or reinstalling
+           with `pip install piper-tts` inside the exact venv the service
+           uses (check with `systemctl show docuforge-web -p
+           ExecStart,Environment` on the server).
+        """
+
+        on_path = shutil.which("piper")
+
+        if on_path:
+            return on_path
+
+        interpreter_dir = Path(sys.executable).parent
+        candidate = interpreter_dir / "piper"
+
+        if candidate.exists():
+            return str(candidate)
+
+        raise RuntimeError(
+            "Piper is not installed or not reachable from this process's "
+            "PATH. If you already ran `pip install piper-tts`, the "
+            "install likely landed in a different Python environment than "
+            "the one the DocuForge service runs in. On the server: run "
+            "`pip install piper-tts` again inside the SAME venv the "
+            "systemd service uses, or find the binary with `find / -name "
+            "piper -type f 2>/dev/null` and add its directory to the "
+            "service's PATH."
+        )

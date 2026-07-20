@@ -588,9 +588,21 @@ class RenderService:
 
                 current_path = merged_path
                 current_is_temp = True
-                current_duration = (
-                    current_duration + clip_durations[i] - duration
-                )
+
+                # Re-probe the real, on-disk duration instead of trusting
+                # the arithmetic running sum. Each pairwise merge re-encodes
+                # audio to AAC, which has its own small encoder delay/
+                # rounding on top of libx264 frame-boundary rounding; those
+                # sub-frame errors don't cancel out, they accumulate merge
+                # after merge. The margin this trim math depends on
+                # (AUDIO_PADDING_SECONDS - TRANSITION_DURATION_SECONDS =
+                # only ~0.1s of real silence) is easily eaten by that drift
+                # over enough scenes, at which point the "silent tail" trim
+                # lands inside actual narration instead -- audibly playing
+                # two sentences on top of each other at that transition.
+                # Grounding every step in the measured duration prevents
+                # that error from ever compounding.
+                current_duration = self._probe_duration(current_path)
 
             shutil.move(str(current_path), str(output_path))
         finally:
