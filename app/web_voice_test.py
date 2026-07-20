@@ -1,6 +1,8 @@
 import hashlib
 import html
 import json
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,19 @@ from app.utils.tr_tts_normalize import clean_tts_text
 router = APIRouter()
 
 VOICE_TEST_DIR = Path("voice_test_cache")
+
+# XTTS model loading alone can take well over a minute on a small VPS's
+# CPU (first call only -- it's cached process-wide after that), which
+# easily exceeds a reverse proxy's default read timeout (nginx/Cloudflare
+# commonly 60-100s). A single blocking request that runs past that limit
+# gets its connection cut and an HTML error page returned instead of our
+# JSON response -- the exact "Unexpected token '<', <!DOCTYPE...' is not
+# valid JSON" failure this fixes. Every synthesis now runs in a background
+# thread; the HTTP request that starts it returns immediately, and the
+# client polls a small, fast status endpoint instead of holding one
+# connection open for the whole synthesis.
+VOICE_TEST_JOBS: dict[str, dict[str, Any]] = {}
+VOICE_TEST_JOBS_LOCK = threading.Lock()
 
 # Medium-length Turkish paragraph deliberately packed with the categories
 # tr_tts_normalize.py handles -- large numbers, decimals with virgul,
@@ -130,6 +145,39 @@ def _cache_filename(
     return f"{provider}_{voice_name}_{digest}.wav"
 
 
+def _run_voice_test_synthesis(
+    job_id: str,
+    provider_key: str,
+    voice_name: str,
+    output_path: Path,
+    filename: str,
+    cleaned_text: str,
+    synth_kwargs: dict[str, Any],
+) -> None:
+    try:
+        register_default_providers()
+        provider = ProviderRegistry.create(category="voice", key=provider_key)
+        provider.synthesize(cleaned_text, output_path, **synth_kwargs)
+
+        with VOICE_TEST_JOBS_LOCK:
+            VOICE_TEST_JOBS[job_id] = {
+                "status": "completed",
+                "url": f"/voice-test/audio/{filename}",
+                "error": None,
+            }
+    except Exception as error:
+        output_path.unlink(missing_ok=True)
+        with VOICE_TEST_JOBS_LOCK:
+            VOICE_TEST_JOBS[job_id] = {
+                "status": "failed",
+                "url": None,
+                "error": (
+                    f"Ses üretilemedi ({PROVIDER_LABELS.get(provider_key, provider_key)}): "
+                    f"{error}"
+                ),
+            }
+
+
 @router.post("/api/voice-test/synthesize")
 def synthesize_voice_test(req: VoiceTestRequest) -> dict[str, Any]:
     provider_key = req.provider.strip().lower()
@@ -151,16 +199,17 @@ def synthesize_voice_test(req: VoiceTestRequest) -> dict[str, Any]:
     output_path = VOICE_TEST_DIR / filename
 
     if output_path.exists() and output_path.stat().st_size > 0:
-        return {"url": f"/voice-test/audio/{filename}", "cached": True}
+        return {"cached": True, "url": f"/voice-test/audio/{filename}"}
 
+    # Resolve anything that can fail fast (unknown provider, missing XTTS
+    # reference) synchronously, so the caller gets an immediate 4xx instead
+    # of having to poll a job just to learn the request was invalid.
     register_default_providers()
 
     try:
-        provider = ProviderRegistry.create(category="voice", key=provider_key)
+        ProviderRegistry.create(category="voice", key=provider_key)
     except KeyError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-
-    cleaned_text = clean_tts_text(text, lang=req.language)
 
     synth_kwargs: dict[str, Any] = {
         "language": req.language,
@@ -172,16 +221,31 @@ def synthesize_voice_test(req: VoiceTestRequest) -> dict[str, Any]:
     if provider_key == "xtts":
         synth_kwargs["reference_audio"] = _resolve_xtts_reference_path(voice_name)
 
-    try:
-        provider.synthesize(cleaned_text, output_path, **synth_kwargs)
-    except Exception as error:
-        output_path.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Ses üretilemedi ({PROVIDER_LABELS.get(provider_key, provider_key)}): {error}",
-        ) from error
+    cleaned_text = clean_tts_text(text, lang=req.language)
 
-    return {"url": f"/voice-test/audio/{filename}", "cached": False}
+    job_id = uuid.uuid4().hex
+    with VOICE_TEST_JOBS_LOCK:
+        VOICE_TEST_JOBS[job_id] = {"status": "running", "url": None, "error": None}
+
+    thread = threading.Thread(
+        target=_run_voice_test_synthesis,
+        args=(job_id, provider_key, voice_name, output_path, filename, cleaned_text, synth_kwargs),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"cached": False, "job_id": job_id}
+
+
+@router.get("/api/voice-test/status/{job_id}")
+def voice_test_status(job_id: str) -> dict[str, Any]:
+    with VOICE_TEST_JOBS_LOCK:
+        job = VOICE_TEST_JOBS.get(job_id)
+
+    if job is None:
+        raise HTTPException(status_code=404, detail="İş bulunamadı.")
+
+    return job
 
 
 @router.get("/voice-test/audio/{filename}")
@@ -389,7 +453,18 @@ async function playVoiceTest(provider, voiceName, rowId) {{
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || "Üretilemedi.");
 
-        audioEl.src = data.url + "?t=" + Date.now();
+        let url;
+        if (data.cached) {{
+            url = data.url;
+        }} else {{
+            // Long-running synthesis (XTTS model load especially) runs in a
+            // background job -- poll instead of holding one request open,
+            // so a slow reverse-proxy read timeout can never turn this into
+            // an HTML error page where JSON was expected.
+            url = await pollVoiceTestJob(data.job_id, btn, statusEl);
+        }}
+
+        audioEl.src = url + "?t=" + Date.now();
         audioEl.style.display = "inline-block";
         statusEl.textContent = data.cached ? "✓ önbellekten" : "✓ üretildi";
         audioEl.play().catch(() => {{}});
@@ -399,6 +474,29 @@ async function playVoiceTest(provider, voiceName, rowId) {{
     }} finally {{
         btn.disabled = false;
         btn.textContent = original;
+    }}
+}}
+
+async function pollVoiceTestJob(jobId, btn, statusEl) {{
+    const startedAt = Date.now();
+    const timeoutMs = 5 * 60 * 1000; // XTTS's first model load can be slow
+
+    while (true) {{
+        if (Date.now() - startedAt > timeoutMs) {{
+            throw new Error("Zaman aşımı -- ses üretimi çok uzun sürdü.");
+        }}
+
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+        btn.textContent = "⏳ Üretiliyor... (" + elapsedSec + "sn)";
+
+        const r = await fetch("/api/voice-test/status/" + jobId);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "İş bulunamadı.");
+
+        if (data.status === "completed") return data.url;
+        if (data.status === "failed") throw new Error(data.error || "Üretilemedi.");
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }}
 }}
 
