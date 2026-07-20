@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from app.providers.base import VoiceProvider
+from app.utils.audio_cleanup import apply_loudness_normalization
 
 
 class EspeakVoiceProvider(VoiceProvider):
@@ -99,6 +100,12 @@ class EspeakVoiceProvider(VoiceProvider):
             raise RuntimeError(
                 f"Voice output is empty: {output_path}"
             )
+
+        # eSpeak-ng's raw output can sound crackly/harsh at its default
+        # level -- see apply_loudness_normalization()'s docstring. Runs
+        # after the file is already confirmed valid, and never fails the
+        # synthesis if the cleanup pass itself has a problem.
+        apply_loudness_normalization(output_path)
 
         return output_path
 

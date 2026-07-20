@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.providers.base import VoiceProvider
+from app.utils.audio_cleanup import apply_loudness_normalization
 
 
 class PiperVoiceProvider(VoiceProvider):
@@ -121,6 +122,12 @@ class PiperVoiceProvider(VoiceProvider):
             raise RuntimeError(
                 f"Piper output is empty: {output_path}"
             )
+
+        # Piper's raw output has a known crackle between sentences (see
+        # apply_loudness_normalization()'s docstring). Runs after the file
+        # is already confirmed valid, and never fails the synthesis if the
+        # cleanup pass itself has a problem.
+        apply_loudness_normalization(output_path)
 
         return output_path
 
