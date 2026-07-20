@@ -237,6 +237,16 @@ class BuildPipeline:
         step_index = ordered_keys.index(step_key)
         downstream_keys = ordered_keys[step_index + 1:]
 
+        self._ensure_upstream_ready(
+            project_dir=project_dir,
+            project_data=project_data,
+            state=state,
+            agent_step_by_key=agent_step_by_key,
+            service_step_by_key=service_step_by_key,
+            upstream_keys=ordered_keys[:step_index],
+            total_steps=len(ordered_keys),
+        )
+
         for key in downstream_keys:
             self._invalidate_step(
                 project_dir=project_dir,
@@ -285,6 +295,72 @@ class BuildPipeline:
             )
 
         return project_dir
+
+    def _ensure_upstream_ready(
+        self,
+        *,
+        project_dir: Path,
+        project_data: dict[str, Any],
+        state: dict[str, Any],
+        agent_step_by_key: dict[str, Any],
+        service_step_by_key: dict[str, Any],
+        upstream_keys: list[str],
+        total_steps: int,
+    ) -> None:
+        """Restore any step before the regenerate target whose output is
+        currently missing, before running the target itself.
+
+        A step's UI card can read "completed" from a stale state.json
+        entry even though its actual output file is gone -- e.g. an
+        earlier step (storyboard, image/video prompts) was regenerated at
+        some point, which invalidates every step downstream of IT
+        (deleting narration_scenes' audio/manifest.json among others) but
+        only re-runs that one target, leaving everything after it
+        deleted-but-still-marked-completed until the user regenerates
+        each subsequent step by hand, in order. Regenerating a LATER step
+        directly (e.g. clicking "Yeniden Üret" on Voice) then fails with
+        a raw, confusing error from deep inside that step's own service
+        (VoiceService: "Audio manifest not found") instead of just fixing
+        itself.
+
+        Uses the exact same completion checks _run_pipeline() already
+        uses for its normal top-to-bottom pass, so anything genuinely
+        still valid on disk is left untouched and not needlessly rerun.
+        """
+
+        for index, key in enumerate(upstream_keys, start=1):
+            if key in agent_step_by_key:
+                definition = get_agent_definition(key)
+                output_path = project_dir / definition.output_file
+
+                if (
+                    output_path.exists()
+                    and output_path.stat().st_size > 0
+                ):
+                    continue
+
+                self._run_agent_step(
+                    index=index,
+                    total_steps=total_steps,
+                    step=agent_step_by_key[key],
+                    definition=definition,
+                    project_dir=project_dir,
+                    project_data=project_data,
+                    state=state,
+                )
+            else:
+                service_step = service_step_by_key[key]
+
+                if service_step["validator"]():
+                    continue
+
+                self._run_service_step(
+                    index=index,
+                    total_steps=total_steps,
+                    step=service_step,
+                    project_dir=project_dir,
+                    state=state,
+                )
 
     def _apply_overrides(
         self,
