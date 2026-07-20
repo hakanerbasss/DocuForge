@@ -309,12 +309,51 @@ def page(title: str, body: str) -> HTMLResponse:
             text-align: center;
             padding: 45px 20px;
         }}
+
+        body {{
+            padding-bottom: 76px;
+        }}
+
+        .bottom-nav {{
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            box-shadow: 0 -6px 20px rgba(20, 30, 60, .06);
+            z-index: 100;
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }}
+
+        .bottom-nav a {{
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 9px 4px 10px;
+            text-decoration: none;
+            color: #7c8aa0;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+
+        .bottom-nav a .nav-icon {{
+            font-size: 21px;
+            line-height: 1;
+        }}
+
+        .bottom-nav a.active {{
+            color: #2166f3;
+        }}
     </style>
 </head>
 
 <body>
 <header>
-    <div class="inner" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <div class="inner" style="display:flex;align-items:center;justify-content:center">
         <a class="brand" href="/">
             <div class="logo">D</div>
             <div>
@@ -324,17 +363,19 @@ def page(title: str, body: str) -> HTMLResponse:
                 </span>
             </div>
         </a>
-        <div style="display:flex;gap:8px">
-            <a class="button secondary" href="/voice-test">🎤 Ses Testi</a>
-            <a class="button secondary" href="/storage">📦 Depolama</a>
-            <a class="button secondary" href="/settings">⚙ Ayarlar</a>
-        </div>
     </div>
 </header>
 
 <main>
     {body}
 </main>
+
+<nav class="bottom-nav">
+    <a href="/" class="active"><span class="nav-icon">🏠</span>Ana Sayfa</a>
+    <a href="/voice-test"><span class="nav-icon">🎤</span>Ses Testi</a>
+    <a href="/storage"><span class="nav-icon">📦</span>Depolama</a>
+    <a href="/settings"><span class="nav-icon">⚙</span>Ayarlar</a>
+</nav>
 
 <script>
 if ("serviceWorker" in navigator) {{

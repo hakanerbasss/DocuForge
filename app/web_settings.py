@@ -470,13 +470,16 @@ h1{{margin:0 0 8px;font-size:clamp(26px,6vw,38px)}}
 .button{{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 15px;border-radius:12px;background:#2166f3;color:white;text-decoration:none;font-weight:750;border:0;cursor:pointer;font:inherit}}
 .button.secondary{{background:#eef3fb;color:#1e3a62}}
 code{{background:#eef3fb;padding:1px 5px;border-radius:5px;font-size:12px}}
+body{{padding-bottom:76px}}
+.bottom-nav{{position:fixed;left:0;right:0;bottom:0;display:flex;background:white;border-top:1px solid #e2e8f0;box-shadow:0 -6px 20px rgba(20,30,60,.06);z-index:100;padding-bottom:env(safe-area-inset-bottom,0)}}
+.bottom-nav a{{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px 10px;text-decoration:none;color:#7c8aa0;font-size:11px;font-weight:700}}
+.bottom-nav a .nav-icon{{font-size:21px;line-height:1}}
+.bottom-nav a.active{{color:#2166f3}}
 </style>
 </head>
 <body>
-<header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+<header><div style="display:flex;align-items:center;justify-content:center">
 <a class="back" href="/">← Projelere dön</a>
-<a class="button secondary" href="/voice-test" style="min-height:34px;padding:0 12px;font-size:13px">🎤 Ses Testi</a>
-<a class="button secondary" href="/storage" style="min-height:34px;padding:0 12px;font-size:13px">📦 Depolama</a>
 </div></header>
 <main>
 <section class="card">
@@ -702,6 +705,12 @@ if ("serviceWorker" in navigator) {{
     navigator.serviceWorker.register("/static/sw.js").catch(() => {{}});
 }}
 </script>
+<nav class="bottom-nav">
+    <a href="/"><span class="nav-icon">🏠</span>Ana Sayfa</a>
+    <a href="/voice-test"><span class="nav-icon">🎤</span>Ses Testi</a>
+    <a href="/storage"><span class="nav-icon">📦</span>Depolama</a>
+    <a href="/settings" class="active"><span class="nav-icon">⚙</span>Ayarlar</a>
+</nav>
 </body>
 </html>""")
 

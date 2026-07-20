@@ -301,16 +301,26 @@ input[type="number"] {{
     min-height: 42px; border: 1px solid #cbd6e5; border-radius: 10px;
     padding: 0 12px; font: inherit; width: 140px;
 }}
+body {{ padding-bottom: 76px; }}
+.bottom-nav {{
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+    background: white; border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -6px 20px rgba(20,30,60,.06); z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}}
+.bottom-nav a {{
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 9px 4px 10px; text-decoration: none; color: #7c8aa0;
+    font-size: 11px; font-weight: 700;
+}}
+.bottom-nav a .nav-icon {{ font-size: 21px; line-height: 1; }}
+.bottom-nav a.active {{ color: #2166f3; }}
 </style>
 </head>
 <body>
 <header>
 <div class="inner">
 <a class="back" href="/">← Projelere dön</a>
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-<a class="back" href="/storage">\U0001F4E6 Depolama</a>
-<a class="back" href="/settings">⚙ Ayarlar</a>
-</div>
 </div>
 </header>
 <main class="inner">
@@ -410,5 +420,11 @@ if ("serviceWorker" in navigator) {{
     navigator.serviceWorker.register("/static/sw.js").catch(() => {{}});
 }}
 </script>
+<nav class="bottom-nav">
+    <a href="/"><span class="nav-icon">🏠</span>Ana Sayfa</a>
+    <a href="/voice-test" class="active"><span class="nav-icon">🎤</span>Ses Testi</a>
+    <a href="/storage"><span class="nav-icon">📦</span>Depolama</a>
+    <a href="/settings"><span class="nav-icon">⚙</span>Ayarlar</a>
+</nav>
 </body>
 </html>""")

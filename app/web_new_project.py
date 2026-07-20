@@ -300,10 +300,15 @@ button:disabled{opacity:.6;cursor:wait}
 .error{background:#ffe9e9;color:#9f2020}
 .success{background:#e8f8ee;color:#08763a}
 .open-project{display:none;margin-top:14px;color:#2166f3;font-weight:800;text-decoration:none}
+body{padding-bottom:76px}
+.bottom-nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:white;border-top:1px solid #e2e8f0;box-shadow:0 -6px 20px rgba(20,30,60,.06);z-index:100;padding-bottom:env(safe-area-inset-bottom,0)}
+.bottom-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px 10px;text-decoration:none;color:#7c8aa0;font-size:11px;font-weight:700}
+.bottom-nav a .nav-icon{font-size:21px;line-height:1}
+.bottom-nav a.active{color:#2166f3}
 </style>
 </head>
 <body>
-<header><div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><a class="back" href="/">\u2190 Projelere d\u00f6n</a><a class="back" href="/voice-test">\U0001F3A4 Ses Testi</a><a class="back" href="/storage">\U0001F4E6 Depolama</a><a class="back" href="/settings">\u2699 Ayarlar</a></div></header>
+<header><div style="display:flex;align-items:center;justify-content:center"><a class="back" href="/">\u2190 Projelere d\u00f6n</a></div></header>
 <main>
 <div id="activeJobBanner"></div>
 <section class="card">
@@ -1185,6 +1190,12 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/static/sw.js").catch(() => {});
 }
 </script>
+<nav class="bottom-nav">
+    <a href="/"><span class="nav-icon">\U0001F3E0</span>Ana Sayfa</a>
+    <a href="/voice-test"><span class="nav-icon">\U0001F3A4</span>Ses Testi</a>
+    <a href="/storage"><span class="nav-icon">\U0001F4E6</span>Depolama</a>
+    <a href="/settings"><span class="nav-icon">⚙</span>Ayarlar</a>
+</nav>
 </body></html>""")
 
 
