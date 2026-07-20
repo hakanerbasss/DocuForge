@@ -2100,15 +2100,34 @@ def project_detail(slug: str) -> HTMLResponse:
         return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#8a5a00;background:#fff4e5">❓ Yok</span>';
     }}
 
+    function sceneMediaImgError(img) {{
+        const div = document.createElement("div");
+        div.className = "muted";
+        div.style.cssText = "font-size:12px;color:#b91c1c;margin-top:10px";
+        div.textContent = "⚠ Dosya tarayıcıda yüklenemedi: " + img.src;
+        img.replaceWith(div);
+    }}
+
     function renderSceneMedia(data) {{
         const grid = document.getElementById("sceneMediaGrid");
 
         grid.innerHTML = data.scenes.map(s => {{
-            const preview = s.current_url
-                ? (s.current_media_type === "video"
+            let preview;
+            if (s.current_url) {{
+                preview = s.current_media_type === "video"
                     ? `<video src="${{s.current_url}}?t=${{Date.now()}}" controls style="width:100%;border-radius:8px;margin-top:10px;background:#000"></video>`
-                    : `<img src="${{s.current_url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:10px">`)
-                : '<div class="muted" style="margin-top:10px;font-size:13px">Bu sahne için henüz medya yok.</div>';
+                    : `<img src="${{s.current_url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:10px" onerror="sceneMediaImgError(this)">`;
+            }} else if (s.current_status === "completed" && s.current_local_path) {{
+                preview = `<div style="margin-top:10px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a5a00">⚠ Kayıtta medya "tamamlandı" görünüyor ama dosya diskte bulunamadı: ${{escapeHtmlJs(s.current_local_path)}}</div>`;
+            }} else if (s.current_status === "failed") {{
+                preview = '<div class="muted" style="margin-top:10px;font-size:13px">❌ Bu sahne için medya üretilemedi/bulunamadı -- videoda düz renkli bir arka plan kullanıldı.</div>';
+            }} else {{
+                preview = '<div class="muted" style="margin-top:10px;font-size:13px">Bu sahne için henüz medya yok.</div>';
+            }}
+
+            const queryLine = s.current_query
+                ? `<div class="muted" style="margin-top:8px;font-size:12px">🔎 Arama sorgusu: "${{escapeHtmlJs(s.current_query)}}"${{s.current_provider ? ' · ' + escapeHtmlJs(s.current_provider) : ''}}</div>`
+                : "";
 
             const manualBadge = s.is_manual
                 ? '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#6b3fa0;background:#f3ecfb;margin-left:6px">✋ Elle yüklendi</span>'
@@ -2146,6 +2165,7 @@ def project_detail(slug: str) -> HTMLResponse:
                     <div>${{sceneMediaTypeBadge(s.current_media_type)}}${{manualBadge}}</div>
                 </div>
 
+                ${{queryLine}}
                 ${{sensitive}}
                 ${{summary}}
                 ${{promptBlock}}

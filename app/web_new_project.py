@@ -1876,6 +1876,8 @@ def scene_media_status(slug: str) -> dict[str, Any]:
                 "current_url": current_url,
                 "current_provider": current_provider,
                 "current_query": manifest_entry.get("query", ""),
+                "current_status": manifest_entry.get("status"),
+                "current_local_path": manifest_entry.get("local_path"),
                 "is_manual": current_provider == "manual",
             })
 
