@@ -53,9 +53,18 @@ class PiperVoiceProvider(VoiceProvider):
             exist_ok=True,
         )
 
-        length_scale = float(
-            options.get("length_scale", 1.0)
+        # VoiceService passes the same 0.5-2.0 "speed" multiplier every
+        # other provider uses (1.0 = normal, >1.0 = faster) -- but this
+        # only ever read a "length_scale" option key, which VoiceService
+        # never sends. So `speed` was silently ignored and every project
+        # got Piper's fixed default rate regardless of its voice_speed
+        # setting. Piper's --length-scale is duration-based and inverted
+        # from "speed" (length_scale=2.0 means twice as LONG, i.e. half
+        # speed), so convert explicitly instead of just renaming the key.
+        speed_multiplier = self._normalize_speed(
+            options.get("speed", 1.0)
         )
+        length_scale = round(1.0 / speed_multiplier, 4)
 
         sentence_silence = float(
             options.get("sentence_silence", 0.15)
@@ -114,6 +123,17 @@ class PiperVoiceProvider(VoiceProvider):
             )
 
         return output_path
+
+    def _normalize_speed(self, value: Any) -> float:
+        try:
+            speed = float(value)
+        except (TypeError, ValueError):
+            return 1.0
+
+        if speed <= 0:
+            return 1.0
+
+        return speed
 
     def _resolve_piper_binary(self) -> str:
         """Locate the `piper` CLI, tolerating the most common deploy gap.

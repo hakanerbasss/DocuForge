@@ -11,6 +11,14 @@ class EspeakVoiceProvider(VoiceProvider):
     provider_key = "espeak"
     provider_name = "eSpeak NG"
 
+    # eSpeak-ng's own default rate, in words-per-minute -- the baseline
+    # the 0.5-2.0 "speed" multiplier (shared across every voice provider,
+    # see VoiceService.generate()'s `speed` param and DocumentaryProject.
+    # voice_speed) scales against.
+    BASE_WPM = 175
+    MIN_WPM = 80
+    MAX_WPM = 400
+
     def synthesize(
         self,
         text: str,
@@ -35,7 +43,19 @@ class EspeakVoiceProvider(VoiceProvider):
             options.get("voice", language)
         ).strip()
 
-        speed = int(options.get("speed", 150))
+        # `speed` arrives as the same 0.5-2.0 multiplier every other voice
+        # provider uses (1.0 = normal) -- NOT a words-per-minute value.
+        # Passing it straight through as eSpeak's `-s` flag (as this used
+        # to do, with speed=1.0 becoming `-s 1`, i.e. "1 word per minute")
+        # produced garbled near-silent output that still passed the
+        # size/duration checks below, so it looked like a fast success
+        # instead of the broken result it actually was.
+        speed_multiplier = self._normalize_speed(
+            options.get("speed", 1.0)
+        )
+        speed = int(round(self.BASE_WPM * speed_multiplier))
+        speed = max(self.MIN_WPM, min(speed, self.MAX_WPM))
+
         pitch = int(options.get("pitch", 50))
         amplitude = int(options.get("amplitude", 100))
 
@@ -81,3 +101,14 @@ class EspeakVoiceProvider(VoiceProvider):
             )
 
         return output_path
+
+    def _normalize_speed(self, value: Any) -> float:
+        try:
+            speed = float(value)
+        except (TypeError, ValueError):
+            return 1.0
+
+        if speed <= 0:
+            return 1.0
+
+        return speed
