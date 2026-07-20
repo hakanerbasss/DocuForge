@@ -48,6 +48,7 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "subtitles_burn_in",
     },
     "thumbnail": {"thumbnail_source", "thumbnail_hook_override"},
+    "seo": {"source_citation"},
 }
 
 
@@ -70,6 +71,7 @@ class BuildPipeline:
         self,
         topic: str,
         source_material: str = "",
+        source_citation: str = "",
         language: str = "tr",
         content_type: str = "documentary",
         target_duration_seconds: int = 600,
@@ -110,6 +112,7 @@ class BuildPipeline:
         project = DocumentaryProject(
             title=topic,
             source_material=source_material,
+            source_citation=source_citation,
             language=language,
             content_type=resolved_content_type,
             target_duration_seconds=target_duration_seconds,
@@ -651,6 +654,11 @@ class BuildPipeline:
                 if step.key == "research":
                     step_kwargs["source_material"] = str(
                         project_data.get("source_material", "")
+                    )
+
+                if step.key == "seo":
+                    step_kwargs["source_citation"] = str(
+                        project_data.get("source_citation", "")
                     )
 
                 result = agent.run(agent_input, **step_kwargs)

@@ -54,6 +54,7 @@ CANCEL_EVENTS: dict[str, threading.Event] = {}
 class BuildRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
     source_material: str = Field(default="", max_length=8000)
+    source_citation: str = Field(default="", max_length=500)
     language: str = Field(default="tr")
     content_type: str = Field(default="documentary")
     target_duration_seconds: int = Field(default=900, ge=10, le=7200)
@@ -119,6 +120,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
             result_dir = BuildPipeline().run(
                 topic=req["topic"],
                 source_material=req.get("source_material", ""),
+                source_citation=req.get("source_citation", ""),
                 language=req["language"],
                 content_type=req["content_type"],
                 target_duration_seconds=req["target_duration_seconds"],
@@ -302,6 +304,10 @@ button:disabled{opacity:.6;cursor:wait}
 <label for="source_material" style="margin-top:12px">Kaynak Metin (opsiyonel)</label>
 <textarea id="source_material" rows="6" placeholder="Elinde zaten doğrulanmış, kaynak gösterilmiş bir haber/metin varsa buraya yapıştır -- araştırma adımı yeni tarih/rakam uydurmaz, sadece bu metni kullanır." onblur="deriveTopicFromSource()"></textarea>
 <div class="hint">Boş bırakırsan DocuForge konuyu kendi araştırıp yazar. Doldurursan (özellikle haber içeriklerinde) sadece buradaki bilgiler kullanılır, ekstra tarih/rakam eklenmez.</div>
+
+<label for="source_citation" style="margin-top:12px">Kaynak (opsiyonel)</label>
+<input id="source_citation" placeholder="Örnek: Sözcü, Milliyet, Uzmanpara.com" maxlength="500">
+<div class="hint">Girilirse video açıklamasının sonuna otomatik olarak "📌 Kaynak: ..." satırı eklenir -- telif ve şeffaflık açısından önemli, özellikle haber ve gerçek yer içeriklerinde.</div>
 
 <div class="row">
 <div>
@@ -994,6 +1000,7 @@ document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggesti
   try{prefill=JSON.parse(raw);}catch(e){return;}
   if(prefill.topic)document.getElementById("topic").value=prefill.topic;
   if(prefill.source_material)document.getElementById("source_material").value=prefill.source_material;
+  if(prefill.source_citation)document.getElementById("source_citation").value=prefill.source_citation;
   if(prefill.content_type)document.getElementById("content_type").value=prefill.content_type;
   onTypeChange();
 })();
@@ -1025,6 +1032,7 @@ async function startBuild(){
   const payload={
     topic,
     source_material:document.getElementById("source_material").value.trim(),
+    source_citation:document.getElementById("source_citation").value.trim(),
     language:document.getElementById("language").value,
     content_type:document.getElementById("content_type").value,
     target_duration_seconds:parseInt(document.getElementById("duration").value),

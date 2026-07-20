@@ -968,6 +968,9 @@ def project_detail(slug: str) -> HTMLResponse:
 
     step_rows: list[str] = []
     escaped_slug_js = quote(project_dir.name)
+    project_source_citation_js = json.dumps(
+        str(project.get("source_citation", ""))
+    )
 
     for index, (key, label) in enumerate(active_step_defs):
         info = steps.get(key) if isinstance(steps, dict) else None
@@ -1720,6 +1723,7 @@ def project_detail(slug: str) -> HTMLResponse:
             topic: s.title,
             source_material: s.script,
             content_type: "shorts",
+            source_citation: {project_source_citation_js},
         }}));
         window.location.href = "/new";
     }}

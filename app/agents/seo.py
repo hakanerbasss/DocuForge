@@ -14,6 +14,7 @@ class SEOAgent(BaseAgent):
         language: str = "en",
         content_type: str = "documentary",
         target_duration_seconds: int = 600,
+        source_citation: str = "",
     ) -> str:
         last_error: Exception | None = None
 
@@ -38,6 +39,9 @@ Do not include explanations before or after the JSON.
             try:
                 response = self.generate_with_retry(prompt)
                 seo_data = self._parse_and_validate(response)
+                seo_data["description"] = self._append_source_citation(
+                    seo_data["description"], source_citation
+                )
 
                 return json.dumps(
                     seo_data,
@@ -114,6 +118,24 @@ Do not include explanations before or after the JSON.
             "text_overlay": self._optional_str(data, "text_overlay"),
             "avoid_elements": self._optional_str(data, "avoid_elements"),
         }
+
+    def _append_source_citation(
+        self,
+        description: str,
+        source_citation: str,
+    ) -> str:
+        """Append a source-credit line to the description, deterministically
+        in code rather than trusting the model to include it -- a real
+        citation matters too much (copyright/trust risk on a documentary
+        channel) to leave to prompt compliance.
+        """
+
+        citation = source_citation.strip()
+
+        if not citation:
+            return description
+
+        return f"{description}\n\n📌 Kaynak: {citation}"
 
     def _optional_str(self, data: dict[str, Any], key: str) -> str:
         """Thumbnail creative-brief fields are best-effort: a missing or
