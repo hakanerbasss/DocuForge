@@ -718,7 +718,9 @@ class ThumbnailService:
         hook = self._turkish_upper(brief["hook"])
         font, lines = self._fit_text_lines(
             draw, hook, max_width=int(width * 0.85), max_lines=2,
-            base_size=int(height * 0.11),
+            # 0.066 = 0.11 * 0.6 -- the "%60" size the user picked from
+            # the split_contrast size comparison mockups.
+            base_size=int(height * 0.066),
         )
 
         self._draw_text_block(
