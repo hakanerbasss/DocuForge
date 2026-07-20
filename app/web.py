@@ -1716,56 +1716,121 @@ def project_detail(slug: str) -> HTMLResponse:
     function renderManualMedia(data) {{
         const grid = document.getElementById("manualMediaGrid");
         window.__manualPrompts = {{}};
-        data.scenes.forEach(s => {{ window.__manualPrompts[s.scene] = s.prompt || ""; }});
 
-        // Scenes free stock (Pexels) reliably covers don't need the user's
-        // attention -- sort them to the end and render them collapsed, so
-        // the card highlights only what actually needs a decision:
-        // sensitive scenes first, then ordinary/non-stock scenes, then
-        // stock-friendly ones last.
-        const sorted = data.scenes.slice().sort((a, b) => {{
-            const rank = s => s.sensitive ? 0 : (s.stock_friendly ? 2 : 1);
-            return rank(a) - rank(b);
+        const sourceMeta = {{
+            stock: {{
+                label: "Stok önerilir",
+                color: "#1f7a4d",
+                bg: "#eaf8f0",
+            }},
+            generated: {{
+                label: "AI üretimi önerilir",
+                color: "#6b3fa0",
+                bg: "#f3ecfb",
+            }},
+            infographic: {{
+                label: "İnfografik önerilir",
+                color: "#1f5ea8",
+                bg: "#eaf2fb",
+            }},
+            archive: {{
+                label: "Gerçek arşiv gerekir",
+                color: "#a14d00",
+                bg: "#fff1e3",
+            }},
+        }};
+
+        data.scenes.forEach(s => {{
+            window.__manualPrompts[s.scene] = s.prompt || "";
         }});
 
-        grid.innerHTML = sorted.map(s => {{
+        grid.innerHTML = data.scenes.map(s => {{
             const done = s.uploaded;
+            const source = sourceMeta[s.recommended_source]
+                || sourceMeta.stock;
+
             const preview = (done && s.url)
-                ? `<img src="${{s.url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:8px">`
+                ? `<img src="${{s.url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:10px">`
                 : "";
+
             const sensitive = s.sensitive
-                ? `<div style="margin-top:8px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:6px 8px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas — gerçek/temsili görseli elle yüklemen önerilir${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
+                ? `<div style="margin-top:10px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
                 : "";
-            const stockNote = (s.stock_friendly && !s.sensitive && !done)
-                ? `<div style="margin-top:8px;background:#eef9f0;border:1px solid #bfe3c6;border-radius:8px;padding:6px 8px;font-size:12px;color:#0f6b2e">🟢 Bu sahne muhtemelen ücretsiz stokta (Pexels) hazır bulunur — dokunmana gerek yok, otomatik denenir.</div>`
+
+            const summary = s.visual_summary
+                ? `<div style="margin-top:10px"><strong>Görselde ne olacak?</strong><div style="margin-top:4px;color:#334155">${{escapeHtmlJs(s.visual_summary)}}</div></div>`
                 : "";
-            const muted = (s.stock_friendly && !s.sensitive && !done);
+
+            const goal = s.generation_goal
+                ? `<div style="margin-top:10px"><strong>Bu görselle ne anlatılacak?</strong><div style="margin-top:4px;color:#334155">${{escapeHtmlJs(s.generation_goal)}}</div></div>`
+                : "";
+
+            const reason = s.recommendation_reason
+                ? `<div style="margin-top:10px"><strong>Neden bu yöntem?</strong><div style="margin-top:4px;color:#334155">${{escapeHtmlJs(s.recommendation_reason)}}</div></div>`
+                : "";
+
+            const authenticity = s.authenticity_note
+                ? `<div style="margin-top:10px;background:#f8fafc;border-left:4px solid #94a3b8;padding:8px 10px;border-radius:6px"><strong>Gerçeklik notu</strong><div style="margin-top:4px;color:#475569">${{escapeHtmlJs(s.authenticity_note)}}</div></div>`
+                : "";
+
+            const statusLabel = done
+                ? "✅ Özel görsel yüklendi"
+                : "Otomatik tamamlanacak";
+
             return `
-            <div style="border:1px solid ${{s.sensitive && !done ? '#ffd8a8' : (done ? '#bfe3c6' : '#dbe5f4')}};border-radius:12px;padding:12px;background:${{done ? '#f2fbf4' : '#ffffff'}};opacity:${{muted ? '0.75' : '1'}}">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <strong>Sahne ${{s.scene}}${{s.sensitive ? ' ⚠' : ''}}</strong>
-                    <span style="font-size:12px">${{done ? '✅ Yüklendi' : (muted ? '🟢 Otomatik' : '⬆ Bekliyor')}}</span>
+            <div style="border:1px solid ${{done ? '#bfe3c6' : '#dbe5f4'}};border-radius:12px;padding:14px;background:${{done ? '#f2fbf4' : '#ffffff'}}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                    <div>
+                        <strong>Sahne ${{s.scene}}${{s.title ? ' — ' + escapeHtmlJs(s.title) : ''}}</strong>
+                        <div style="margin-top:6px">
+                            <span style="display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;color:${{source.color}};background:${{source.bg}}">
+                                ${{source.label}}
+                            </span>
+                        </div>
+                    </div>
+                    <span style="font-size:12px;color:#475569;text-align:right">${{statusLabel}}</span>
                 </div>
+
                 ${{sensitive}}
-                ${{stockNote}}
-                <div style="font-size:12px;color:#4a5568;margin-top:6px;max-height:90px;overflow:auto;white-space:pre-wrap">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
-                <div style="display:flex;gap:6px;margin-top:8px">
-                    <button type="button" onclick="copyManualPrompt(this, ${{s.scene}})" style="flex:1;min-height:32px;font-size:12px">📋 Prompt'u Kopyala</button>
-                    <label style="flex:1;min-height:32px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
-                        ${{done ? '🔄 Değiştir' : '⬆ Yükle'}}
+                ${{summary}}
+                ${{goal}}
+                ${{reason}}
+                ${{authenticity}}
+
+                <details style="margin-top:12px">
+                    <summary style="cursor:pointer;font-weight:700;color:#245ec7">
+                        Tam üretim promptunu göster
+                    </summary>
+                    <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
+                </details>
+
+                <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+                    <button type="button" onclick="copyManualPrompt(this, ${{s.scene}})" style="flex:1;min-height:34px;font-size:12px">
+                        📋 Promptu Kopyala
+                    </button>
+                    <label style="flex:1;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
+                        ${{done ? '🔄 Görseli Değiştir' : '⬆ Görsel Yükle'}}
                         <input type="file" accept="image/*" style="display:none" onchange="uploadManualScene(${{s.scene}}, this)">
                     </label>
                 </div>
+
+                <div style="margin-top:8px;font-size:12px;color:#64748b">
+                    Boş bırakırsan seçili otomatik sağlayıcı bu sahneyi tamamlar.
+                </div>
+
                 ${{preview}}
             </div>`;
         }}).join("");
+
         const status = document.getElementById("manualMediaStatus");
         const uploaded = data.scenes.filter(s => s.uploaded).length;
-        const stockAuto = data.scenes.filter(s => s.stock_friendly && !s.sensitive && !s.uploaded).length;
         const auto = data.scenes.length - uploaded;
-        status.textContent = `${{uploaded}} / ${{data.scenes.length}} sahne elle yüklendi`
-            + (auto > 0 ? ` — kalan ${{auto}} sahne otomatik üretilecek` : "")
-            + (stockAuto > 0 ? ` (${{stockAuto}}'i muhtemelen ücretsiz stokta bulunur)` : "");
+
+        status.textContent =
+            `${{uploaded}} / ${{data.scenes.length}} sahneye özel görsel yüklendi`
+            + (auto > 0
+                ? ` — kalan ${{auto}} sahne otomatik tamamlanacak`
+                : "");
     }}
 
     function escapeHtmlJs(s) {{

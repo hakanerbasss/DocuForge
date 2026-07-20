@@ -1456,26 +1456,43 @@ def manual_media_status(slug: str) -> dict[str, Any]:
     builder = MediaBuilder()
     prompts = builder._load_image_prompts_by_scene(project_dir)
 
-    # Per-scene flags from ImagePromptAgent, so the card can guide the user:
-    # - sensitive: nudge to hand-supply a real, cleared image.
-    # - stock_friendly: subject free stock (Pexels) reliably covers, so the
-    #   creator need not hand-make it -- the pipeline auto-fetches stock.
-    sensitive_by_scene: dict[int, str] = {}
-    stock_friendly_scenes: set[int] = set()
+    # Rich per-scene guidance from ImagePromptAgent.
+    guidance_by_scene: dict[int, dict[str, Any]] = {}
     image_prompts_raw = load_json(project_dir / "image_prompts.json")
+
     for item in image_prompts_raw.get("images", []) or []:
         if not isinstance(item, dict):
             continue
+
         scene_no = item.get("scene")
+
         if not isinstance(scene_no, int):
             continue
-        if bool(item.get("sensitive")):
-            reason = item.get("sensitive_reason")
-            sensitive_by_scene[scene_no] = (
-                reason.strip() if isinstance(reason, str) else ""
-            )
-        if bool(item.get("stock_friendly")):
-            stock_friendly_scenes.add(scene_no)
+
+        guidance_by_scene[scene_no] = {
+            "visual_summary": str(
+                item.get("visual_summary") or ""
+            ).strip(),
+            "generation_goal": str(
+                item.get("generation_goal") or ""
+            ).strip(),
+            "recommended_source": str(
+                item.get("recommended_source") or "stock"
+            ).strip().lower(),
+            "recommendation_reason": str(
+                item.get("recommendation_reason") or ""
+            ).strip(),
+            "visual_category": str(
+                item.get("visual_category") or "general"
+            ).strip(),
+            "authenticity_note": str(
+                item.get("authenticity_note") or ""
+            ).strip(),
+            "sensitive": bool(item.get("sensitive")),
+            "sensitive_reason": str(
+                item.get("sensitive_reason") or ""
+            ).strip(),
+        }
 
     scenes: list[dict[str, Any]] = []
 
@@ -1495,14 +1512,47 @@ def manual_media_status(slug: str) -> dict[str, Any]:
             if isinstance(scene, dict):
                 title = str(scene.get("title") or "")
 
+            guidance = guidance_by_scene.get(
+                scene_number,
+                {},
+            )
+
             scenes.append({
                 "scene": scene_number,
                 "title": title,
                 "prompt": prompts.get(scene_number, ""),
+                "visual_summary": guidance.get(
+                    "visual_summary",
+                    "",
+                ),
+                "generation_goal": guidance.get(
+                    "generation_goal",
+                    "",
+                ),
+                "recommended_source": guidance.get(
+                    "recommended_source",
+                    "stock",
+                ),
+                "recommendation_reason": guidance.get(
+                    "recommendation_reason",
+                    "",
+                ),
+                "visual_category": guidance.get(
+                    "visual_category",
+                    "general",
+                ),
+                "authenticity_note": guidance.get(
+                    "authenticity_note",
+                    "",
+                ),
                 "uploaded": uploaded is not None,
-                "sensitive": scene_number in sensitive_by_scene,
-                "sensitive_reason": sensitive_by_scene.get(scene_number, ""),
-                "stock_friendly": scene_number in stock_friendly_scenes,
+                "sensitive": bool(
+                    guidance.get("sensitive", False)
+                ),
+                "sensitive_reason": guidance.get(
+                    "sensitive_reason",
+                    "",
+                ),
                 "url": (
                     f"/files/{slug}/media/"
                     f"scene_{scene_number:03d}/{uploaded.name}"

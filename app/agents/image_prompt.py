@@ -106,6 +106,55 @@ Do not include explanations before or after the JSON.
                 "must be a non-empty string."
             )
 
+        defaults = {
+            "visual_summary": "",
+            "generation_goal": "",
+            "recommended_source": "stock",
+            "recommendation_reason": "",
+            "visual_category": "general",
+            "authenticity_note": "",
+            "sensitive": False,
+            "sensitive_reason": "",
+        }
+
+        for field, default in defaults.items():
+            image.setdefault(field, default)
+
+        allowed_sources = {
+            "stock",
+            "generated",
+            "infographic",
+            "archive",
+        }
+
+        source = str(
+            image.get("recommended_source", "stock")
+        ).strip().lower()
+
+        if source not in allowed_sources:
+            raise ValueError(
+                f"Image item {index}: invalid recommended_source "
+                f"'{source}'."
+            )
+
+        image["recommended_source"] = source
+        image["sensitive"] = bool(image.get("sensitive", False))
+
+        for field in (
+            "visual_summary",
+            "generation_goal",
+            "recommendation_reason",
+            "visual_category",
+            "authenticity_note",
+            "sensitive_reason",
+        ):
+            value = image.get(field, "")
+            image[field] = (
+                value.strip()
+                if isinstance(value, str)
+                else str(value).strip()
+            )
+
     def _remove_code_fences(self, response: str) -> str:
         cleaned = response.strip()
 
