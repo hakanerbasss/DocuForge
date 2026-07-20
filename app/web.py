@@ -847,6 +847,25 @@ def project_detail(slug: str) -> HTMLResponse:
             scenes_text = ", ".join(
                 str(number) for number in placeholder_scenes
             )
+            scene_numbers_json = json.dumps(placeholder_scenes)
+            has_scene_media_fix = (
+                project_dir / "media" / "manifest.json"
+            ).exists()
+
+            fix_button = (
+                f"""
+                <button
+                    class="button"
+                    style="margin-top:12px"
+                    onclick='focusSceneMediaFix({scene_numbers_json})'
+                >
+                    🔧 Bu sahne(ler)in medyasını şimdi düzelt
+                </button>
+                """
+                if has_scene_media_fix
+                else ""
+            )
+
             media_warning_section = f"""
             <section class="card" style="border-color:#f0c96a;background:#fffaf0">
                 <h2 style="color:#8a5a00">⚠ Bazı sahnelerde görsel/video üretilemedi</h2>
@@ -854,9 +873,11 @@ def project_detail(slug: str) -> HTMLResponse:
                     Sahne {html.escape(scenes_text)} için görsel veya video
                     oluşturulamadığından o sahnelerde düz renkli bir arka plan
                     kullanıldı -- anlatım sesi kaybolmadı, sadece görsel eksik.
-                    "📦 Medya İndirme" adımını Yeniden Üret ile tekrar
-                    denetebilir veya videoyu bu haliyle kullanabilirsin.
+                    Aşağıdaki butonla o sahneyi doğrudan bul: kendi görsel/video
+                    yükleyebilir, farklı bir stok sonucu seçebilir ya da otomatik
+                    başka bir tane deneyebilirsin.
                 </p>
+                {fix_button}
             </section>
             """
 
@@ -2047,6 +2068,28 @@ def project_detail(slug: str) -> HTMLResponse:
         }}
     }}
 
+    async function focusSceneMediaFix(sceneNumbers) {{
+        const card = document.getElementById("sceneMediaCard");
+        if (!card) return;
+
+        await loadSceneMedia();
+        card.style.display = "";
+        card.scrollIntoView({{behavior: "smooth", block: "start"}});
+
+        (sceneNumbers || []).forEach(scene => {{
+            const item = document.getElementById(`sceneMediaItem_${{scene}}`);
+            if (!item) return;
+            item.style.outline = "3px solid #f0c96a";
+            item.style.outlineOffset = "2px";
+            item.style.boxShadow = "0 0 0 6px rgba(240,201,106,.25)";
+            setTimeout(() => {{
+                item.style.outline = "";
+                item.style.outlineOffset = "";
+                item.style.boxShadow = "";
+            }}, 4000);
+        }});
+    }}
+
     function sceneMediaTypeBadge(mediaType) {{
         if (mediaType === "video") {{
             return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#1f5ea8;background:#eaf2fb">🎥 Video</span>';
@@ -2097,7 +2140,7 @@ def project_detail(slug: str) -> HTMLResponse:
             }}
 
             return `
-            <div style="border:1px solid #dbe5f4;border-radius:12px;padding:14px;background:#ffffff">
+            <div id="sceneMediaItem_${{s.scene}}" style="border:1px solid #dbe5f4;border-radius:12px;padding:14px;background:#ffffff;transition:box-shadow .3s,outline .3s">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
                     <strong>Sahne ${{s.scene}}${{s.title ? ' — ' + escapeHtmlJs(s.title) : ''}}</strong>
                     <div>${{sceneMediaTypeBadge(s.current_media_type)}}${{manualBadge}}</div>
