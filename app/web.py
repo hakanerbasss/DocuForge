@@ -873,21 +873,21 @@ def project_detail(slug: str) -> HTMLResponse:
 
     manual_media_section = ""
 
-    if str(
-        project.get("image_provider", "")
-    ).strip().lower() == "manual":
+    if bool(project.get("manual_upload_enabled")):
         manual_media_section = """
         <section class="card" id="manualMediaCard" style="display:none">
-            <h2>🖼 Sahne Görsellerini Yükle (Elle)</h2>
+            <h2>🖼 Sahne Görsellerini Yükle (Elle — Opsiyonel)</h2>
             <p class="muted">
-                Her sahne için aşağıdaki prompt'u ChatGPT'de (veya istediğin
-                görsel aracında) üret, çıkan görseli ilgili sahnenin kutusuna
-                yükle. Tüm sahneler yüklendiğinde "Devam Et"e bas — üretim
-                medya adımından itibaren kaldığı yerden sürer.
+                İstediğin sahne için aşağıdaki prompt'u ChatGPT'de (veya başka
+                bir görsel aracında) üret, çıkan görseli ilgili sahnenin
+                kutusuna yükle. <b>Boş bıraktığın sahneler otomatik olarak
+                seçili sağlayıcıdan (Pexels/AI) indirilir</b> — hiçbiri zorunlu
+                değil. Hazır olunca "Devam Et"e bas; üretim medya adımından
+                itibaren sürer.
             </p>
             <div id="manualMediaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:14px"></div>
             <div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                <button class="button" id="manualContinueBtn" disabled onclick="manualContinue(this)">▶ Devam Et</button>
+                <button class="button" id="manualContinueBtn" onclick="manualContinue(this)">▶ Devam Et (kalanları otomatik üret)</button>
                 <span id="manualMediaStatus" class="muted"></span>
             </div>
         </section>
@@ -1174,6 +1174,7 @@ def project_detail(slug: str) -> HTMLResponse:
         subtitles_burn_in: "Altyazıyı Videoya Göm",
         ai_disclosure_enabled: "Yapay Zeka İbaresi Ekle",
         location_map_enabled: "Konum Haritası Ekle",
+        manual_upload_enabled: "Görselleri Elle Yükle",
         thumbnail_source: "Kapak Görseli Kaynağı",
         thumbnail_hook_override: "Kapak Üzerindeki Başlık",
     }};
@@ -1701,7 +1702,7 @@ def project_detail(slug: str) -> HTMLResponse:
             const r = await fetch(`/api/projects/{escaped_slug_js}/manual-media`);
             if (!r.ok) return;
             const data = await r.json();
-            if (!data.manual || data.render_done || !data.scenes || !data.scenes.length) {{
+            if (!data.manual || !data.awaiting || !data.scenes || !data.scenes.length) {{
                 card.style.display = "none";
                 return;
             }}
@@ -1738,11 +1739,11 @@ def project_detail(slug: str) -> HTMLResponse:
                 ${{preview}}
             </div>`;
         }}).join("");
-        const btn = document.getElementById("manualContinueBtn");
         const status = document.getElementById("manualMediaStatus");
         const uploaded = data.scenes.filter(s => s.uploaded).length;
-        btn.disabled = !data.all_uploaded;
-        status.textContent = `${{uploaded}} / ${{data.scenes.length}} sahne görseli yüklendi`;
+        const auto = data.scenes.length - uploaded;
+        status.textContent = `${{uploaded}} / ${{data.scenes.length}} sahne elle yüklendi`
+            + (auto > 0 ? ` — kalan ${{auto}} sahne otomatik üretilecek` : "");
     }}
 
     function escapeHtmlJs(s) {{
@@ -1784,7 +1785,7 @@ def project_detail(slug: str) -> HTMLResponse:
         btn.disabled = true;
         btn.textContent = "⏳ Devam ediliyor…";
         try {{
-            const r = await fetch(`/api/projects/{escaped_slug_js}/resume`, {{method: "POST"}});
+            const r = await fetch(`/api/projects/{escaped_slug_js}/manual-media/continue`, {{method: "POST"}});
             const data = await r.json();
             if (!r.ok) throw new Error(data.detail || "Devam edilemedi.");
             document.getElementById("manualMediaCard").style.display = "none";
@@ -1792,7 +1793,7 @@ def project_detail(slug: str) -> HTMLResponse:
         }} catch (e) {{
             alert("Hata: " + e.message);
             btn.disabled = false;
-            btn.textContent = "▶ Devam Et";
+            btn.textContent = "▶ Devam Et (kalanları otomatik üret)";
         }}
     }}
 

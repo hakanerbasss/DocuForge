@@ -36,7 +36,12 @@ STEP_ALLOWED_OVERRIDES: dict[str, set[str]] = {
         "source_material",
     },
     "voice": {"voice_provider", "voice_name", "voice_speed"},
-    "media": {"image_provider", "video_provider", "media_mode"},
+    "media": {
+        "image_provider",
+        "video_provider",
+        "media_mode",
+        "manual_upload_enabled",
+    },
     "render": {
         "resolution",
         "fps",
@@ -96,6 +101,7 @@ class BuildPipeline:
         subtitles_burn_in: bool = False,
         ai_disclosure_enabled: bool = False,
         location_map_enabled: bool = False,
+        manual_upload_enabled: bool = False,
         thumbnail_enabled: bool = False,
         thumbnail_source: str = "auto",
         template: str | None = None,
@@ -139,6 +145,7 @@ class BuildPipeline:
             subtitles_burn_in=subtitles_burn_in,
             ai_disclosure_enabled=ai_disclosure_enabled,
             location_map_enabled=location_map_enabled,
+            manual_upload_enabled=manual_upload_enabled,
             thumbnail_enabled=thumbnail_enabled,
             thumbnail_source=thumbnail_source,
         )
@@ -344,6 +351,18 @@ class BuildPipeline:
                 # clear those too so a stale variant never outlives the
                 # step that made it.
                 self._clear_thumbnail_variants(project_dir)
+
+            if step_key == "media":
+                # Reopen the manual-upload slots: dropping the "ready"
+                # marker makes the media step pause again so the user can
+                # revise which scenes they hand-supply.
+                marker = (
+                    project_dir
+                    / "media"
+                    / MediaBuilder.MANUAL_READY_MARKER
+                )
+                if marker.exists():
+                    marker.unlink()
 
         state.get("steps", {}).pop(step_key, None)
 

@@ -74,6 +74,7 @@ class DocumentaryProject:
     subtitles_burn_in: bool = False
     ai_disclosure_enabled: bool = False
     location_map_enabled: bool = False
+    manual_upload_enabled: bool = False
     thumbnail_enabled: bool = False
     thumbnail_source: str = "auto"
     thumbnail_hook_override: str = ""
@@ -309,6 +310,9 @@ class DocumentaryProject:
             ),
             location_map_enabled=bool(
                 data.get("location_map_enabled", False)
+            ),
+            manual_upload_enabled=bool(
+                data.get("manual_upload_enabled", False)
             ),
             thumbnail_enabled=bool(
                 data.get("thumbnail_enabled", False)

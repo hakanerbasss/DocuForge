@@ -12,8 +12,8 @@ from app.providers.shared.models import MediaAsset
 class MediaBuilder:
     """Download or generate suitable media for every storyboard scene."""
 
-    MANUAL_PROVIDER_KEY = "manual"
     MANUAL_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+    MANUAL_READY_MARKER = "manual_ready.json"
 
     def build(self, project_path: str) -> Path:
         project_dir = Path(project_path)
@@ -46,25 +46,34 @@ class MediaBuilder:
         image_provider_key = str(project_data.get("image_provider", "pexels"))
         video_provider_key = str(project_data.get("video_provider", "pexels"))
 
-        # Manual upload provider: the user hand-supplies each scene's image
-        # (e.g. generated in ChatGPT from the per-scene prompt). No API call
-        # -- we only collect what has been uploaded and pause the pipeline
-        # until every scene has one.
-        if image_provider_key.strip().lower() == self.MANUAL_PROVIDER_KEY:
-            return self._build_manual(
-                project_dir,
-                media_dir,
-                storyboard,
-            )
+        # Optional manual-upload layer: when enabled, the user may hand-supply
+        # any scene's image (e.g. generated in ChatGPT from the per-scene
+        # prompt). It is NOT mandatory -- scenes left without an upload fall
+        # back to the normal provider flow below. On the first media run we
+        # pause once (marker absent) to give the user the chance to upload;
+        # "Devam Et" writes the marker and resumes.
+        manual_enabled = bool(project_data.get("manual_upload_enabled"))
+        manual_marker = media_dir / self.MANUAL_READY_MARKER
 
-        video_provider = ProviderRegistry.create(
-            category="video",
-            key=video_provider_key,
+        if manual_enabled and not manual_marker.exists():
+            missing = self._scenes_without_upload(media_dir, storyboard)
+            raise PipelineAwaitingUpload(missing)
+
+        # When manual upload is enabled the providers are only a fallback for
+        # scenes the user left empty, so a missing API key must not hard-fail
+        # the whole build -- an empty scene simply gets no provider media
+        # (the render step then drops in a placeholder). Without manual
+        # upload, a provider that can't be created is still a real error.
+        video_provider = self._create_provider(
+            "video",
+            video_provider_key,
+            tolerant=manual_enabled,
         ) if media_mode != "image" else None
 
-        image_provider = ProviderRegistry.create(
-            category="image",
-            key=image_provider_key,
+        image_provider = self._create_provider(
+            "image",
+            image_provider_key,
+            tolerant=manual_enabled,
         ) if media_mode != "video" else None
 
         image_prompts_by_scene = self._load_image_prompts_by_scene(
@@ -93,7 +102,19 @@ class MediaBuilder:
 
             result = None
 
-            if media_mode == "image":
+            manual_upload = (
+                self.find_manual_upload(scene_dir)
+                if manual_enabled
+                else None
+            )
+
+            if manual_upload is not None:
+                # Hand-supplied image wins over any provider/video for this
+                # scene (works in every media_mode); empty scenes fall
+                # through to the normal acquisition below.
+                print(f"  🖼 Elle yüklenen görsel kullanılıyor: {manual_upload.name}")
+                result = self._manual_result(manual_upload)
+            elif media_mode == "image":
                 # Only images
                 result = self._acquire_image(
                     provider=image_provider,
@@ -213,76 +234,66 @@ class MediaBuilder:
 
         return None
 
-    def _build_manual(
+    def _create_provider(
         self,
-        project_dir: Path,
+        category: str,
+        key: str,
+        tolerant: bool,
+    ) -> Any:
+        try:
+            return ProviderRegistry.create(category=category, key=key)
+        except Exception as error:
+            if tolerant:
+                print(
+                    f"  ⚠ {category}/{key} sağlayıcısı hazırlanamadı "
+                    f"({error}); elle yüklenmeyen sahneler boş kalabilir."
+                )
+                return None
+            raise
+
+    def _scenes_without_upload(
+        self,
         media_dir: Path,
         storyboard: dict[str, Any],
-    ) -> Path:
-        """Collect hand-uploaded scene images; pause if any are missing."""
+    ) -> list[int]:
+        """List scene numbers that still lack a hand-uploaded image.
 
-        manifest_items: list[dict[str, Any]] = []
-        missing_scenes: list[int] = []
+        Purely informational (uploads are optional): it tells the pause UI
+        which scenes are still empty. Also ensures each scene dir exists so
+        an upload can land there.
+        """
+
+        missing: list[int] = []
 
         for index, scene in enumerate(storyboard["scenes"], start=1):
-            scene_number = scene.get("scene", index)
+            scene_number = (
+                scene.get("scene", index)
+                if isinstance(scene, dict)
+                else index
+            )
             scene_dir = media_dir / f"scene_{scene_number:03d}"
             scene_dir.mkdir(parents=True, exist_ok=True)
 
-            uploaded = self.find_manual_upload(scene_dir)
-            search_query = self._build_query(scene)
+            if self.find_manual_upload(scene_dir) is None:
+                missing.append(scene_number)
 
-            if uploaded is None:
-                missing_scenes.append(scene_number)
-                manifest_item = {
-                    "scene": scene_number,
-                    "status": "awaiting_upload",
-                    "query": search_query,
-                    "error": "Elle yükleme bekleniyor.",
-                }
-            else:
-                manifest_item = {
-                    "scene": scene_number,
-                    "status": "completed",
-                    "query": search_query,
-                    "media_type": "image",
-                    "provider": self.MANUAL_PROVIDER_KEY,
-                    "asset_id": uploaded.stem,
-                    "local_path": str(uploaded),
-                    "download_url": str(uploaded),
-                    "metadata": {"manual_upload": True},
-                }
+        return missing
 
-            self._write_scene_asset(scene_dir, manifest_item)
-            manifest_items.append(manifest_item)
+    def _manual_result(
+        self,
+        uploaded: Path,
+    ) -> tuple[MediaAsset, Path]:
+        """Wrap a hand-uploaded image as a completed media result."""
 
-        completed_count = sum(
-            item["status"] == "completed" for item in manifest_items
+        asset = MediaAsset(
+            asset_id=uploaded.stem,
+            provider="manual",
+            media_type="image",
+            download_url=str(uploaded),
+            metadata={"manual_upload": True},
         )
 
-        manifest_path = media_dir / "manifest.json"
-        manifest_path.write_text(
-            json.dumps(
-                {
-                    "project": str(project_dir),
-                    "scene_count": len(storyboard["scenes"]),
-                    "completed_count": completed_count,
-                    "failed_count": 0,
-                    "awaiting_upload_count": len(missing_scenes),
-                    "scenes": manifest_items,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
-        if missing_scenes:
-            # Cooperative pause: stop before render so the user can upload
-            # the remaining scene images, then resume.
-            raise PipelineAwaitingUpload(missing_scenes)
-
-        return manifest_path
+        return asset, uploaded
 
     def _is_generation_provider(self, provider: Any) -> bool:
         """Distinguish AI generation providers from search-based stock providers.

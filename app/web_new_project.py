@@ -77,6 +77,7 @@ class BuildRequest(BaseModel):
     subtitles_burn_in: bool = Field(default=False)
     ai_disclosure_enabled: bool = Field(default=False)
     location_map_enabled: bool = Field(default=False)
+    manual_upload_enabled: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
     thumbnail_source: str = Field(default="auto")
 
@@ -145,6 +146,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 subtitles_burn_in=req.get("subtitles_burn_in", False),
                 ai_disclosure_enabled=req.get("ai_disclosure_enabled", False),
                 location_map_enabled=req.get("location_map_enabled", False),
+                manual_upload_enabled=req.get("manual_upload_enabled", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
                 thumbnail_source=req.get("thumbnail_source", "auto"),
                 cancel_event=cancel_event,
@@ -372,14 +374,13 @@ button:disabled{opacity:.6;cursor:wait}
 <div class="row">
 <div>
 <label for="image_provider">G\u00f6rsel Sa\u011flay\u0131c\u0131</label>
-<select id="image_provider" onchange="onImageProviderChange()">
+<select id="image_provider">
 <option value="pexels" selected>Pexels (\u00fccretsiz stok)</option>
 <option value="pixabay">Pixabay (\u00fccretsiz stok)</option>
 <option value="unsplash">Unsplash (\u00fccretsiz stok)</option>
 <option value="dalle">DALL-E / OpenAI (AI \u00fcretim, \u00fccretli)</option>
 <option value="google_imagen">Google Imagen (AI \u00fcretim, \u00fccretli)</option>
 <option value="fal">fal.ai / Flux (AI \u00fcretim, \u00fccretli)</option>
-<option value="manual">Elle Y\u00fckleme (ChatGPT g\u00f6rselleri \u2014 \u00fccretsiz)</option>
 </select>
 </div>
 <div>
@@ -393,7 +394,12 @@ button:disabled{opacity:.6;cursor:wait}
 </div>
 </div>
 <div class="hint">AI \u00fcretim sa\u011flay\u0131c\u0131lar\u0131 ilgili API anahtar\u0131n\u0131 (.env) gerektirir: OPENAI_API_KEY, GOOGLE_API_KEY, FAL_KEY, PIXABAY_API_KEY, UNSPLASH_ACCESS_KEY.</div>
-<div id="manualProviderHint" class="hint" style="display:none;background:#eef5ff;border:1px solid #cfe0f7;border-radius:10px;padding:10px 12px;margin-top:8px">Elle y\u00fckleme: sistem her sahne i\u00e7in bir g\u00f6rsel prompt'u \u00fcretir, \u00fcretim medya ad\u0131m\u0131nda <b>durur</b>. Prompt'lar\u0131 ChatGPT'de \u00fcretip g\u00f6rselleri proje sayfas\u0131ndan ilgili sahnelere y\u00fckler, sonra "Devam Et"e basars\u0131n. Video sa\u011flay\u0131c\u0131 bu modda kullan\u0131lmaz (sadece g\u00f6rseller).</div>
+
+<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:14px">
+<input type="checkbox" id="manual_upload_enabled" style="width:auto;min-height:auto" onchange="onManualUploadToggle()">
+\U0001F5BC G\u00f6rselleri elle y\u00fckle (opsiyonel \u2014 ChatGPT/AI ile \u00fcret)
+</label>
+<div id="manualUploadHint" class="hint" style="display:none;background:#eef5ff;border:1px solid #cfe0f7;border-radius:10px;padding:10px 12px;margin-top:6px">\u0130\u015faretlersen \u00fcretim medya ad\u0131m\u0131nda <b>durur</b> ve her sahne i\u00e7in bir y\u00fckleme kutusu a\u00e7\u0131l\u0131r (sistemin \u00fcretti\u011fi prompt'la birlikte). \u0130stedi\u011fin sahneleri ChatGPT'de \u00fcretip y\u00fckle; <b>bo\u015f b\u0131rakt\u0131klar\u0131n otomatik olarak yukar\u0131daki sa\u011flay\u0131c\u0131dan (Pexels/AI) indirilir</b> \u2014 hi\u00e7bir sahne zorunlu de\u011fil. Video+g\u00f6rsel modunda elle y\u00fckledi\u011fin g\u00f6rsel o sahneyi ezer.</div>
 
 <label for="fps">Kare H\u0131z\u0131 (FPS)</label>
 <select id="fps">
@@ -604,10 +610,9 @@ function onTypeChange(){
   updateHint();
 }
 
-function onImageProviderChange(){
-  const manual=document.getElementById("image_provider").value==="manual";
-  document.getElementById("manualProviderHint").style.display=manual?"block":"none";
-  if(manual){document.getElementById("media_mode").value="image";}
+function onManualUploadToggle(){
+  const on=document.getElementById("manual_upload_enabled").checked;
+  document.getElementById("manualUploadHint").style.display=on?"block":"none";
 }
 
 function updateHint(){
@@ -1024,7 +1029,7 @@ function onProviderChange(){
 
 document.getElementById("duration").addEventListener("input",updateHint);
 document.getElementById("topic").addEventListener("blur",updateMusicMoodSuggestion);
-onImageProviderChange();
+onManualUploadToggle();
 
 (function applyPendingPrefill(){
   const raw=sessionStorage.getItem("docuforge_prefill");
@@ -1087,6 +1092,7 @@ async function startBuild(){
     subtitles_burn_in:document.getElementById("subtitles_burn_in").checked,
     ai_disclosure_enabled:document.getElementById("ai_disclosure_enabled").checked,
     location_map_enabled:document.getElementById("location_map_enabled").checked,
+    manual_upload_enabled:document.getElementById("manual_upload_enabled").checked,
     thumbnail_enabled:document.getElementById("thumbnail_enabled").checked,
     thumbnail_source:document.getElementById("thumbnail_source").value,
   };
@@ -1440,10 +1446,7 @@ def manual_media_status(slug: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Proje bulunamadı.")
 
     project_data = load_json(project_dir / "project.json")
-    is_manual = (
-        str(project_data.get("image_provider", "")).strip().lower()
-        == MediaBuilder.MANUAL_PROVIDER_KEY
-    )
+    is_manual = bool(project_data.get("manual_upload_enabled"))
 
     storyboard = load_json(project_dir / "storyboard.json")
     scenes_raw = (
@@ -1493,11 +1496,18 @@ def manual_media_status(slug: str) -> dict[str, Any]:
         final_video.exists() and final_video.stat().st_size > 0
     )
 
+    # "awaiting" = the media step is paused for the user's upload decision:
+    # manual enabled, they haven't pressed Devam Et yet (marker absent), and
+    # the video isn't already rendered.
+    marker = project_dir / "media" / MediaBuilder.MANUAL_READY_MARKER
+    awaiting = is_manual and not marker.exists() and not render_done
+
     return {
         "manual": is_manual,
         "scenes": scenes,
         "all_uploaded": all_uploaded,
         "render_done": render_done,
+        "awaiting": awaiting,
     }
 
 
@@ -1562,6 +1572,54 @@ async def manual_media_upload(
         "scene": scene,
         "url": f"/files/{slug}/media/scene_{scene:03d}/{destination.name}",
     }
+
+
+@router.post("/api/projects/{slug}/manual-media/continue")
+def manual_media_continue(slug: str) -> dict[str, Any]:
+    """Finish the manual-upload step and resume the build.
+
+    Writes the "ready" marker so the media step no longer pauses -- scenes
+    the user uploaded use their image, the rest fall back to the configured
+    provider -- then resumes the pipeline from the media step onward.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    media_dir = project_dir / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    (media_dir / MediaBuilder.MANUAL_READY_MARKER).write_text(
+        json.dumps({"ready": True}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    job_id = uuid.uuid4().hex
+
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "kind": "build",
+            "topic": slug,
+            "project_slug": slug,
+            "project_path": str(project_dir),
+            "error": None,
+            "request": {},
+        }
+        _persist_job(job_id)
+
+    CANCEL_EVENTS[job_id] = threading.Event()
+
+    thread = threading.Thread(
+        target=_execute_build,
+        args=(job_id, {}, project_dir),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id, "status": "queued", "project_slug": slug}
 
 
 @router.post("/api/projects/{slug}/regenerate/{step_key}")
