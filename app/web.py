@@ -2500,4 +2500,19 @@ def project_file(
             detail="Dosya bulunamadı.",
         )
 
-    return FileResponse(requested)
+    # Every file under a project directory is regenerable output (scene
+    # media, final_video.mp4, thumbnails, subtitles...) -- the exact
+    # opposite of the kind of content a cache should hold onto. A `?v=`/
+    # `?t=` query-string cache-buster only works if whatever sits in
+    # front (browser, and critically any CDN like Cloudflare) actually
+    # includes the query string in its cache key; some CDN configs cache
+    # by path only, silently serving stale bytes at this exact URL after
+    # a regenerate/replace even though the query changed. An explicit
+    # no-store here is honored by browsers and by Cloudflare's default
+    # caching (which respects origin Cache-Control unless "Cache
+    # Everything" is force-enabled), so a freshly replaced file is never
+    # served stale regardless of front-end caching configuration.
+    return FileResponse(
+        requested,
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
