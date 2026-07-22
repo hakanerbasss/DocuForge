@@ -1134,6 +1134,17 @@ class MediaBuilder:
         and the "Promptu Kopyala" button in the web UI -- same
         composition either way, since the need (context, not a bare
         description) is identical in both cases.
+
+        Deliberately does NOT ask the model to "leave clean space at
+        the bottom for a caption": _image_to_clip() runs every still
+        image through a Ken Burns zoompan (slow zoom-in over the
+        scene's duration), so whatever the model left empty in the
+        static image doesn't stay put -- it drifts/gets cropped as the
+        zoom progresses, making a reserved "safe zone" unreliable for a
+        moving clip. Legibility for any later burned-in text is instead
+        handled at burn time (a solid-enough backing box behind the
+        text -- see RenderService._burn_scene_text_overlays), which
+        works regardless of what ends up behind it after the zoom.
         """
 
         prompt = str(item.get("prompt") or "").strip()
@@ -1161,10 +1172,6 @@ class MediaBuilder:
                 + (f" ({reason})" if reason else "")
                 + " -- gerçek bir kişi/olayı birebir taklit etme."
             )
-
-        parts.append(
-            "Alt kısımda yazı eklenebilecek temiz, boş bir alan bırak."
-        )
 
         return " ".join(parts)
 
