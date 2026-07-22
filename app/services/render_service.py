@@ -1259,10 +1259,18 @@ class RenderService:
         # is ASS's &HAABBGGRR format; alpha 80 (~50% opaque) gives a
         # soft dark backing without going flat black. Outline now sets
         # the box's padding around the text rather than a text stroke.
+        # MarginV was 80 -- reported as sitting noticeably higher than
+        # that number suggests (a lot of empty space below it on a real
+        # render), so it's now 40. `original_size` pins libass's
+        # reference resolution to this render's actual WIDTH/HEIGHT --
+        # without it, a plain SRT (no PlayResX/PlayResY of its own)
+        # leaves libass to assume some internal default, which can
+        # silently scale MarginV/FontSize away from the pixel values
+        # written here.
         force_style = (
             "FontSize=18,PrimaryColour=&H00FFFFFF,"
             "BackColour=&H80000000,BorderStyle=3,"
-            "Outline=3,Shadow=0,Alignment=2,MarginV=80"
+            "Outline=3,Shadow=0,Alignment=2,MarginV=40"
         )
 
         burned_path = video_path.with_name(
@@ -1275,7 +1283,11 @@ class RenderService:
             "-i",
             str(video_path),
             "-vf",
-            f"subtitles='{escaped_srt_path}':force_style='{force_style}'",
+            (
+                f"subtitles='{escaped_srt_path}':"
+                f"force_style='{force_style}':"
+                f"original_size={self.WIDTH}x{self.HEIGHT}"
+            ),
             "-c:a",
             "copy",
             "-movflags",
