@@ -1657,6 +1657,21 @@ class RenderService:
             f"{duration:.3f}",
             "-vf",
             video_filter,
+        ])
+
+        if not zoom:
+            # zoompan bakes fps into its own output; without it the
+            # image demuxer's default framerate applies instead, which
+            # doesn't match the other clips' self.FPS and breaks the
+            # stream-copy concat in _concat_stream_copy (mismatched
+            # clips get dropped/corrupted -- this is what made the
+            # closing scene vanish entirely after zoom was disabled).
+            command.extend([
+                "-r",
+                str(self.FPS),
+            ])
+
+        command.extend([
             "-c:v",
             "libx264",
             "-preset",
