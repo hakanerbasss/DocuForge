@@ -263,7 +263,7 @@ def _render_scene_media_card(
         preview = f"""
         <div id="scenePreviewWrap_{scene_number}" style="position:relative;margin-top:10px;container-type:inline-size;overflow:hidden;border-radius:8px">
             {media_tag}
-            <div id="overlayPreviewText_{scene_number}" style="position:absolute;display:none;font-size:16px;font-size:4cqw;font-weight:700;color:#ffffff;background:rgba(0,0,0,.4);padding:0.3em 0.6em;border-radius:4px;max-width:88%;text-align:center;pointer-events:none;white-space:pre-wrap;line-height:1.2"></div>
+            <div id="overlayPreviewText_{scene_number}" style="position:absolute;display:none;font-size:16px;font-size:4cqw;font-weight:700;color:#ffffff;text-shadow:0 0 3px rgba(0,0,0,.85),0 0 3px rgba(0,0,0,.85);background:rgba(0,0,0,.25);padding:0.2em 0.5em;border-radius:4px;max-width:88%;text-align:center;pointer-events:none;white-space:pre-wrap;line-height:1.2"></div>
         </div>
         """
     elif current_status == "completed" and current_local_path:
@@ -1597,9 +1597,9 @@ def project_detail(slug: str) -> HTMLResponse:
         middle_left:   {{top: "50%", left: "4%", right: "auto", bottom: "auto", transform: "translateY(-50%)"}},
         center:        {{top: "50%", left: "50%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)"}},
         middle_right:  {{top: "50%", left: "auto", right: "4%", bottom: "auto", transform: "translateY(-50%)"}},
-        bottom_left:   {{top: "auto", left: "4%", right: "auto", bottom: "8%", transform: "none"}},
-        bottom_center: {{top: "auto", left: "50%", right: "auto", bottom: "8%", transform: "translateX(-50%)"}},
-        bottom_right:  {{top: "auto", left: "auto", right: "4%", bottom: "8%", transform: "none"}},
+        bottom_left:   {{top: "auto", left: "4%", right: "auto", bottom: "20%", transform: "none"}},
+        bottom_center: {{top: "auto", left: "50%", right: "auto", bottom: "20%", transform: "translateX(-50%)"}},
+        bottom_right:  {{top: "auto", left: "auto", right: "4%", bottom: "20%", transform: "none"}},
     }};
 
     const FIELD_LABELS_TR = {{

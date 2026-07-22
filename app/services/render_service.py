@@ -61,8 +61,16 @@ class RenderService:
 
     # 3x3 grid the user picks from -- (x, y) as ffmpeg drawtext
     # expressions, text_w/text_h/w/h all resolved by drawtext itself.
-    # 40px side margins, 60px bottom margin (leaves room above burned-in
-    # subtitles, which sit ~80px from the bottom -- see _burn_in_subtitles).
+    # Bottom margin is 150px (not a tighter ~60px) specifically to clear
+    # _burn_in_subtitles' burned-in subtitle band, which sits fixed
+    # ~80-135px above the bottom edge (FontSize=18, MarginV=80,
+    # BorderStyle=3 box). A tighter margin let this overlay's box
+    # overlap the subtitle's box almost exactly -- two stacked
+    # semi-transparent boxes compound into something far darker and
+    # more solid-looking than either alone, with mismatched edges where
+    # they don't quite align, which is exactly what looked like "too
+    # high, too solid black, ugly square edges" -- not one bug, but two
+    # overlays landing on top of each other.
     OVERLAY_POSITION_EXPRESSIONS: dict[str, tuple[str, str]] = {
         "top_left": ("40", "40"),
         "top_center": ("(w-text_w)/2", "40"),
@@ -70,9 +78,9 @@ class RenderService:
         "middle_left": ("40", "(h-text_h)/2"),
         "center": ("(w-text_w)/2", "(h-text_h)/2"),
         "middle_right": ("w-text_w-40", "(h-text_h)/2"),
-        "bottom_left": ("40", "h-text_h-60"),
-        "bottom_center": ("(w-text_w)/2", "h-text_h-60"),
-        "bottom_right": ("w-text_w-40", "h-text_h-60"),
+        "bottom_left": ("40", "h-text_h-150"),
+        "bottom_center": ("(w-text_w)/2", "h-text_h-150"),
+        "bottom_right": ("w-text_w-40", "h-text_h-150"),
     }
 
     def render(self, project_path: str) -> Path:
@@ -1448,11 +1456,19 @@ class RenderService:
             font_path = self._resolve_overlay_font(style)
             font_clause = f"fontfile='{font_path}':" if font_path else ""
 
-            # ffmpeg's fontcolor accepts "#RRGGBB" directly.
+            # ffmpeg's fontcolor accepts "#RRGGBB" directly. The box is
+            # deliberately light (black@0.25, not 0.4) and tight
+            # (boxborderw=6, not 12) with a thin text outline added for
+            # legibility instead -- a heavier/bigger box read as an ugly
+            # solid black rectangle with hard square corners, which
+            # ffmpeg's drawtext has no rounded-corner option for at all;
+            # keeping the box subtle and leaning on the outline for
+            # contrast is the closest practical alternative.
             filters.append(
                 f"drawtext={font_clause}text='{escaped_text}':"
                 f"fontsize=40:fontcolor={color}:"
-                "box=1:boxcolor=black@0.4:boxborderw=12:"
+                "borderw=2:bordercolor=black@0.7:"
+                "box=1:boxcolor=black@0.25:boxborderw=6:"
                 f"x={x_expr}:y={y_expr}:"
                 f"enable='between(t,{start:.2f},{end:.2f})'"
             )
