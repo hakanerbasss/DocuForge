@@ -241,17 +241,31 @@ def _render_scene_media_card(
     if current_url:
         escaped_url = html.escape(str(current_url), quote=True)
         if current_media_type == "video":
-            preview = (
+            media_tag = (
                 f'<video src="{escaped_url}" controls '
-                'style="width:100%;border-radius:8px;margin-top:10px;'
+                'style="display:block;width:100%;border-radius:8px;'
                 'background:#000"></video>'
             )
         else:
-            preview = (
+            media_tag = (
                 f'<img src="{escaped_url}" '
-                'style="width:100%;border-radius:8px;margin-top:10px" '
+                'style="display:block;width:100%;border-radius:8px" '
                 'onerror="sceneMediaImgError(this)">'
             )
+
+        # container-type:inline-size lets the overlay preview text size
+        # itself as a % of THIS element's rendered width (4cqw), so it
+        # scales correctly regardless of the grid column's actual pixel
+        # width -- no JS measurement/resize-listener needed. Browsers
+        # without container query support simply ignore that one
+        # invalid declaration and keep the plain-px fallback declared
+        # right before it.
+        preview = f"""
+        <div id="scenePreviewWrap_{scene_number}" style="position:relative;margin-top:10px;container-type:inline-size;overflow:hidden;border-radius:8px">
+            {media_tag}
+            <div id="overlayPreviewText_{scene_number}" style="position:absolute;display:none;font-size:16px;font-size:4cqw;font-weight:700;color:#ffffff;background:rgba(0,0,0,.4);padding:0.3em 0.6em;border-radius:4px;max-width:88%;text-align:center;pointer-events:none;white-space:pre-wrap;line-height:1.2"></div>
+        </div>
+        """
     elif current_status == "completed" and current_local_path:
         preview = (
             '<div style="margin-top:10px;background:#fff4e5;'
@@ -2163,6 +2177,7 @@ def project_detail(slug: str) -> HTMLResponse:
     checkForActiveJob();
     loadShortsSplit();
     loadManualMedia();
+    initOverlayPreviews();
 
     async function loadManualMedia() {{
         const card = document.getElementById("manualMediaCard");
@@ -2483,18 +2498,82 @@ def project_detail(slug: str) -> HTMLResponse:
         }}
     }}
 
+    const OVERLAY_POSITION_CSS = {{
+        top_left:      {{top: "6%", left: "4%", right: "auto", bottom: "auto", transform: "none"}},
+        top_center:    {{top: "6%", left: "50%", right: "auto", bottom: "auto", transform: "translateX(-50%)"}},
+        top_right:     {{top: "6%", left: "auto", right: "4%", bottom: "auto", transform: "none"}},
+        middle_left:   {{top: "50%", left: "4%", right: "auto", bottom: "auto", transform: "translateY(-50%)"}},
+        center:        {{top: "50%", left: "50%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)"}},
+        middle_right:  {{top: "50%", left: "auto", right: "4%", bottom: "auto", transform: "translateY(-50%)"}},
+        bottom_left:   {{top: "auto", left: "4%", right: "auto", bottom: "8%", transform: "none"}},
+        bottom_center: {{top: "auto", left: "50%", right: "auto", bottom: "8%", transform: "translateX(-50%)"}},
+        bottom_right:  {{top: "auto", left: "auto", right: "4%", bottom: "8%", transform: "none"}},
+    }};
+
+    function updateOverlayPreview(scene) {{
+        const el = document.getElementById(`overlayPreviewText_${{scene}}`);
+        if (!el) return;
+
+        const textInput = document.getElementById(`overlayText_${{scene}}`);
+        if (!textInput) return;
+
+        const text = textInput.value.trim();
+
+        if (!text) {{
+            el.style.display = "none";
+            return;
+        }}
+
+        const colorInput = document.getElementById(`overlayColor_${{scene}}`);
+        const styleSelect = document.getElementById(`overlayStyle_${{scene}}`);
+        const positionInput = document.getElementById(`overlayPosition_${{scene}}`);
+
+        el.textContent = text;
+        el.style.display = "block";
+        el.style.color = colorInput ? colorInput.value : "#ffffff";
+
+        const style = styleSelect ? styleSelect.value : "bold";
+        el.style.fontWeight = style === "regular" ? "400" : "700";
+        el.style.fontStyle = style === "bold_italic" ? "italic" : "normal";
+
+        const position = positionInput ? positionInput.value : "bottom_center";
+        const css = OVERLAY_POSITION_CSS[position] || OVERLAY_POSITION_CSS.bottom_center;
+        el.style.top = css.top;
+        el.style.left = css.left;
+        el.style.right = css.right;
+        el.style.bottom = css.bottom;
+        el.style.transform = css.transform;
+    }}
+
+    function initOverlayPreviews() {{
+        document.querySelectorAll("[id^='overlayPreviewText_']").forEach(el => {{
+            const scene = el.id.replace("overlayPreviewText_", "");
+            updateOverlayPreview(scene);
+
+            const textInput = document.getElementById(`overlayText_${{scene}}`);
+            const colorInput = document.getElementById(`overlayColor_${{scene}}`);
+            const styleSelect = document.getElementById(`overlayStyle_${{scene}}`);
+
+            if (textInput) textInput.addEventListener("input", () => updateOverlayPreview(scene));
+            if (colorInput) colorInput.addEventListener("input", () => updateOverlayPreview(scene));
+            if (styleSelect) styleSelect.addEventListener("change", () => updateOverlayPreview(scene));
+        }});
+    }}
+
     function selectOverlayPosition(scene, position, btn) {{
         const hidden = document.getElementById(`overlayPosition_${{scene}}`);
         if (hidden) hidden.value = position;
 
         const grid = document.getElementById(`overlayPositionGrid_${{scene}}`);
-        if (!grid) return;
+        if (grid) {{
+            grid.querySelectorAll("button").forEach(b => {{
+                const active = b.dataset.position === position;
+                b.style.background = active ? "#2166f3" : "#ffffff";
+                b.style.color = active ? "#ffffff" : "#334155";
+            }});
+        }}
 
-        grid.querySelectorAll("button").forEach(b => {{
-            const active = b.dataset.position === position;
-            b.style.background = active ? "#2166f3" : "#ffffff";
-            b.style.color = active ? "#ffffff" : "#334155";
-        }});
+        updateOverlayPreview(scene);
     }}
 
     async function saveSceneTextOverlay(scene, btn) {{
