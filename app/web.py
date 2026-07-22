@@ -1578,6 +1578,30 @@ def project_detail(slug: str) -> HTMLResponse:
     <script>
     const slug = "{escaped_slug_js}";
 
+    // Declared up here (not down near updateOverlayPreview() where it's
+    // used) because initOverlayPreviews() is called from this script's
+    // top-level init block, which runs BEFORE later top-level `const`
+    // declarations are reached -- function declarations are hoisted
+    // whole, but a `const` a hoisted function's body reads is still in
+    // its temporal dead zone until its own declaration line executes.
+    // Calling the (hoisted, callable) function early while the const it
+    // depends on is still uninitialized threw "Cannot access
+    // 'OVERLAY_POSITION_CSS' before initialization" -- and since a
+    // thrown error aborts the whole initOverlayPreviews() forEach loop,
+    // it also silently skipped wiring up every scene after the first
+    // one with saved/typed text.
+    const OVERLAY_POSITION_CSS = {{
+        top_left:      {{top: "6%", left: "4%", right: "auto", bottom: "auto", transform: "none"}},
+        top_center:    {{top: "6%", left: "50%", right: "auto", bottom: "auto", transform: "translateX(-50%)"}},
+        top_right:     {{top: "6%", left: "auto", right: "4%", bottom: "auto", transform: "none"}},
+        middle_left:   {{top: "50%", left: "4%", right: "auto", bottom: "auto", transform: "translateY(-50%)"}},
+        center:        {{top: "50%", left: "50%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)"}},
+        middle_right:  {{top: "50%", left: "auto", right: "4%", bottom: "auto", transform: "translateY(-50%)"}},
+        bottom_left:   {{top: "auto", left: "4%", right: "auto", bottom: "8%", transform: "none"}},
+        bottom_center: {{top: "auto", left: "50%", right: "auto", bottom: "8%", transform: "translateX(-50%)"}},
+        bottom_right:  {{top: "auto", left: "auto", right: "4%", bottom: "8%", transform: "none"}},
+    }};
+
     const FIELD_LABELS_TR = {{
         voice_provider: "Ses Sağlayıcı",
         voice_name: "Ses",
@@ -2497,18 +2521,6 @@ def project_detail(slug: str) -> HTMLResponse:
             btn.disabled = false;
         }}
     }}
-
-    const OVERLAY_POSITION_CSS = {{
-        top_left:      {{top: "6%", left: "4%", right: "auto", bottom: "auto", transform: "none"}},
-        top_center:    {{top: "6%", left: "50%", right: "auto", bottom: "auto", transform: "translateX(-50%)"}},
-        top_right:     {{top: "6%", left: "auto", right: "4%", bottom: "auto", transform: "none"}},
-        middle_left:   {{top: "50%", left: "4%", right: "auto", bottom: "auto", transform: "translateY(-50%)"}},
-        center:        {{top: "50%", left: "50%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)"}},
-        middle_right:  {{top: "50%", left: "auto", right: "4%", bottom: "auto", transform: "translateY(-50%)"}},
-        bottom_left:   {{top: "auto", left: "4%", right: "auto", bottom: "8%", transform: "none"}},
-        bottom_center: {{top: "auto", left: "50%", right: "auto", bottom: "8%", transform: "translateX(-50%)"}},
-        bottom_right:  {{top: "auto", left: "auto", right: "4%", bottom: "8%", transform: "none"}},
-    }};
 
     function updateOverlayPreview(scene) {{
         const el = document.getElementById(`overlayPreviewText_${{scene}}`);
