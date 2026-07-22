@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
+from app.web_new_project import scene_media_status
 from app.web_settings import router as settings_router
 from app.web_storage import router as storage_router
 from app.web_voice_test import router as voice_test_router
@@ -95,6 +96,204 @@ def safe_project_dir(slug: str) -> Path:
         )
 
     return project_dir
+
+
+def _scene_media_type_badge(media_type: str | None) -> str:
+    if media_type == "video":
+        return (
+            '<span style="display:inline-block;padding:3px 8px;'
+            "border-radius:999px;font-size:11px;font-weight:700;"
+            'color:#1f5ea8;background:#eaf2fb">🎥 Video</span>'
+        )
+    if media_type == "image":
+        return (
+            '<span style="display:inline-block;padding:3px 8px;'
+            "border-radius:999px;font-size:11px;font-weight:700;"
+            'color:#1f7a4d;background:#eaf8f0">🖼 Görsel</span>'
+        )
+    return (
+        '<span style="display:inline-block;padding:3px 8px;'
+        "border-radius:999px;font-size:11px;font-weight:700;"
+        'color:#8a5a00;background:#fff4e5">❓ Yok</span>'
+    )
+
+
+def _render_scene_media_card(
+    scene: dict,
+    image_search_capable: bool,
+    video_search_capable: bool,
+) -> str:
+    """Render one scene's review card server-side.
+
+    Deliberately NOT built by a client-side fetch-then-render JS pass:
+    an early version populated this grid entirely via
+    GET /api/projects/{slug}/scene-media on page load, and any silent
+    failure in that fetch (or an empty/unexpected response shape) left
+    the whole section invisible with no error shown -- exactly matching
+    a real report of the section "never appearing" on a fully completed
+    project where the underlying data was fine. Rendering directly from
+    the same data the endpoint itself computes means the cards are
+    simply part of the page response, with nothing left to silently
+    fail.
+    """
+
+    scene_number = scene["scene"]
+    title = html.escape(str(scene.get("title") or ""))
+    title_html = f" — {title}" if title else ""
+
+    manual_badge = (
+        '<span style="display:inline-block;padding:3px 8px;'
+        "border-radius:999px;font-size:11px;font-weight:700;"
+        'color:#6b3fa0;background:#f3ecfb;margin-left:6px">'
+        "✋ Elle yüklendi</span>"
+        if scene.get("is_manual")
+        else ""
+    )
+
+    current_url = scene.get("current_url")
+    current_media_type = scene.get("current_media_type")
+    current_status = scene.get("current_status")
+    current_local_path = scene.get("current_local_path")
+
+    if current_url:
+        escaped_url = html.escape(str(current_url), quote=True)
+        if current_media_type == "video":
+            preview = (
+                f'<video src="{escaped_url}" controls '
+                'style="width:100%;border-radius:8px;margin-top:10px;'
+                'background:#000"></video>'
+            )
+        else:
+            preview = (
+                f'<img src="{escaped_url}" '
+                'style="width:100%;border-radius:8px;margin-top:10px" '
+                'onerror="sceneMediaImgError(this)">'
+            )
+    elif current_status == "completed" and current_local_path:
+        preview = (
+            '<div style="margin-top:10px;background:#fff4e5;'
+            "border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;"
+            'font-size:12px;color:#8a5a00">⚠ Kayıtta medya "tamamlandı" '
+            "görünüyor ama dosya diskte bulunamadı: "
+            f"{html.escape(str(current_local_path))}</div>"
+        )
+    elif current_status == "failed":
+        preview = (
+            '<div class="muted" style="margin-top:10px;font-size:13px">'
+            "❌ Bu sahne için medya üretilemedi/bulunamadı -- videoda "
+            "düz renkli bir arka plan kullanıldı.</div>"
+        )
+    else:
+        preview = (
+            '<div class="muted" style="margin-top:10px;font-size:13px">'
+            "Bu sahne için henüz medya yok.</div>"
+        )
+
+    query = scene.get("current_query")
+    provider = scene.get("current_provider")
+    query_line = ""
+
+    if query:
+        provider_suffix = (
+            f" · {html.escape(str(provider))}" if provider else ""
+        )
+        query_line = (
+            '<div class="muted" style="margin-top:8px;font-size:12px">'
+            f'🔎 Arama sorgusu: "{html.escape(str(query))}"'
+            f"{provider_suffix}</div>"
+        )
+
+    sensitive = ""
+
+    if scene.get("sensitive"):
+        reason = scene.get("sensitive_reason")
+        reason_html = f": {html.escape(str(reason))}" if reason else ""
+        sensitive = (
+            '<div style="margin-top:10px;background:#fff4e5;'
+            "border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;"
+            'font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından '
+            f"hassas{reason_html}</div>"
+        )
+
+    summary = ""
+
+    if scene.get("visual_summary"):
+        summary = (
+            '<div style="margin-top:10px"><strong>Görselde ne olacak?'
+            '</strong><div style="margin-top:4px;color:#334155">'
+            f'{html.escape(str(scene["visual_summary"]))}</div></div>'
+        )
+
+    prompt_text = "\n\n---\n\n".join(
+        str(part)
+        for part in (scene.get("image_prompt"), scene.get("video_prompt"))
+        if part
+    )
+    prompt_block = ""
+
+    if prompt_text:
+        prompt_block = f"""
+        <details style="margin-top:12px">
+            <summary style="cursor:pointer;font-weight:700;color:#245ec7">
+                Tam üretim promptunu göster
+            </summary>
+            <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">{html.escape(prompt_text)}</div>
+        </details>
+        """
+
+    browse_buttons_list = []
+
+    if image_search_capable:
+        browse_buttons_list.append(
+            '<button type="button" '
+            f"onclick=\"browseSceneAlternatives({scene_number}, 'image')\" "
+            'style="flex:1;min-height:34px;font-size:12px">'
+            "🔍 Farklı Görsel Seç</button>"
+        )
+
+    if video_search_capable:
+        browse_buttons_list.append(
+            '<button type="button" '
+            f"onclick=\"browseSceneAlternatives({scene_number}, 'video')\" "
+            'style="flex:1;min-height:34px;font-size:12px">'
+            "🔍 Farklı Video Seç</button>"
+        )
+
+    browse_buttons = (
+        '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'
+        f'{"".join(browse_buttons_list)}</div>'
+        if browse_buttons_list
+        else ""
+    )
+
+    return f"""
+    <div id="sceneMediaItem_{scene_number}" style="border:1px solid #dbe5f4;border-radius:12px;padding:14px;background:#ffffff;transition:box-shadow .3s,outline .3s">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <strong>Sahne {scene_number}{title_html}</strong>
+            <div>{_scene_media_type_badge(current_media_type)}{manual_badge}</div>
+        </div>
+
+        {query_line}
+        {sensitive}
+        {summary}
+        {prompt_block}
+
+        <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+            <label style="flex:1;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
+                ⬆ Kendi Görsel/Video Yükle
+                <input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadSceneMedia({scene_number}, this)">
+            </label>
+            <button type="button" onclick="regenerateSceneMedia({scene_number}, this)" style="flex:1;min-height:34px;font-size:12px">
+                🔄 Otomatik Başka Dene
+            </button>
+        </div>
+        {browse_buttons}
+
+        <div id="sceneMediaAlternatives_{scene_number}" style="display:none;margin-top:10px;max-height:280px;overflow:auto"></div>
+
+        {preview}
+    </div>
+    """
 
 
 def page(title: str, body: str) -> HTMLResponse:
@@ -975,25 +1174,40 @@ def project_detail(slug: str) -> HTMLResponse:
     scene_media_section = ""
 
     if (project_dir / "media" / "manifest.json").exists():
-        scene_media_section = """
-        <section class="card" id="sceneMediaCard" style="display:none">
-            <h2>🎬 Sahne Medyasını Düzenle</h2>
-            <p class="muted">
-                Bir sahnede yanlış veya alakasız bir görsel/video mı var? (Örn.
-                "flamingo ayağı" yerine tamamen ilgisiz bir stok video gelmesi
-                gibi.) Komple videoyu baştan üretmek yerine sadece o sahnenin
-                medyasını burada değiştir -- kendi görsel/videonu yükle, farklı
-                bir stok sonucu seç, ya da otomatik başka bir tane dene. Sonra
-                en alttaki "Videoyu Yeniden Oluştur"a bas; sadece render (ve
-                sonrasındaki adımlar) yeniden çalışır.
-            </p>
-            <div id="sceneMediaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px"></div>
-            <div style="margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid #edf1f6;padding-top:16px">
-                <button class="button" id="sceneMediaRebuildBtn" onclick="rebuildVideoAfterSceneMediaFix(this)">🎬 Videoyu Yeniden Oluştur</button>
-                <span id="sceneMediaStatus" class="muted"></span>
-            </div>
-        </section>
-        """
+        scene_media_data = scene_media_status(project_dir.name)
+        scene_media_list = scene_media_data.get("scenes") or []
+
+        if scene_media_data.get("available") and scene_media_list:
+            scene_cards_html = "".join(
+                _render_scene_media_card(
+                    scene,
+                    bool(scene_media_data.get("image_search_capable")),
+                    bool(scene_media_data.get("video_search_capable")),
+                )
+                for scene in scene_media_list
+            )
+
+            scene_media_section = f"""
+            <section class="card" id="sceneMediaCard">
+                <h2>🎬 Sahne Medyasını Düzenle</h2>
+                <p class="muted">
+                    Bir sahnede yanlış veya alakasız bir görsel/video mı var? (Örn.
+                    "flamingo ayağı" yerine tamamen ilgisiz bir stok video gelmesi
+                    gibi.) Komple videoyu baştan üretmek yerine sadece o sahnenin
+                    medyasını burada değiştir -- kendi görsel/videonu yükle, farklı
+                    bir stok sonucu seç, ya da otomatik başka bir tane dene. Sonra
+                    en alttaki "Videoyu Yeniden Oluştur"a bas; sadece render (ve
+                    sonrasındaki adımlar) yeniden çalışır.
+                </p>
+                <div id="sceneMediaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px">
+                    {scene_cards_html}
+                </div>
+                <div style="margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid #edf1f6;padding-top:16px">
+                    <button class="button" id="sceneMediaRebuildBtn" onclick="rebuildVideoAfterSceneMediaFix(this)">🎬 Videoyu Yeniden Oluştur</button>
+                    <span id="sceneMediaStatus" class="muted"></span>
+                </div>
+            </section>
+            """
 
     seo_path = project_dir / "seo.json"
     seo_section = ""
@@ -1859,7 +2073,6 @@ def project_detail(slug: str) -> HTMLResponse:
     checkForActiveJob();
     loadShortsSplit();
     loadManualMedia();
-    loadSceneMedia();
 
     async function loadManualMedia() {{
         const card = document.getElementById("manualMediaCard");
@@ -2050,30 +2263,10 @@ def project_detail(slug: str) -> HTMLResponse:
         }}
     }}
 
-    async function loadSceneMedia() {{
-        const card = document.getElementById("sceneMediaCard");
-        if (!card) return;
-        try {{
-            const r = await fetch(`/api/projects/${{slug}}/scene-media`);
-            if (!r.ok) return;
-            const data = await r.json();
-            if (!data.available || !data.scenes || !data.scenes.length) {{
-                card.style.display = "none";
-                return;
-            }}
-            renderSceneMedia(data);
-            card.style.display = "";
-        }} catch (e) {{
-            // sessizce yut
-        }}
-    }}
-
-    async function focusSceneMediaFix(sceneNumbers) {{
+    function focusSceneMediaFix(sceneNumbers) {{
         const card = document.getElementById("sceneMediaCard");
         if (!card) return;
 
-        await loadSceneMedia();
-        card.style.display = "";
         card.scrollIntoView({{behavior: "smooth", block: "start"}});
 
         (sceneNumbers || []).forEach(scene => {{
@@ -2090,102 +2283,12 @@ def project_detail(slug: str) -> HTMLResponse:
         }});
     }}
 
-    function sceneMediaTypeBadge(mediaType) {{
-        if (mediaType === "video") {{
-            return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#1f5ea8;background:#eaf2fb">🎥 Video</span>';
-        }}
-        if (mediaType === "image") {{
-            return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#1f7a4d;background:#eaf8f0">🖼 Görsel</span>';
-        }}
-        return '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#8a5a00;background:#fff4e5">❓ Yok</span>';
-    }}
-
     function sceneMediaImgError(img) {{
         const div = document.createElement("div");
         div.className = "muted";
         div.style.cssText = "font-size:12px;color:#b91c1c;margin-top:10px";
         div.textContent = "⚠ Dosya tarayıcıda yüklenemedi: " + img.src;
         img.replaceWith(div);
-    }}
-
-    function renderSceneMedia(data) {{
-        const grid = document.getElementById("sceneMediaGrid");
-
-        grid.innerHTML = data.scenes.map(s => {{
-            let preview;
-            if (s.current_url) {{
-                preview = s.current_media_type === "video"
-                    ? `<video src="${{s.current_url}}?t=${{Date.now()}}" controls style="width:100%;border-radius:8px;margin-top:10px;background:#000"></video>`
-                    : `<img src="${{s.current_url}}?t=${{Date.now()}}" style="width:100%;border-radius:8px;margin-top:10px" onerror="sceneMediaImgError(this)">`;
-            }} else if (s.current_status === "completed" && s.current_local_path) {{
-                preview = `<div style="margin-top:10px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a5a00">⚠ Kayıtta medya "tamamlandı" görünüyor ama dosya diskte bulunamadı: ${{escapeHtmlJs(s.current_local_path)}}</div>`;
-            }} else if (s.current_status === "failed") {{
-                preview = '<div class="muted" style="margin-top:10px;font-size:13px">❌ Bu sahne için medya üretilemedi/bulunamadı -- videoda düz renkli bir arka plan kullanıldı.</div>';
-            }} else {{
-                preview = '<div class="muted" style="margin-top:10px;font-size:13px">Bu sahne için henüz medya yok.</div>';
-            }}
-
-            const queryLine = s.current_query
-                ? `<div class="muted" style="margin-top:8px;font-size:12px">🔎 Arama sorgusu: "${{escapeHtmlJs(s.current_query)}}"${{s.current_provider ? ' · ' + escapeHtmlJs(s.current_provider) : ''}}</div>`
-                : "";
-
-            const manualBadge = s.is_manual
-                ? '<span style="display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#6b3fa0;background:#f3ecfb;margin-left:6px">✋ Elle yüklendi</span>'
-                : "";
-
-            const sensitive = s.sensitive
-                ? `<div style="margin-top:10px;background:#fff4e5;border:1px solid #ffd8a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#8a5a00">⚠ Telif/gerçeklik açısından hassas${{s.sensitive_reason ? ': ' + escapeHtmlJs(s.sensitive_reason) : ''}}</div>`
-                : "";
-
-            const summary = s.visual_summary
-                ? `<div style="margin-top:10px"><strong>Görselde ne olacak?</strong><div style="margin-top:4px;color:#334155">${{escapeHtmlJs(s.visual_summary)}}</div></div>`
-                : "";
-
-            const promptText = [s.image_prompt, s.video_prompt].filter(Boolean).join("\\n\\n---\\n\\n");
-
-            const promptBlock = promptText
-                ? `<details style="margin-top:12px">
-                    <summary style="cursor:pointer;font-weight:700;color:#245ec7">Tam üretim promptunu göster</summary>
-                    <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">${{escapeHtmlJs(promptText)}}</div>
-                </details>`
-                : "";
-
-            const browseButtons = [];
-            if (data.image_search_capable) {{
-                browseButtons.push(`<button type="button" onclick="browseSceneAlternatives(${{s.scene}}, 'image')" style="flex:1;min-height:34px;font-size:12px">🔍 Farklı Görsel Seç</button>`);
-            }}
-            if (data.video_search_capable) {{
-                browseButtons.push(`<button type="button" onclick="browseSceneAlternatives(${{s.scene}}, 'video')" style="flex:1;min-height:34px;font-size:12px">🔍 Farklı Video Seç</button>`);
-            }}
-
-            return `
-            <div id="sceneMediaItem_${{s.scene}}" style="border:1px solid #dbe5f4;border-radius:12px;padding:14px;background:#ffffff;transition:box-shadow .3s,outline .3s">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-                    <strong>Sahne ${{s.scene}}${{s.title ? ' — ' + escapeHtmlJs(s.title) : ''}}</strong>
-                    <div>${{sceneMediaTypeBadge(s.current_media_type)}}${{manualBadge}}</div>
-                </div>
-
-                ${{queryLine}}
-                ${{sensitive}}
-                ${{summary}}
-                ${{promptBlock}}
-
-                <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
-                    <label style="flex:1;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #cbd6e5;border-radius:8px;cursor:pointer;background:#f4f8ff">
-                        ⬆ Kendi Görsel/Video Yükle
-                        <input type="file" accept="image/*,video/mp4" style="display:none" onchange="uploadSceneMedia(${{s.scene}}, this)">
-                    </label>
-                    <button type="button" onclick="regenerateSceneMedia(${{s.scene}}, this)" style="flex:1;min-height:34px;font-size:12px">
-                        🔄 Otomatik Başka Dene
-                    </button>
-                </div>
-                ${{browseButtons.length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${{browseButtons.join("")}}</div>` : ""}}
-
-                <div id="sceneMediaAlternatives_${{s.scene}}" style="display:none;margin-top:10px;max-height:280px;overflow:auto"></div>
-
-                ${{preview}}
-            </div>`;
-        }}).join("");
     }}
 
     async function uploadSceneMedia(scene, input) {{
@@ -2199,7 +2302,7 @@ def project_detail(slug: str) -> HTMLResponse:
             const data = await r.json();
             if (!r.ok) throw new Error(data.detail || "Yüklenemedi.");
             status.textContent = `Sahne ${{scene}} güncellendi — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
-            await loadSceneMedia();
+            location.reload();
         }} catch (e) {{
             alert("Hata: " + e.message);
             status.textContent = "";
@@ -2216,7 +2319,7 @@ def project_detail(slug: str) -> HTMLResponse:
             const data = await r.json();
             if (!r.ok) throw new Error(data.detail || "Denenemedi.");
             status.textContent = `Sahne ${{scene}} için yeni bir medya bulundu — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
-            await loadSceneMedia();
+            location.reload();
         }} catch (e) {{
             alert("Hata: " + e.message);
         }} finally {{
@@ -2283,7 +2386,7 @@ def project_detail(slug: str) -> HTMLResponse:
             const data = await r.json();
             if (!r.ok) throw new Error(data.detail || "Seçilemedi.");
             status.textContent = `Sahne ${{scene}} güncellendi — değişikliği videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
-            await loadSceneMedia();
+            location.reload();
         }} catch (e) {{
             alert("Hata: " + e.message);
             btn.disabled = false;
