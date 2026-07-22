@@ -1467,6 +1467,7 @@ def manual_media_status(slug: str) -> dict[str, Any]:
 
     builder = MediaBuilder()
     prompts = builder._load_image_prompts_by_scene(project_dir)
+    prompt_items = builder._load_image_prompt_items_by_scene(project_dir)
 
     # Rich per-scene guidance from ImagePromptAgent.
     guidance_by_scene: dict[int, dict[str, Any]] = {}
@@ -1529,10 +1530,18 @@ def manual_media_status(slug: str) -> dict[str, Any]:
                 {},
             )
 
+            prompt_item = prompt_items.get(scene_number)
+            full_prompt = (
+                builder.compose_full_image_prompt(prompt_item)
+                if prompt_item is not None
+                else prompts.get(scene_number, "")
+            )
+
             scenes.append({
                 "scene": scene_number,
                 "title": title,
                 "prompt": prompts.get(scene_number, ""),
+                "full_prompt": full_prompt,
                 "visual_summary": guidance.get(
                     "visual_summary",
                     "",
@@ -1768,6 +1777,7 @@ def scene_media_status(slug: str) -> dict[str, Any]:
 
     builder = MediaBuilder()
     image_prompts = builder._load_image_prompts_by_scene(project_dir)
+    image_prompt_items = builder._load_image_prompt_items_by_scene(project_dir)
     video_prompts = builder._load_video_prompts_by_scene(project_dir)
 
     guidance_by_scene: dict[int, dict[str, Any]] = {}
@@ -1856,10 +1866,18 @@ def scene_media_status(slug: str) -> dict[str, Any]:
             current_provider = manifest_entry.get("provider")
             guidance = guidance_by_scene.get(scene_number, {})
 
+            prompt_item = image_prompt_items.get(scene_number)
+            full_image_prompt = (
+                builder.compose_full_image_prompt(prompt_item)
+                if prompt_item is not None
+                else image_prompts.get(scene_number, "")
+            )
+
             scenes.append({
                 "scene": scene_number,
                 "title": title,
                 "image_prompt": image_prompts.get(scene_number, ""),
+                "full_image_prompt": full_image_prompt,
                 "video_prompt": video_prompts.get(scene_number, ""),
                 "visual_summary": guidance.get("visual_summary", ""),
                 "generation_goal": guidance.get("generation_goal", ""),

@@ -323,7 +323,10 @@ def _render_scene_media_card(
 
     prompt_text = "\n\n---\n\n".join(
         str(part)
-        for part in (scene.get("image_prompt"), scene.get("video_prompt"))
+        for part in (
+            scene.get("full_image_prompt") or scene.get("image_prompt"),
+            scene.get("video_prompt"),
+        )
         if part
     )
     prompt_block = ""
@@ -2249,7 +2252,7 @@ def project_detail(slug: str) -> HTMLResponse:
         }};
 
         data.scenes.forEach(s => {{
-            window.__manualPrompts[s.scene] = s.prompt || "";
+            window.__manualPrompts[s.scene] = s.full_prompt || s.prompt || "";
         }});
 
         grid.innerHTML = data.scenes.map(s => {{
@@ -2309,7 +2312,7 @@ def project_detail(slug: str) -> HTMLResponse:
                     <summary style="cursor:pointer;font-weight:700;color:#245ec7">
                         Tam üretim promptunu göster
                     </summary>
-                    <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">${{escapeHtmlJs(s.prompt || '(prompt yok)')}}</div>
+                    <div style="font-size:12px;color:#334155;margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px">${{escapeHtmlJs(s.full_prompt || s.prompt || '(prompt yok)')}}</div>
                 </details>
 
                 <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">

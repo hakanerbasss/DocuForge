@@ -81,6 +81,9 @@ class MediaBuilder:
         image_prompts_by_scene = self._load_image_prompts_by_scene(
             project_dir
         )
+        image_prompt_items_by_scene = self._load_image_prompt_items_by_scene(
+            project_dir
+        )
         video_prompts_by_scene = self._load_video_prompts_by_scene(
             project_dir
         )
@@ -124,6 +127,7 @@ class MediaBuilder:
                     scene_dir=scene_dir,
                     search_query=search_query,
                     image_prompts_by_scene=image_prompts_by_scene,
+                    prompt_items_by_scene=image_prompt_items_by_scene,
                 )
             elif media_mode == "video":
                 # Only videos, no image fallback
@@ -150,6 +154,7 @@ class MediaBuilder:
                         scene_dir=scene_dir,
                         search_query=search_query,
                         image_prompts_by_scene=image_prompts_by_scene,
+                        prompt_items_by_scene=image_prompt_items_by_scene,
                     )
 
             if result is None:
@@ -334,6 +339,9 @@ class MediaBuilder:
         image_prompts_by_scene = self._load_image_prompts_by_scene(
             project_dir
         )
+        image_prompt_items_by_scene = self._load_image_prompt_items_by_scene(
+            project_dir
+        )
         video_prompts_by_scene = self._load_video_prompts_by_scene(
             project_dir
         )
@@ -354,6 +362,7 @@ class MediaBuilder:
             result = self._acquire_image(
                 image_provider, scene_number, scene_dir, search_query,
                 image_prompts_by_scene, avoid_asset_id=previous_asset_id,
+                prompt_items_by_scene=image_prompt_items_by_scene,
             )
         elif media_mode == "video":
             result = self._acquire_video(
@@ -369,6 +378,7 @@ class MediaBuilder:
                 result = self._acquire_image(
                     image_provider, scene_number, scene_dir, search_query,
                     image_prompts_by_scene, avoid_asset_id=previous_asset_id,
+                    prompt_items_by_scene=image_prompt_items_by_scene,
                 )
 
         if result is None:
@@ -862,6 +872,7 @@ class MediaBuilder:
         search_query: str,
         image_prompts_by_scene: dict[int, str],
         avoid_asset_id: str | None = None,
+        prompt_items_by_scene: dict[int, dict[str, Any]] | None = None,
     ) -> tuple[MediaAsset, Path] | None:
         if provider is None:
             return None
@@ -873,6 +884,7 @@ class MediaBuilder:
                 scene_dir,
                 search_query,
                 image_prompts_by_scene,
+                prompt_items_by_scene,
             )
 
         try:
@@ -912,8 +924,21 @@ class MediaBuilder:
         scene_dir: Path,
         search_query: str,
         image_prompts_by_scene: dict[int, str],
+        prompt_items_by_scene: dict[int, dict[str, Any]] | None = None,
     ) -> tuple[MediaAsset, Path] | None:
-        prompt = image_prompts_by_scene.get(scene_number, search_query)
+        prompt_item = (
+            (prompt_items_by_scene or {}).get(scene_number)
+        )
+
+        if prompt_item is not None:
+            # Full story-aware prompt (visual_summary/generation_goal/
+            # recommended_source-appropriate style/authenticity notes),
+            # not just the bare visual description -- see
+            # compose_full_image_prompt()'s docstring for why a
+            # context-free prompt can't make story-consistent choices.
+            prompt = self.compose_full_image_prompt(prompt_item)
+        else:
+            prompt = image_prompts_by_scene.get(scene_number, search_query)
 
         try:
             paths = provider.get_images(
@@ -1015,6 +1040,133 @@ class MediaBuilder:
                 result[scene] = prompt.strip()
 
         return result
+
+    def _load_image_prompt_items_by_scene(
+        self,
+        project_dir: Path,
+    ) -> dict[int, dict[str, Any]]:
+        """Like _load_image_prompts_by_scene, but keyed to each scene's
+        FULL guidance dict (visual_summary/generation_goal/
+        recommended_source/authenticity_note/sensitive/...), not just
+        the bare prompt string -- lets callers compose a story-aware
+        prompt via compose_full_image_prompt() instead of sending an AI
+        generator a context-free visual description it has no way to
+        make story-consistent choices from.
+        """
+
+        path = project_dir / "image_prompts.json"
+
+        if not path.exists():
+            return {}
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        images = data.get("images")
+
+        if not isinstance(images, list):
+            return {}
+
+        result: dict[int, dict[str, Any]] = {}
+
+        for item in images:
+            if not isinstance(item, dict):
+                continue
+
+            scene = item.get("scene")
+            prompt = item.get("prompt")
+
+            if (
+                isinstance(scene, int)
+                and isinstance(prompt, str)
+                and prompt.strip()
+            ):
+                result[scene] = item
+
+        return result
+
+    # Style guidance appended when composing the full prompt, keyed by
+    # recommended_source -- ONLY affects the AI-generation path
+    # (_generate_image), never stock search, since these are
+    # instructions for a generative model, not search keywords.
+    SOURCE_STYLE_DIRECTIVES: dict[str, str] = {
+        "generated": (
+            "Bu görsel temsili/sembolik bir canlandırmadır -- belirli, "
+            "gerçek bir olayı ya da kişiyi birebir belgeliyormuş gibi "
+            "gösterme; atmosferi ve fikri yansıtan, açıkça yorumlanmış "
+            "bir sahne oluştur."
+        ),
+        "infographic": (
+            "Bu sahne için fotogerçekçi bir görüntü yerine temiz bir "
+            "bilgi grafiği/diyagram/şablon tarzı kullan -- ikonlar, "
+            "etiketler, basit şekiller ve düzenli bir kompozisyonla "
+            "bilgiyi görselleştir; gerçek bir fotoğraf gibi görünmeye "
+            "çalışma."
+        ),
+        "archive": (
+            "Gerçek arşiv görüntüsü bulunamadığı için bu görsel onun "
+            "yerine geçecek -- fotogerçekçi taklit ÜRETME (gerçek bir "
+            "belge/fotoğraf gibi görünmemeli); bunun yerine temsili/"
+            "sembolik bir canlandırma ya da bilgi grafiği tarzı bir "
+            "alternatif oluştur."
+        ),
+    }
+
+    def compose_full_image_prompt(self, item: dict[str, Any]) -> str:
+        """Fold a scene's full narrative context into ONE prompt.
+
+        The bare "prompt" field alone only describes what should be in
+        frame -- it carries none of the "why" (generation_goal), the
+        surrounding story beat (visual_summary), or how source-
+        appropriate a real photograph would even be (recommended_source/
+        authenticity_note/sensitive). Sent as-is to an AI image
+        generator (or pasted alone into another chat), none of that
+        context survives, so the result can't make story-consistent
+        choices -- e.g. attempting photorealism for a scene explicitly
+        marked as needing a representative/symbolic or infographic
+        treatment instead. This composes everything into one prompt so
+        whichever model reads it (ours automatically, or another AI a
+        user pastes it into) gets the whole picture in one shot.
+
+        Used for both the actual AI generation call (_generate_image)
+        and the "Promptu Kopyala" button in the web UI -- same
+        composition either way, since the need (context, not a bare
+        description) is identical in both cases.
+        """
+
+        prompt = str(item.get("prompt") or "").strip()
+        parts = [prompt] if prompt else []
+
+        goal = str(item.get("generation_goal") or "").strip()
+        if goal:
+            parts.append(f"Bu görselle şu anlatılmalı: {goal}.")
+
+        summary = str(item.get("visual_summary") or "").strip()
+        if summary:
+            parts.append(f"Sahnenin bağlamı: {summary}.")
+
+        source = str(
+            item.get("recommended_source") or "stock"
+        ).strip().lower()
+        directive = self.SOURCE_STYLE_DIRECTIVES.get(source)
+        if directive:
+            parts.append(directive)
+
+        if bool(item.get("sensitive")):
+            reason = str(item.get("sensitive_reason") or "").strip()
+            parts.append(
+                "Dikkat: bu sahne telif/gerçeklik açısından hassas"
+                + (f" ({reason})" if reason else "")
+                + " -- gerçek bir kişi/olayı birebir taklit etme."
+            )
+
+        parts.append(
+            "Alt kısımda yazı eklenebilecek temiz, boş bir alan bırak."
+        )
+
+        return " ".join(parts)
 
     def _load_video_prompts_by_scene(
         self,
