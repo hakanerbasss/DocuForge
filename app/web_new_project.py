@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import threading
 import uuid
@@ -2059,6 +2060,92 @@ def scene_media_select(
         "media_type": asset.media_type,
         "url": f"/files/{slug}/media/scene_{scene:03d}/{path.name}",
     }
+
+
+VALID_OVERLAY_STYLES = {"bold", "regular", "bold_italic"}
+VALID_OVERLAY_POSITIONS = {
+    "top_left", "top_center", "top_right",
+    "middle_left", "center", "middle_right",
+    "bottom_left", "bottom_center", "bottom_right",
+}
+
+
+class SceneTextOverlayRequest(BaseModel):
+    text: str = Field(default="", max_length=200)
+    color: str = Field(default="#ffffff")
+    style: str = Field(default="bold")
+    position: str = Field(default="bottom_center")
+
+
+@router.post("/api/projects/{slug}/scene-text-overlays/{scene}")
+def save_scene_text_overlay(
+    slug: str,
+    scene: int,
+    request: SceneTextOverlayRequest,
+) -> dict[str, Any]:
+    """Save (or clear, if text is blank) one scene's custom on-screen
+    text overlay. Burned into that exact scene's on-screen time window
+    on the next render -- see RenderService._burn_scene_text_overlays.
+    Lets each project look hand-designed instead of every video coming
+    out of the same visual template.
+    """
+
+    project_dir = PROJECTS_ROOT / slug
+
+    if not (project_dir / "project.json").exists():
+        raise HTTPException(status_code=404, detail="Proje bulunamadı.")
+
+    style = (
+        request.style if request.style in VALID_OVERLAY_STYLES else "bold"
+    )
+    position = (
+        request.position
+        if request.position in VALID_OVERLAY_POSITIONS
+        else "bottom_center"
+    )
+    color = request.color.strip() or "#ffffff"
+
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        raise HTTPException(
+            status_code=400,
+            detail="Renk #RRGGBB formatında olmalı (örn. #ffcc00).",
+        )
+
+    overlays_path = project_dir / "text_overlays.json"
+    data: dict[str, Any] = {}
+
+    if overlays_path.exists():
+        try:
+            data = json.loads(overlays_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+
+    scenes = data.get("scenes")
+
+    if not isinstance(scenes, dict):
+        scenes = {}
+
+    text = request.text.strip()
+
+    if text:
+        scenes[str(scene)] = {
+            "text": text,
+            "color": color,
+            "style": style,
+            "position": position,
+        }
+    else:
+        scenes.pop(str(scene), None)
+
+    data["scenes"] = scenes
+
+    overlays_path.parent.mkdir(parents=True, exist_ok=True)
+    overlays_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return {"ok": True, "scene": scene, "cleared": not text}
 
 
 @router.post("/api/projects/{slug}/regenerate/{step_key}")

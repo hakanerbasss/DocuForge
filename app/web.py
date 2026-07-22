@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.services.render_service import RenderService
 from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
@@ -118,10 +119,92 @@ def _scene_media_type_badge(media_type: str | None) -> str:
     )
 
 
+_OVERLAY_POSITION_LABELS: dict[str, str] = {
+    "top_left": "↖", "top_center": "↑", "top_right": "↗",
+    "middle_left": "←", "center": "•", "middle_right": "→",
+    "bottom_left": "↙", "bottom_center": "↓", "bottom_right": "↘",
+}
+
+_OVERLAY_STYLE_LABELS: dict[str, str] = {
+    "bold": "Kalın",
+    "regular": "İnce",
+    "bold_italic": "Kalın İtalik",
+}
+
+
+def _render_scene_text_overlay_form(
+    scene_number: int,
+    overlay: dict | None,
+) -> str:
+    """Per-scene "burn custom text into this scene" mini-form.
+
+    Server-rendered with the scene's current saved values (same
+    principle as the rest of this card -- nothing here depends on a
+    client-side fetch succeeding to become visible). Saving posts to
+    /api/projects/{slug}/scene-text-overlays/{scene} and reloads; the
+    text only actually appears in the video after the next "Videoyu
+    Yeniden Oluştur".
+    """
+
+    overlay = overlay or {}
+    text = html.escape(str(overlay.get("text") or ""), quote=True)
+    color = html.escape(str(overlay.get("color") or "#ffffff"), quote=True)
+    current_style = overlay.get("style") or "bold"
+    current_position = overlay.get("position") or "bottom_center"
+
+    style_options = "".join(
+        f'<option value="{key}" {"selected" if key == current_style else ""}>{label}</option>'
+        for key, label in _OVERLAY_STYLE_LABELS.items()
+    )
+
+    position_buttons = "".join(
+        f'<button type="button" data-position="{key}" '
+        f'onclick="selectOverlayPosition({scene_number}, \'{key}\', this)" '
+        'style="min-height:28px;min-width:28px;padding:0;font-size:13px;'
+        f'border:1px solid #cbd6e5;border-radius:6px;cursor:pointer;'
+        f'background:{"#2166f3" if key == current_position else "#ffffff"};'
+        f'color:{"#ffffff" if key == current_position else "#334155"}" '
+        f'title="{key}">{label}</button>'
+        for key, label in _OVERLAY_POSITION_LABELS.items()
+    )
+
+    return f"""
+    <div style="margin-top:14px;border-top:1px solid #edf1f6;padding-top:12px">
+        <strong style="font-size:13px">📝 Sahne Yazısı (opsiyonel)</strong>
+        <input type="text" id="overlayText_{scene_number}" value="{text}" maxlength="200"
+            placeholder="Bu sahnede ekranda görünecek yazı (boş bırakırsan yazı olmaz)"
+            style="width:100%;min-height:38px;border:1px solid #cbd6e5;border-radius:8px;padding:0 10px;font:inherit;margin-top:6px;box-sizing:border-box">
+        <div style="display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px">
+                Renk
+                <input type="color" id="overlayColor_{scene_number}" value="{color}" style="width:40px;height:32px;padding:0;border:1px solid #cbd6e5;border-radius:6px">
+            </label>
+            <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px">
+                Stil
+                <select id="overlayStyle_{scene_number}" style="min-height:32px;border:1px solid #cbd6e5;border-radius:8px;font-size:12px">
+                    {style_options}
+                </select>
+            </label>
+        </div>
+        <div style="margin-top:8px">
+            <div class="muted" style="font-size:11px;margin-bottom:4px">Konum</div>
+            <div style="display:grid;grid-template-columns:repeat(3,28px);gap:4px" id="overlayPositionGrid_{scene_number}">
+                {position_buttons}
+            </div>
+            <input type="hidden" id="overlayPosition_{scene_number}" value="{current_position}">
+        </div>
+        <button type="button" onclick="saveSceneTextOverlay({scene_number}, this)" style="margin-top:10px;min-height:32px;font-size:12px;width:auto;padding:0 14px">
+            💾 Yazıyı Kaydet
+        </button>
+    </div>
+    """
+
+
 def _render_scene_media_card(
     scene: dict,
     image_search_capable: bool,
     video_search_capable: bool,
+    text_overlay: dict | None = None,
 ) -> str:
     """Render one scene's review card server-side.
 
@@ -292,6 +375,8 @@ def _render_scene_media_card(
         <div id="sceneMediaAlternatives_{scene_number}" style="display:none;margin-top:10px;max-height:280px;overflow:auto"></div>
 
         {preview}
+
+        {_render_scene_text_overlay_form(scene_number, text_overlay)}
     </div>
     """
 
@@ -1178,11 +1263,16 @@ def project_detail(slug: str) -> HTMLResponse:
         scene_media_list = scene_media_data.get("scenes") or []
 
         if scene_media_data.get("available") and scene_media_list:
+            text_overlays_by_scene = RenderService()._load_text_overlays(
+                project_dir
+            )
+
             scene_cards_html = "".join(
                 _render_scene_media_card(
                     scene,
                     bool(scene_media_data.get("image_search_capable")),
                     bool(scene_media_data.get("video_search_capable")),
+                    text_overlays_by_scene.get(scene["scene"]),
                 )
                 for scene in scene_media_list
             )
@@ -2390,6 +2480,48 @@ def project_detail(slug: str) -> HTMLResponse:
         }} catch (e) {{
             alert("Hata: " + e.message);
             btn.disabled = false;
+        }}
+    }}
+
+    function selectOverlayPosition(scene, position, btn) {{
+        const hidden = document.getElementById(`overlayPosition_${{scene}}`);
+        if (hidden) hidden.value = position;
+
+        const grid = document.getElementById(`overlayPositionGrid_${{scene}}`);
+        if (!grid) return;
+
+        grid.querySelectorAll("button").forEach(b => {{
+            const active = b.dataset.position === position;
+            b.style.background = active ? "#2166f3" : "#ffffff";
+            b.style.color = active ? "#ffffff" : "#334155";
+        }});
+    }}
+
+    async function saveSceneTextOverlay(scene, btn) {{
+        const text = document.getElementById(`overlayText_${{scene}}`).value;
+        const color = document.getElementById(`overlayColor_${{scene}}`).value;
+        const style = document.getElementById(`overlayStyle_${{scene}}`).value;
+        const position = document.getElementById(`overlayPosition_${{scene}}`).value;
+
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = "⏳ Kaydediliyor…";
+
+        try {{
+            const r = await fetch(`/api/projects/${{slug}}/scene-text-overlays/${{scene}}`, {{
+                method: "POST",
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{text, color, style, position}}),
+            }});
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || "Kaydedilemedi.");
+            document.getElementById("sceneMediaStatus").textContent =
+                `Sahne ${{scene}} yazısı kaydedildi — videoya yansıtmak için "Videoyu Yeniden Oluştur"a bas.`;
+            location.reload();
+        }} catch (e) {{
+            alert("Hata: " + e.message);
+            btn.disabled = false;
+            btn.textContent = original;
         }}
     }}
 

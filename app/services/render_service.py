@@ -30,6 +30,51 @@ class RenderService:
         "4k":       (3840, 2160),
     }
 
+    # Per-scene custom text overlay: font style presets, restricted to
+    # families already commonly installed alongside the bold set
+    # ThumbnailService uses (fonts-dejavu-core, fonts-liberation,
+    # fonts-noto-core, fonts-freefont-ttf) -- no extra font install
+    # needed. If none of a style's candidates exist on this server,
+    # fontfile= is simply omitted and ffmpeg's drawtext falls back to
+    # its own default (the same fallback _burn_ai_disclosure already
+    # relies on without ever specifying a font at all).
+    OVERLAY_FONT_CANDIDATES: dict[str, tuple[Path, ...]] = {
+        "bold": (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+        ),
+        "regular": (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+        ),
+        "bold_italic": (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf"),
+            Path("/usr/share/fonts/truetype/freefont/FreeSansBoldOblique.ttf"),
+        ),
+    }
+
+    # 3x3 grid the user picks from -- (x, y) as ffmpeg drawtext
+    # expressions, text_w/text_h/w/h all resolved by drawtext itself.
+    # 40px side margins, 60px bottom margin (leaves room above burned-in
+    # subtitles, which sit ~80px from the bottom -- see _burn_in_subtitles).
+    OVERLAY_POSITION_EXPRESSIONS: dict[str, tuple[str, str]] = {
+        "top_left": ("40", "40"),
+        "top_center": ("(w-text_w)/2", "40"),
+        "top_right": ("w-text_w-40", "40"),
+        "middle_left": ("40", "(h-text_h)/2"),
+        "center": ("(w-text_w)/2", "(h-text_h)/2"),
+        "middle_right": ("w-text_w-40", "(h-text_h)/2"),
+        "bottom_left": ("40", "h-text_h-60"),
+        "bottom_center": ("(w-text_w)/2", "h-text_h-60"),
+        "bottom_right": ("w-text_w-40", "h-text_h-60"),
+    }
+
     def render(self, project_path: str) -> Path:
         project_dir = Path(project_path)
 
@@ -98,6 +143,7 @@ class RenderService:
 
         clip_files: list[Path] = []
         clip_durations: list[float] = []
+        scene_numbers_in_order: list[int] = []
         subtitle_segments: list[tuple[int, float, str | None]] = []
         placeholder_scene_numbers: list[int] = []
 
@@ -238,6 +284,7 @@ class RenderService:
 
             clip_files.append(clip_path)
             clip_durations.append(scene_duration)
+            scene_numbers_in_order.append(scene_number)
 
         if not clip_files:
             raise ValueError("No usable media files found.")
@@ -363,6 +410,27 @@ class RenderService:
                 # banner failing to burn in shouldn't cost the whole render.
                 print(
                     f"  ⚠ Yapay zeka ibaresi eklenemedi, ibaresiz devam "
+                    f"ediliyor: {error}"
+                )
+
+        overlays_by_scene = self._load_text_overlays(project_dir)
+
+        if overlays_by_scene:
+            try:
+                self._burn_scene_text_overlays(
+                    output_path,
+                    overlays_by_scene,
+                    scene_numbers_in_order,
+                    start_offsets,
+                    clip_durations,
+                    subtitle_offset,
+                )
+            except Exception as error:
+                # Same tolerance as music/disclosure above -- a custom
+                # scene caption failing to burn in shouldn't cost the
+                # whole render; the video is still valid without it.
+                print(
+                    f"  ⚠ Sahne yazıları eklenemedi, yazısız devam "
                     f"ediliyor: {error}"
                 )
 
@@ -1276,6 +1344,151 @@ class RenderService:
         burned_path.replace(video_path)
 
         print("  ✅ AI disclosure banner burned into video")
+
+    def _load_text_overlays(
+        self,
+        project_dir: Path,
+    ) -> dict[int, dict[str, Any]]:
+        """Load per-scene custom text overlay settings (text, color,
+        style, position), keyed by scene number. Written by the "Sahne
+        Medyasını Düzenle" review UI -- lets each project have its own
+        hand-placed captions instead of every video looking like the
+        same stamped-out template, which also helps distinguish videos
+        from each other for platform duplicate/template detection.
+        """
+
+        path = project_dir / "text_overlays.json"
+
+        if not path.exists():
+            return {}
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        scenes = data.get("scenes") if isinstance(data, dict) else None
+
+        if not isinstance(scenes, dict):
+            return {}
+
+        result: dict[int, dict[str, Any]] = {}
+
+        for key, value in scenes.items():
+            try:
+                scene_number = int(key)
+            except (TypeError, ValueError):
+                continue
+
+            if isinstance(value, dict) and str(value.get("text") or "").strip():
+                result[scene_number] = value
+
+        return result
+
+    def _resolve_overlay_font(self, style: str) -> str | None:
+        candidates = self.OVERLAY_FONT_CANDIDATES.get(
+            style, self.OVERLAY_FONT_CANDIDATES["bold"]
+        )
+
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
+
+        return None
+
+    def _burn_scene_text_overlays(
+        self,
+        video_path: Path,
+        overlays_by_scene: dict[int, dict[str, Any]],
+        scene_numbers: list[int],
+        start_offsets: list[float],
+        clip_durations: list[float],
+        subtitle_offset: float,
+    ) -> None:
+        """Burn every configured scene's custom text into the final
+        video in one ffmpeg pass, each constrained to exactly that
+        scene's on-screen time window via enable='between(t,start,end)'.
+
+        start_offsets/clip_durations are the same per-scene concat data
+        _write_srt already uses for subtitle timing -- subtitle_offset
+        (the cold-open/hook duration, 0 if none) shifts every window the
+        same way _write_srt shifts subtitle timestamps, so a scene's
+        caption still lands on the right frames even when a hook clip
+        was prepended.
+        """
+
+        filters: list[str] = []
+
+        for index, scene_number in enumerate(scene_numbers):
+            overlay = overlays_by_scene.get(scene_number)
+
+            if not overlay:
+                continue
+
+            text = str(overlay.get("text") or "").strip()
+
+            if not text:
+                continue
+
+            start = start_offsets[index] + subtitle_offset
+            end = start + clip_durations[index]
+
+            escaped_text = (
+                text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "’")
+            )
+
+            color = str(overlay.get("color") or "#ffffff").strip() or "#ffffff"
+            position = str(overlay.get("position") or "bottom_center")
+            style = str(overlay.get("style") or "bold")
+
+            x_expr, y_expr = self.OVERLAY_POSITION_EXPRESSIONS.get(
+                position, self.OVERLAY_POSITION_EXPRESSIONS["bottom_center"]
+            )
+
+            font_path = self._resolve_overlay_font(style)
+            font_clause = f"fontfile='{font_path}':" if font_path else ""
+
+            # ffmpeg's fontcolor accepts "#RRGGBB" directly.
+            filters.append(
+                f"drawtext={font_clause}text='{escaped_text}':"
+                f"fontsize=40:fontcolor={color}:"
+                "box=1:boxcolor=black@0.4:boxborderw=12:"
+                f"x={x_expr}:y={y_expr}:"
+                f"enable='between(t,{start:.2f},{end:.2f})'"
+            )
+
+        if not filters:
+            return
+
+        burned_path = video_path.with_name("final_video_scene_text.mp4")
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-vf",
+            ",".join(filters),
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(burned_path),
+        ]
+
+        self._run(command)
+
+        if (
+            not burned_path.exists()
+            or burned_path.stat().st_size == 0
+        ):
+            raise RuntimeError(
+                f"Scene text overlay burn-in failed: {burned_path}"
+            )
+
+        burned_path.replace(video_path)
+
+        print(f"  ✅ {len(filters)} sahne yazısı videoya gömüldü")
 
     def _video_to_clip(
         self,
