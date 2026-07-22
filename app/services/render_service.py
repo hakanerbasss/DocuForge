@@ -179,9 +179,9 @@ class RenderService:
                     f"({location_map_path.name})"
                 )
             else:
-                video_files = sorted(scene_dir.glob("*.mp4"))
+                video_files = self._newest_first(scene_dir.glob("*.mp4"))
 
-                image_files = sorted(
+                image_files = self._newest_first(
                     file_path
                     for pattern in (
                         "*.jpg",
@@ -1586,6 +1586,27 @@ class RenderService:
             result[scene_number] = scene
 
         return result
+
+    def _newest_first(self, paths: Any) -> list[Path]:
+        """Order candidate scene media files newest-modified-first.
+
+        A scene directory should only ever hold one current media file
+        (every replace path clears the old one first), but this is the
+        tie-breaker if a stale file ever ends up sitting alongside a
+        fresh replacement for any reason -- alphabetical order (the
+        previous behavior) had no relationship to which file was
+        actually intended as current, and could silently keep using an
+        old, already-replaced asset forever. Newest mtime always
+        reflects "the one most recently placed here", which is the
+        correct proxy for "the one the user actually wants" whether it
+        arrived via upload, regenerate, or the original auto-download.
+        """
+
+        return sorted(
+            paths,
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
 
     def _scene_number_from_dir(
         self,

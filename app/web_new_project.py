@@ -1643,11 +1643,12 @@ async def manual_media_upload(
     scene_dir = project_dir / "media" / f"scene_{scene:03d}"
     scene_dir.mkdir(parents=True, exist_ok=True)
 
-    # Replace any earlier upload for this scene, whatever its extension.
-    for known_extension in MediaBuilder.MANUAL_IMAGE_EXTENSIONS:
-        old = scene_dir / f"manual{known_extension}"
-        if old.exists():
-            old.unlink()
+    # Clear anything already sitting in this scene's directory (an
+    # earlier manual upload, or an auto-picked image.jpg/scene.mp4 if
+    # this scene had already gone through the normal provider flow at
+    # some point) -- otherwise a stale file could keep winning
+    # RenderService's/current_scene_asset's own picker over this upload.
+    MediaBuilder().clear_scene_media(scene_dir)
 
     destination = scene_dir / f"manual{extension}"
     destination.write_bytes(data)

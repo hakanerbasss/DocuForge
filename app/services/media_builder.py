@@ -239,23 +239,41 @@ class MediaBuilder:
 
     def current_scene_asset(self, scene_dir: Path) -> Path | None:
         """Whichever file RenderService.render() would actually use for
-        this scene right now: first video, else first image, both sorted
-        alphabetically -- mirrors that method's own picker exactly so a
-        review UI always shows what the next render will really use.
+        this scene right now: newest-modified video, else newest-modified
+        image -- mirrors that method's own picker exactly so a review UI
+        always shows what the next render will really use.
+
+        Newest-mtime (not alphabetical) is the tie-breaker: a scene
+        directory should only ever hold one current file since every
+        replace path clears the old one first, but if a stale file ever
+        ends up sitting alongside a fresh replacement for any reason,
+        alphabetical order has no relationship to which one is actually
+        current (e.g. "image.jpg" always sorts before "manual.jpg"
+        regardless of which was placed there most recently) -- mtime
+        does.
         """
 
-        videos = sorted(scene_dir.glob("*.mp4")) if scene_dir.exists() else []
+        videos = self._newest_first(
+            scene_dir.glob("*.mp4") if scene_dir.exists() else []
+        )
 
         if videos:
             return videos[0]
 
-        images = sorted(
+        images = self._newest_first(
             file_path
             for pattern in ("*.jpg", "*.jpeg", "*.png", "*.webp")
             for file_path in (scene_dir.glob(pattern) if scene_dir.exists() else [])
         )
 
         return images[0] if images else None
+
+    def _newest_first(self, paths: Any) -> list[Path]:
+        return sorted(
+            paths,
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
 
     def clear_scene_media(self, scene_dir: Path) -> None:
         """Remove every acquired media file for one scene before replacing
