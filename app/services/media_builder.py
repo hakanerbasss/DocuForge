@@ -1182,11 +1182,16 @@ class MediaBuilder:
             )
 
         parts.append(
-            "Bu görsel 16:9 en-boy oranında bir YouTube belgesel "
-            "videosu sahnesi için üretiliyor. Fotoğrafın üst kısmına "
-            "bu görselin hangi amaçla kullanıldığını belirten küçük "
-            "bir başlık, alt kısmına ise \"Fotoğraf Temsilidir.\" "
-            "yazısını ekle."
+            "Bu görsel, 16:9 en-boy oranında bir YouTube belgesel "
+            "videosunda kullanılacak bir sahne görselidir (bu bilgiyi "
+            "görsele yazma). Fotoğrafın üst kısmına, bu sahnenin "
+            "KONUSUNU özetleyen kısa bir başlık ekle -- başlık bu "
+            "sahnede ne anlatıldığıyla ilgili olmalı, 'YouTube için "
+            "üretilmiştir' gibi görselin ne amaçla üretildiğini "
+            "belirten bir yazı OLMAMALI. Fotoğrafın alt kısmına ise "
+            "\"Fotoğraf Temsilidir.\" yazısını ekle. Her iki yazı da "
+            "küçük ve göze batmayan puntoda olsun, büyük/baskın "
+            "yazı kullanma."
         )
 
         return " ".join(parts)
