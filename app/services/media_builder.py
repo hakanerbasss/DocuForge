@@ -1141,10 +1141,18 @@ class MediaBuilder:
         scene's duration), so whatever the model left empty in the
         static image doesn't stay put -- it drifts/gets cropped as the
         zoom progresses, making a reserved "safe zone" unreliable for a
-        moving clip. Legibility for any later burned-in text is instead
-        handled at burn time (a solid-enough backing box behind the
-        text -- see RenderService._burn_scene_text_overlays), which
-        works regardless of what ends up behind it after the zoom.
+        moving clip.
+
+        DOES explicitly ask the model to bake a small purpose caption
+        at the top and "Fotoğraf Temsilidir." at the bottom directly
+        into the generated image -- a deliberate choice by the user,
+        who reviews/regenerates by hand (via ChatGPT's own chat, not
+        DocuForge's paid API) rather than relying on this automatically.
+        Baked-in text is subject to the exact same zoompan drift/crop
+        risk noted above for scene images specifically (thumbnails
+        aren't run through _image_to_clip, so this concern doesn't
+        apply there) -- the manual review step is the safety net for
+        that, not a guarantee this function can make on its own.
         """
 
         prompt = str(item.get("prompt") or "").strip()
@@ -1172,6 +1180,14 @@ class MediaBuilder:
                 + (f" ({reason})" if reason else "")
                 + " -- gerçek bir kişi/olayı birebir taklit etme."
             )
+
+        parts.append(
+            "Bu görsel 16:9 en-boy oranında bir YouTube belgesel "
+            "videosu sahnesi için üretiliyor. Fotoğrafın üst kısmına "
+            "bu görselin hangi amaçla kullanıldığını belirten küçük "
+            "bir başlık, alt kısmına ise \"Fotoğraf Temsilidir.\" "
+            "yazısını ekle."
+        )
 
         return " ".join(parts)
 
