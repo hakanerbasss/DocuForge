@@ -275,6 +275,7 @@ class RenderService:
                     destination=clip_path,
                     duration=scene_duration,
                     audio_path=audio_path,
+                    zoom=(closing_image_path is None),
                 )
 
             else:
@@ -1606,6 +1607,7 @@ class RenderService:
         destination: Path,
         duration: float,
         audio_path: Path | None,
+        zoom: bool = True,
     ) -> None:
         frame_count = max(
             1,
@@ -1627,11 +1629,8 @@ class RenderService:
                 str(audio_path),
             ])
 
-        command.extend([
-            "-t",
-            f"{duration:.3f}",
-            "-vf",
-            (
+        if zoom:
+            video_filter = (
                 f"scale={self.WIDTH}:{self.HEIGHT}:"
                 "force_original_aspect_ratio=increase,"
                 f"crop={self.WIDTH}:{self.HEIGHT},"
@@ -1641,7 +1640,23 @@ class RenderService:
                 f"s={self.WIDTH}x{self.HEIGHT}:"
                 f"fps={self.FPS},"
                 "setsar=1"
-            ),
+            )
+        else:
+            # No zoompan: used for the fixed closing-shot image, whose
+            # baked-in text (e.g. "abone olun") becomes hard to read and
+            # can drift out of frame under the Ken Burns zoom.
+            video_filter = (
+                f"scale={self.WIDTH}:{self.HEIGHT}:"
+                "force_original_aspect_ratio=increase,"
+                f"crop={self.WIDTH}:{self.HEIGHT},"
+                "setsar=1"
+            )
+
+        command.extend([
+            "-t",
+            f"{duration:.3f}",
+            "-vf",
+            video_filter,
             "-c:v",
             "libx264",
             "-preset",
