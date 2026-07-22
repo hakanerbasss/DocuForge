@@ -1576,6 +1576,8 @@ def project_detail(slug: str) -> HTMLResponse:
     </section>
 
     <script>
+    const slug = "{escaped_slug_js}";
+
     const FIELD_LABELS_TR = {{
         voice_provider: "Ses Sağlayıcı",
         voice_name: "Ses",
@@ -2122,8 +2124,6 @@ def project_detail(slug: str) -> HTMLResponse:
     let activeBuildJobId = null;
 
     async function checkForActiveJob() {{
-        const slug = "{escaped_slug_js}";
-
         try {{
             const r = await fetch("/api/jobs/active");
             const data = await r.json();
