@@ -443,6 +443,27 @@ class RenderService:
                     f"ediliyor: {error}"
                 )
 
+        try:
+            total_duration = subtitle_offset + sum(clip_durations)
+            chapters = self._build_video_chapters(
+                storyboard,
+                scene_numbers_in_order,
+                start_offsets,
+                clip_durations,
+                subtitle_offset,
+                total_duration,
+                project_data,
+            )
+
+            if chapters is not None:
+                self._write_video_chapters(project_dir, chapters)
+        except Exception as error:
+            # Chapters only edit seo.json's description text -- never
+            # worth failing a finished render over.
+            print(
+                f"  ⚠ Bölüm zaman damgaları eklenemedi: {error}"
+            )
+
         warnings_path = render_dir / "media_warnings.json"
 
         if placeholder_scene_numbers:
@@ -1833,6 +1854,135 @@ class RenderService:
             durations[scene_number] = duration
 
         return durations
+
+    def _build_storyboard_title_map(
+        self,
+        storyboard: dict[str, Any],
+    ) -> dict[int, str]:
+        scenes = storyboard.get("scenes")
+        titles: dict[int, str] = {}
+
+        if not isinstance(scenes, list):
+            return titles
+
+        for index, scene in enumerate(scenes, start=1):
+            if not isinstance(scene, dict):
+                continue
+
+            try:
+                scene_number = int(scene.get("scene", index))
+            except (TypeError, ValueError):
+                scene_number = index
+
+            title = str(scene.get("title", "")).strip()
+
+            if title:
+                titles[scene_number] = title
+
+        return titles
+
+    CHAPTERS_MIN_SECONDS = 10.0
+    CHAPTERS_MIN_COUNT = 3
+    CHAPTERS_MARKER = "⏱ Bölümler:"
+
+    def _format_chapter_timestamp(self, seconds: float) -> str:
+        total_seconds = max(0, int(seconds))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+
+        if hours:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+
+        return f"{minutes}:{secs:02d}"
+
+    def _intro_chapter_label(self, project_data: dict[str, Any]) -> str:
+        language = str(project_data.get("language", "")).strip().lower()
+        return "Giriş" if language == "tr" else "Intro"
+
+    def _build_video_chapters(
+        self,
+        storyboard: dict[str, Any],
+        scene_numbers_in_order: list[int],
+        start_offsets: list[float],
+        clip_durations: list[float],
+        subtitle_offset: float,
+        total_duration: float,
+        project_data: dict[str, Any],
+    ) -> list[tuple[float, str]] | None:
+        """Build a YouTube-chapters-compatible timestamp list from the
+        same per-scene timing this render already computed for
+        subtitles/overlays -- clicking a timestamp in the description
+        jumps straight to that scene. Returns None (skip silently) when
+        there aren't enough scenes long enough to satisfy YouTube's own
+        rules (first chapter at 0:00, at least 3 chapters, each at
+        least 10s) -- a non-compliant list wouldn't render as chapters
+        at all, so it's not worth cluttering the description with one.
+        """
+
+        titles_by_scene = self._build_storyboard_title_map(storyboard)
+        raw: list[tuple[float, str]] = []
+
+        if subtitle_offset > 0:
+            raw.append((0.0, self._intro_chapter_label(project_data)))
+
+        for scene_number, offset in zip(
+            scene_numbers_in_order, start_offsets
+        ):
+            start = subtitle_offset + offset
+            title = titles_by_scene.get(scene_number, "").strip()
+            raw.append((start, title or f"Sahne {scene_number}"))
+
+        raw.sort(key=lambda entry: entry[0])
+
+        merged: list[tuple[float, str]] = []
+
+        for start, title in raw:
+            if merged and start - merged[-1][0] < self.CHAPTERS_MIN_SECONDS:
+                continue
+            merged.append((start, title))
+
+        if merged and merged[0][0] != 0.0:
+            merged[0] = (0.0, merged[0][1])
+
+        if merged and total_duration - merged[-1][0] < self.CHAPTERS_MIN_SECONDS:
+            merged.pop()
+
+        if len(merged) < self.CHAPTERS_MIN_COUNT:
+            return None
+
+        return merged
+
+    def _write_video_chapters(
+        self,
+        project_dir: Path,
+        chapters: list[tuple[float, str]],
+    ) -> None:
+        seo_path = project_dir / "seo.json"
+
+        if not seo_path.exists():
+            return
+
+        seo_data = self._load_json(seo_path)
+        description = str(seo_data.get("description", ""))
+
+        if self.CHAPTERS_MARKER in description:
+            description = description.split(self.CHAPTERS_MARKER)[0].rstrip()
+
+        chapter_lines = "\n".join(
+            f"{self._format_chapter_timestamp(start)} {title}"
+            for start, title in chapters
+        )
+
+        seo_data["description"] = (
+            f"{description}\n\n{self.CHAPTERS_MARKER}\n{chapter_lines}"
+        )
+
+        seo_path.write_text(
+            json.dumps(seo_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        print(f"  ✅ Bölüm zaman damgaları eklendi ({len(chapters)} bölüm)")
 
     def _build_audio_scene_map(
         self,
