@@ -94,7 +94,7 @@ class Settings:
 
     model: str = os.getenv(
         "MODEL",
-        "deepseek-chat",
+        "deepseek-v4-flash",
     )
 
     deepseek_api_key: str = _resolve_secret(

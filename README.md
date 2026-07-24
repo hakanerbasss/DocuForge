@@ -112,7 +112,7 @@ TEXT_PROVIDER=deepseek
 IMAGE_PROVIDER=pexels
 VIDEO_PROVIDER=pexels
 VOICE_PROVIDER=local_tts
-MODEL=deepseek-chat
+MODEL=deepseek-v4-flash
 
 # Only needed for voice_provider: xtts
 XTTS_REFERENCE_AUDIO=/path/to/your/reference_voice.wav
