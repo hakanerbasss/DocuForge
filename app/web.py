@@ -14,6 +14,7 @@ from app.services.thumbnail_service import ThumbnailService
 from app.web_new_project import PIPELINE_STEP_ORDER
 from app.web_new_project import router as new_project_router
 from app.web_new_project import scene_media_status
+from app.web_photo_story import router as photo_story_router
 from app.web_settings import router as settings_router
 from app.web_storage import router as storage_router
 from app.web_voice_test import router as voice_test_router
@@ -25,6 +26,7 @@ app = FastAPI(
 )
 
 app.include_router(new_project_router)
+app.include_router(photo_story_router)
 app.include_router(settings_router)
 app.include_router(storage_router)
 app.include_router(voice_test_router)
@@ -673,7 +675,7 @@ def page(title: str, body: str) -> HTMLResponse:
 
 <nav class="bottom-nav">
     <a href="/" class="active"><span class="nav-icon">🏠</span>Ana Sayfa</a>
-    <a href="/voice-test"><span class="nav-icon">🎤</span>Ses Testi</a>
+    <a href="/photo-story"><span class="nav-icon">🎞</span>Foto Hikaye</a>
     <a href="/storage"><span class="nav-icon">📦</span>Depolama</a>
     <a href="/settings"><span class="nav-icon">⚙</span>Ayarlar</a>
 </nav>
