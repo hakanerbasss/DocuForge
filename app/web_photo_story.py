@@ -112,7 +112,7 @@ button:disabled{{opacity:.55;cursor:wait}}
 .slot-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:14px}}
 .slot{{border:1px solid #dbe5f4;border-radius:12px;padding:12px;background:#fff}}
 .slot-num{{font-weight:700;font-size:12px;color:#6b7a94;margin-bottom:8px}}
-.slot-img{{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;
+.slot-img{{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;
     display:block;background:#f0f4f9}}
 .slot-img.empty{{display:flex;align-items:center;justify-content:center;
     color:#94a3b8;font-size:28px;border:2px dashed #cbd6e5}}
@@ -458,12 +458,12 @@ def photo_story_detail(slug: str) -> HTMLResponse:
         {download_btn}
     </div>
 
-    <div class="card">
+    <div class="card" id="splitCard">
         <h3>✂️ Izgarayı Otomatik Böl</h3>
         <p class="muted" style="margin-top:0">
             Tüm panellerin bir arada olduğu tek bir fotoğrafı yükle — DocuForge onu
-            otomatik olarak {panel_count} eşit hücreye böler ve slotlara atar.
-            PhotoSplit'e gerek yok!
+            otomatik olarak eşit hücrelere böler. Önce <b>önizleme</b> gösterir,
+            onay verince slotlara kaydeder. PhotoSplit'e gerek yok!
         </p>
         <div class="row">
             <div>
@@ -475,15 +475,31 @@ def photo_story_detail(slug: str) -> HTMLResponse:
                 <input id="gridCols" type="number" value="5" min="1" max="20">
             </div>
         </div>
-        <label style="display:flex;align-items:center;justify-content:center;
+        <label id="gridUploadBtn" style="display:flex;align-items:center;justify-content:center;
             min-height:44px;border:2px dashed #2166f3;border-radius:12px;
             cursor:pointer;background:#f4f8ff;font-weight:700;margin-top:12px;
             color:#2166f3;text-align:center">
-            📤 Izgara Fotoğrafını Yükle &amp; Böl
-            <input type="file" accept="image/*" style="display:none"
-                onchange="splitGrid(this)">
+            📤 Izgara Fotoğrafını Seç
+            <input id="gridFileInput" type="file" accept="image/*" style="display:none"
+                onchange="requestPreview(this.files[0])">
         </label>
         <div id="splitStatus" style="display:none;margin-top:10px" class="status-box"></div>
+
+        <div id="splitPreviewArea" style="display:none;margin-top:16px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                <button type="button" class="sm secondary" onclick="toggleSwap()">
+                    ↔ Satır/Sütun Yer Değiştir
+                </button>
+                <button type="button" class="sm secondary" onclick="toggleReverse()">
+                    ↕ Sırayı Ters Çevir
+                </button>
+                <button type="button" class="sm" onclick="confirmSplit()"
+                    style="background:#059669;color:white;border:none">
+                    ✅ Onayla &amp; Kaydet
+                </button>
+            </div>
+            <div id="previewGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px"></div>
+        </div>
     </div>
 
     <div class="card">
@@ -602,30 +618,85 @@ def photo_story_detail(slug: str) -> HTMLResponse:
         pollRender(data.job_id);
     }}
 
-    async function splitGrid(input) {{
-        if (!input.files[0]) return;
+    let _splitSwapped = false;
+    let _splitReversed = false;
+    let _splitFile = null;
+
+    function toggleSwap() {{
+        _splitSwapped = !_splitSwapped;
+        requestPreview(null);
+    }}
+    function toggleReverse() {{
+        _splitReversed = !_splitReversed;
+        requestPreview(null);
+    }}
+
+    async function requestPreview(file) {{
+        if (file) _splitFile = file;
+        if (!_splitFile) return;
+
         const rows = parseInt(document.getElementById('gridRows').value) || 3;
         const cols = parseInt(document.getElementById('gridCols').value) || 5;
         const statusEl = document.getElementById('splitStatus');
         statusEl.style.display = 'block';
         statusEl.className = 'status-box';
-        statusEl.textContent = `⏳ ${{rows}}×${{cols}} = ${{rows*cols}} panele bölünüyor...`;
+        statusEl.textContent = '⏳ Bölünüyor, önizleme hazırlanıyor...';
 
         const fd = new FormData();
-        fd.append('file', input.files[0]);
+        fd.append('file', _splitFile);
+
+        const url = `/api/photo-story/${{SLUG}}/preview-split`
+            + `?rows=${{rows}}&cols=${{cols}}`
+            + `&swap_axes=${{_splitSwapped ? 1 : 0}}`
+            + `&reverse_order=${{_splitReversed ? 1 : 0}}`;
+
+        const resp = await fetch(url, {{method: 'POST', body: fd}});
+        const data = await resp.json();
+
+        if (!data.panels) {{
+            statusEl.className = 'status-box err';
+            statusEl.textContent = '❌ ' + (data.detail || 'Hata oluştu.');
+            return;
+        }}
+
+        statusEl.style.display = 'none';
+
+        // Build preview grid
+        const grid = document.getElementById('previewGrid');
+        grid.innerHTML = '';
+        for (const p of data.panels) {{
+            const cell = document.createElement('div');
+            cell.style.cssText = 'position:relative;text-align:center';
+            cell.innerHTML = `<div style="font-size:10px;font-weight:700;color:#6b7a94;margin-bottom:2px">${{p.num}}</div>`
+                + `<img src="${{p.url}}?t=${{Date.now()}}" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;border:1px solid #dbe5f4">`;
+            grid.appendChild(cell);
+        }}
+        document.getElementById('splitPreviewArea').style.display = 'block';
+    }}
+
+    async function confirmSplit() {{
+        const rows = parseInt(document.getElementById('gridRows').value) || 3;
+        const cols = parseInt(document.getElementById('gridCols').value) || 5;
+        const panelCount = (_splitSwapped ? cols : rows) * (_splitSwapped ? rows : cols);
+        const statusEl = document.getElementById('splitStatus');
+        statusEl.style.display = 'block';
+        statusEl.className = 'status-box';
+        statusEl.textContent = '⏳ Paneller kaydediliyor...';
+        document.getElementById('splitPreviewArea').style.display = 'none';
 
         const resp = await fetch(
-            `/api/photo-story/${{SLUG}}/split-grid?rows=${{rows}}&cols=${{cols}}`,
-            {{method: 'POST', body: fd}}
+            `/api/photo-story/${{SLUG}}/confirm-split?panel_count=${{panelCount}}`,
+            {{method: 'POST'}}
         );
         const data = await resp.json();
         if (data.ok) {{
             statusEl.className = 'status-box ok';
-            statusEl.textContent = `✅ ${{data.saved.length}} panel oluşturuldu. Sayfa yenileniyor...`;
-            setTimeout(() => location.reload(), 1200);
+            statusEl.textContent = `✅ ${{data.saved}} panel kaydedildi. Sayfa yenileniyor...`;
+            setTimeout(() => location.reload(), 1000);
         }} else {{
             statusEl.className = 'status-box err';
-            statusEl.textContent = '❌ ' + (data.detail || 'Hata oluştu.');
+            statusEl.textContent = '❌ ' + (data.detail || 'Kaydetme başarısız.');
+            document.getElementById('splitPreviewArea').style.display = 'block';
         }}
     }}
 
@@ -734,84 +805,160 @@ async def upload_panel(slug: str, num: int, file: UploadFile) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# API — grid split (built-in PhotoSplit)                                       #
+# API — grid split: preview + confirm                                          #
 # --------------------------------------------------------------------------- #
 
-@router.post("/api/photo-story/{slug}/split-grid")
-async def split_grid(
+def _crop_cells(
+    img: "Image.Image",
+    rows: int,
+    cols: int,
+    swap_axes: bool,
+    reverse_order: bool,
+) -> list["Image.Image"]:
+    """Divide img into rows×cols cells and return them in reading order.
+
+    swap_axes   — transpose row/column iteration (fixes portrait/landscape
+                  orientation mismatches where the user specifies rows/cols
+                  the wrong way round).
+    reverse_order — flip the cell list end-to-end (fixes bottom-to-top
+                    ordering in some grid generators).
+    """
+
+    w, h = img.size
+
+    # Square-crop the source first so the grid divides evenly and each
+    # cell comes out as close to 1:1 as possible.  Many comic-strip grid
+    # apps produce a square canvas; if the source is already close to
+    # square this is a no-op.  We take the largest square centred on the
+    # image so we never stretch content.
+    if abs(w - h) > 4:
+        side = min(w, h)
+        x0 = (w - side) // 2
+        y0 = (h - side) // 2
+        img = img.crop((x0, y0, x0 + side, y0 + side))
+        w, h = img.size
+
+    # Swap interpretation so the user can just flip a toggle when wrong
+    r, c = (cols, rows) if swap_axes else (rows, cols)
+
+    cell_w = w // c
+    cell_h = h // r
+
+    cells: list["Image.Image"] = []
+    for ri in range(r):
+        for ci in range(c):
+            x0 = ci * cell_w
+            y0 = ri * cell_h
+            x1 = x0 + cell_w if ci < c - 1 else w
+            y1 = y0 + cell_h if ri < r - 1 else h
+            cells.append(img.crop((x0, y0, x1, y1)))
+
+    if reverse_order:
+        cells.reverse()
+
+    return cells
+
+
+@router.post("/api/photo-story/{slug}/preview-split")
+async def preview_split(
     slug: str,
     file: UploadFile,
     rows: int = 3,
     cols: int = 5,
+    swap_axes: int = 0,
+    reverse_order: int = 0,
 ) -> dict:
-    """Upload a single grid image and auto-crop it into rows×cols panels.
-
-    Uses Pillow to divide the image into equal rectangular cells.
-    Each cell is saved as a numbered panel slot, in left-to-right
-    top-to-bottom order (same reading order PhotoSplit uses).
-    """
+    """Split the grid image and return preview URLs without touching slots."""
 
     if rows < 1 or rows > 20 or cols < 1 or cols > 20:
         raise HTTPException(status_code=400, detail="Satır/sütun 1–20 arası olmalı.")
 
-    panel_count = rows * cols
     project_dir = _safe_project_dir(slug)
-    config = _load_config(project_dir)
-    slots: dict[str, Any] = config.get("slots") or {}
 
-    data = await file.read()
+    raw = await file.read()
     try:
-        img = Image.open(io.BytesIO(data)).convert("RGB")
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Görsel açılamadı: {exc}")
 
-    w, h = img.size
-    cell_w = w // cols
-    cell_h = h // rows
+    # Persist the raw grid for the confirm step (reuse without re-upload)
+    grid_cache = project_dir / "preview_grid.jpg"
+    grid_cache.write_bytes(raw)
 
-    if cell_w < 10 or cell_h < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Görsel çok küçük veya ızgara boyutu çok büyük.",
-        )
+    cells = _crop_cells(img, rows, cols, bool(swap_axes), bool(reverse_order))
+
+    preview_dir = project_dir / "preview_split"
+    if preview_dir.exists():
+        shutil.rmtree(preview_dir)
+    preview_dir.mkdir()
+
+    panels = []
+    for i, cell in enumerate(cells, start=1):
+        dest = preview_dir / f"preview_{i:03d}.jpg"
+        cell.save(dest, "JPEG", quality=90)
+        panels.append({
+            "num": i,
+            "url": f"/photo-story-files/{slug}/preview_split/preview_{i:03d}.jpg",
+        })
+
+    # Cache split params for confirm step
+    (project_dir / "preview_split_params.json").write_text(
+        json.dumps({
+            "rows": rows, "cols": cols,
+            "swap_axes": bool(swap_axes),
+            "reverse_order": bool(reverse_order),
+            "count": len(cells),
+        }),
+        encoding="utf-8",
+    )
+
+    return {"panels": panels}
+
+
+@router.post("/api/photo-story/{slug}/confirm-split")
+def confirm_split(slug: str, panel_count: int = 0) -> dict:
+    """Move preview panels into the actual slots and update config."""
+
+    project_dir = _safe_project_dir(slug)
+    preview_dir = project_dir / "preview_split"
+    params_path = project_dir / "preview_split_params.json"
+
+    if not preview_dir.exists():
+        raise HTTPException(status_code=400, detail="Önce önizleme yapılmalı.")
+
+    previews = sorted(preview_dir.glob("preview_*.jpg"))
+    if not previews:
+        raise HTTPException(status_code=400, detail="Önizleme dosyaları bulunamadı.")
 
     panels_dir = project_dir / "panels"
     panels_dir.mkdir(exist_ok=True)
 
-    saved: list[int] = []
-    num = 1
-    for row in range(rows):
-        for col in range(cols):
-            x0 = col * cell_w
-            y0 = row * cell_h
-            x1 = x0 + cell_w if col < cols - 1 else w
-            y1 = y0 + cell_h if row < rows - 1 else h
+    config = _load_config(project_dir)
+    slots: dict[str, Any] = config.get("slots") or {}
+    saved = 0
 
-            cell = img.crop((x0, y0, x1, y1))
-            dest = panels_dir / f"panel_{num:03d}.jpg"
-            cell.save(dest, "JPEG", quality=95)
+    for i, src in enumerate(previews, start=1):
+        dest = panels_dir / f"panel_{i:03d}.jpg"
+        shutil.copy2(src, dest)
+        slot = slots.setdefault(str(i), {})
+        slot["panel_file"] = f"panels/panel_{i:03d}.jpg"
+        if not slot.get("sfx_keyword"):
+            slot.setdefault("sfx_keyword", "")
+        slot.setdefault("sfx_file", None)
+        slot.setdefault("sfx_track_name", "")
+        slot.setdefault("duration", None)
+        saved += 1
 
-            rel = f"panels/panel_{num:03d}.jpg"
-            slot = slots.setdefault(str(num), {})
-            slot["panel_file"] = rel
-            saved.append(num)
-            num += 1
-
-    # Extend slot list if needed
-    for n in range(1, panel_count + 1):
-        slots.setdefault(str(n), {
-            "panel_file": None,
-            "sfx_keyword": "",
-            "sfx_file": None,
-            "sfx_track_name": "",
-            "duration": None,
-        })
-
+    n = panel_count or saved
+    config["panel_count"] = n
     config["slots"] = slots
-    config["panel_count"] = panel_count
     _save_config(project_dir, config)
 
-    return {"ok": True, "saved": saved, "panel_count": panel_count}
+    # Clean up temp files
+    shutil.rmtree(preview_dir, ignore_errors=True)
+    (project_dir / "preview_split_params.json").unlink(missing_ok=True)
+
+    return {"ok": True, "saved": saved}
 
 
 # --------------------------------------------------------------------------- #
