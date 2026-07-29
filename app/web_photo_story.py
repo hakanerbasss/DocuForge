@@ -996,12 +996,12 @@ def confirm_split(
     h_fracs: str = "",
     v_fracs: str = "",
     reversed: int = 0,
-    margin: int = 15,
+    inset: int = 5,
 ) -> dict:
     """Crop the stored grid image at the given line positions and save panels.
 
-    margin — pixels to exclude on each side of every cut line, so the
-             white separator band is fully removed from both adjacent panels.
+    inset — pixels to trim from all 4 edges of every panel after cutting,
+            removing any separator bleed or JPEG edge artefacts.
     """
 
     project_dir = _safe_project_dir(slug)
@@ -1016,7 +1016,7 @@ def confirm_split(
 
     W, H = img.size
 
-    def _parse_fracs(s: str, total: int) -> list[int]:
+    def _parse_cuts(s: str, total: int) -> list[int]:
         pts = []
         for tok in s.split(","):
             tok = tok.strip()
@@ -1027,30 +1027,18 @@ def confirm_split(
                     pass
         return sorted(pts)
 
-    def _pts_to_regions(pts: list[int], total: int) -> list[tuple[int, int]]:
-        """Convert cut-line pixel positions into (start, end) content regions.
-
-        Each cut point pt → content above ends at pt-margin,
-                            content below starts at pt+margin.
-        """
-        m = max(0, margin)
-        regions: list[tuple[int, int]] = []
-        prev = 0
-        for pt in pts:
-            regions.append((prev, max(prev, pt - m)))
-            prev = min(total, pt + m)
-        regions.append((prev, total))
-        return regions
-
-    h_regions = _pts_to_regions(_parse_fracs(h_fracs, H), H)
-    v_regions = _pts_to_regions(_parse_fracs(v_fracs, W), W)
+    h_cuts = [0] + _parse_cuts(h_fracs, H) + [H]
+    v_cuts = [0] + _parse_cuts(v_fracs, W) + [W]
 
     panels_dir = project_dir / "panels"
     panels_dir.mkdir(exist_ok=True)
 
+    pad = max(0, inset)
     cells: list[tuple[int, int, int, int]] = []
-    for y0, y1 in h_regions:
-        for x0, x1 in v_regions:
+    for ri in range(len(h_cuts) - 1):
+        for ci in range(len(v_cuts) - 1):
+            x0, y0 = v_cuts[ci] + pad, h_cuts[ri] + pad
+            x1, y1 = v_cuts[ci + 1] - pad, h_cuts[ri + 1] - pad
             cells.append((x0, y0, x1, y1))
 
     if reversed:
