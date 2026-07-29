@@ -1645,10 +1645,10 @@ class RenderService:
         ]
 
         if audio_path is not None:
-            command.extend([
-                "-i",
-                str(audio_path),
-            ])
+            command.extend(["-i", str(audio_path)])
+        else:
+            # Silent audio — must be declared as input BEFORE output options
+            command.extend(["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
 
         if zoom:
             video_filter = (
@@ -1663,9 +1663,6 @@ class RenderService:
                 "setsar=1"
             )
         else:
-            # No zoompan: used for the fixed closing-shot image, whose
-            # baked-in text (e.g. "abone olun") becomes hard to read and
-            # can drift out of frame under the Ken Burns zoom.
             video_filter = (
                 f"scale={self.WIDTH}:{self.HEIGHT}:"
                 "force_original_aspect_ratio=increase,"
@@ -1674,58 +1671,32 @@ class RenderService:
             )
 
         command.extend([
-            "-t",
-            f"{duration:.3f}",
-            "-vf",
-            video_filter,
+            "-t", f"{duration:.3f}",
+            "-vf", video_filter,
         ])
 
         if not zoom:
-            # zoompan bakes fps into its own output; without it the
-            # image demuxer's default framerate applies instead, which
-            # doesn't match the other clips' self.FPS and breaks the
-            # stream-copy concat in _concat_stream_copy (mismatched
-            # clips get dropped/corrupted -- this is what made the
-            # closing scene vanish entirely after zoom was disabled).
-            command.extend([
-                "-r",
-                str(self.FPS),
-            ])
+            command.extend(["-r", str(self.FPS)])
 
         command.extend([
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
         ])
 
         if audio_path is not None:
             command.extend([
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-                "-ar",
-                "48000",
-                "-ac",
-                "2",
-                "-af",
-                "apad",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "48000",
+                "-ac", "2",
+                "-af", "apad",
             ])
         else:
             command.extend([
-                "-f",
-                "lavfi",
-                "-i",
-                "anullsrc=r=48000:cl=stereo",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
+                "-c:a", "aac",
+                "-b:a", "192k",
                 "-shortest",
             ])
 
@@ -1756,55 +1727,38 @@ class RenderService:
         command = [
             "ffmpeg",
             "-y",
-            "-f",
-            "lavfi",
+            "-f", "lavfi",
             "-i",
             f"color=c=0x14203a:s={self.WIDTH}x{self.HEIGHT}:"
             f"d={duration:.3f}:r={self.FPS}",
         ]
 
         if audio_path is not None:
-            command.extend([
-                "-i",
-                str(audio_path),
-            ])
+            command.extend(["-i", str(audio_path)])
+        else:
+            # Silent audio input — must come before output options
+            command.extend(["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
 
         command.extend([
-            "-t",
-            f"{duration:.3f}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
+            "-t", f"{duration:.3f}",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
         ])
 
         if audio_path is not None:
             command.extend([
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-                "-ar",
-                "48000",
-                "-ac",
-                "2",
-                "-af",
-                "apad",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "48000",
+                "-ac", "2",
+                "-af", "apad",
             ])
         else:
             command.extend([
-                "-f",
-                "lavfi",
-                "-i",
-                "anullsrc=r=48000:cl=stereo",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
+                "-c:a", "aac",
+                "-b:a", "192k",
                 "-shortest",
             ])
 

@@ -377,19 +377,19 @@ def _render_slot(slug: str, num: int, slot: dict[str, Any],
         </label>
 
         <label style="font-size:12px;margin-top:8px;margin-bottom:2px;font-weight:700">
-            Ses Efekti Anahtar Kelimesi
+            Ses Efekti Kelimesi
         </label>
         <input type="text" id="sfxKw_{n}" value="{sfx_keyword}"
-            placeholder="örn: dramatic reveal, explosion, birds"
+            placeholder="örn: whoosh, explosion, birds"
             style="font-size:12px;min-height:34px"
             onblur="saveSfxKeyword({n})">
-
+        <button onclick="fetchSfx({n})" style="margin-top:6px;background:#059669">
+            🔊 Ses Ara &amp; İndir
+        </button>
         {sfx_label}
-
-        <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="sm secondary" onclick="fetchSfx({n})">🔊 SFX İndir</button>
-            <button class="sm danger" onclick="removeSfx({n})" style="display:{'block' if sfx_file else 'none'}" id="rmSfx_{n}">✕</button>
-        </div>
+        <button class="sm danger" onclick="removeSfx({n})" style="display:{'block' if sfx_file else 'none'};margin-top:4px" id="rmSfx_{n}">
+            ✕ Sesi Kaldır
+        </button>
     </div>
     """
 
