@@ -81,6 +81,7 @@ class BuildRequest(BaseModel):
     manual_upload_enabled: bool = Field(default=False)
     thumbnail_enabled: bool = Field(default=False)
     thumbnail_source: str = Field(default="auto")
+    verbatim_script: bool = Field(default=False)
 
 
 class RegenerateRequest(BaseModel):
@@ -150,6 +151,7 @@ def _execute_build(job_id: str, req: dict[str, Any], project_dir: Path) -> None:
                 manual_upload_enabled=req.get("manual_upload_enabled", False),
                 thumbnail_enabled=req["thumbnail_enabled"],
                 thumbnail_source=req.get("thumbnail_source", "auto"),
+                verbatim_script=req.get("verbatim_script", False),
                 cancel_event=cancel_event,
             )
         with JOBS_LOCK:
@@ -323,8 +325,15 @@ body{padding-bottom:76px}
 <div id="topicSuggestions" style="display:none;margin-top:12px"></div>
 
 <label for="source_material" style="margin-top:12px">Kaynak Metin (opsiyonel)</label>
-<textarea id="source_material" rows="6" placeholder="Elinde zaten doğrulanmış, kaynak gösterilmiş bir haber/metin varsa buraya yapıştır -- araştırma adımı yeni tarih/rakam uydurmaz, sadece bu metni kullanır." onblur="deriveTopicFromSource()"></textarea>
-<div class="hint">Boş bırakırsan DocuForge konuyu kendi araştırıp yazar. Doldurursan (özellikle haber içeriklerinde) sadece buradaki bilgiler kullanılır, ekstra tarih/rakam eklenmez.</div>
+<textarea id="source_material" rows="6" placeholder="Hazır senaryonu veya kaynak metnini buraya yapıştır." onblur="deriveTopicFromSource(); updateVerbatimHint()"></textarea>
+<div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+  <label class="toggle-switch" style="margin:0">
+    <input type="checkbox" id="verbatim_script" onchange="updateVerbatimHint()">
+    <span class="slider"></span>
+  </label>
+  <span style="font-size:14px;font-weight:600">Senaryoyu birebir kullan</span>
+</div>
+<div id="verbatimHint" class="hint" style="margin-top:4px">Kapalı: DocuForge kaynak metni referans alarak kendi senaryosunu yazar.</div>
 
 <label for="source_citation" style="margin-top:12px">Kaynak (opsiyonel)</label>
 <input id="source_citation" placeholder="Örnek: Sözcü, Milliyet, Uzmanpara.com" maxlength="500">
@@ -1060,12 +1069,29 @@ function deriveTopicFromSource(){
   if(firstLine)topicEl.value=firstLine;
 }
 
+function updateVerbatimHint(){
+  const on=document.getElementById("verbatim_script").checked;
+  const hasSrc=document.getElementById("source_material").value.trim().length>0;
+  const hint=document.getElementById("verbatimHint");
+  if(on){
+    hint.textContent=hasSrc
+      ? "✅ Açık: Kaynak Metin birebir senaryo olarak kullanılacak. Araştırma ve senaryo yazma adımları atlanacak."
+      : "⚠️ Açık ama Kaynak Metin boş — senaryonu yukarıya yapıştır.";
+    hint.style.color=hasSrc?"#166534":"#92400e";
+  }else{
+    hint.textContent="Kapalı: DocuForge kaynak metni referans alarak kendi senaryosunu yazar.";
+    hint.style.color="";
+  }
+}
+
 async function startBuild(){
   const btn=document.getElementById("startButton");
   deriveTopicFromSource();
   const topic=document.getElementById("topic").value.trim();
   if(!topic){alert("Konu giriniz (ya da Kaynak Metin kutusuna bir metin yapıştır, konu otomatik doldurulsun).");return;}
   if(topic.length>200){alert("⚠️ Konu alanı en fazla 200 karakter olabilir.\n\nSenaryonu veya uzun metni 'Kaynak Metin' kutusuna yapıştır — Konu alanına sadece kısa bir başlık yaz (örn: 'Kuantum Fiziği').");return;}
+  const verbatim=document.getElementById("verbatim_script").checked;
+  if(verbatim&&!document.getElementById("source_material").value.trim()){alert("⚠️ 'Senaryoyu birebir kullan' açık ama Kaynak Metin boş.\n\nSenaryonu Kaynak Metin alanına yapıştır veya toggle'ı kapat.");return;}
   btn.disabled=true;
   const statusBox=document.getElementById("statusBox");
   statusBox.style.display="block";
@@ -1079,6 +1105,7 @@ async function startBuild(){
     topic,
     source_material:document.getElementById("source_material").value.trim(),
     source_citation:document.getElementById("source_citation").value.trim(),
+    verbatim_script:document.getElementById("verbatim_script").checked,
     language:document.getElementById("language").value,
     content_type:document.getElementById("content_type").value,
     target_duration_seconds:parseInt(document.getElementById("duration").value),

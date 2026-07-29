@@ -80,6 +80,7 @@ class DocumentaryProject:
     thumbnail_hook_override: str = ""
     source_material: str = ""
     source_citation: str = ""
+    verbatim_script: bool = False
 
     status: str = "created"
     created_at: str = ""
@@ -106,6 +107,7 @@ class DocumentaryProject:
         ).strip()
         self.source_material = str(self.source_material).strip()
         self.source_citation = str(self.source_citation).strip()
+        self.verbatim_script = bool(self.verbatim_script)
         self.status = str(self.status).strip().lower()
 
         self.target_duration_seconds = int(
@@ -328,6 +330,9 @@ class DocumentaryProject:
             ),
             source_citation=str(
                 data.get("source_citation", "")
+            ),
+            verbatim_script=bool(
+                data.get("verbatim_script", False)
             ),
             status=str(data.get("status", "created")),
             created_at=str(data.get("created_at", "")),

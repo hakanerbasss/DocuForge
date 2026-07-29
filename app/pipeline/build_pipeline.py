@@ -104,6 +104,7 @@ class BuildPipeline:
         manual_upload_enabled: bool = False,
         thumbnail_enabled: bool = False,
         thumbnail_source: str = "auto",
+        verbatim_script: bool = False,
         template: str | None = None,
         cancel_event: threading.Event | None = None,
     ) -> Path:
@@ -148,6 +149,7 @@ class BuildPipeline:
             manual_upload_enabled=manual_upload_enabled,
             thumbnail_enabled=thumbnail_enabled,
             thumbnail_source=thumbnail_source,
+            verbatim_script=verbatim_script,
         )
 
         project_service = ProjectService()
@@ -591,6 +593,51 @@ class BuildPipeline:
             "Üretim kullanıcı tarafından iptal edildi."
         )
 
+    def _inject_verbatim_script(
+        self,
+        project_dir: Path,
+        project_data: dict[str, Any],
+        state: dict[str, Any],
+    ) -> None:
+        """When verbatim_script is set, write source_material as script.md
+        and a placeholder research.md, then mark both steps completed so
+        the pipeline skips them."""
+
+        source = project_data.get("source_material", "").strip()
+        if not source:
+            raise ValueError(
+                "Senaryoyu birebir kullan seçili ama Kaynak Metin boş. "
+                "Senaryonu Kaynak Metin alanına yapıştır."
+            )
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        research_path = project_dir / "research.md"
+        if not research_path.exists():
+            research_path.write_text(
+                f"# {project_data.get('title', '')}\n\n"
+                "(Araştırma adımı atlandı — senaryo birebir kullanılıyor.)",
+                encoding="utf-8",
+            )
+
+        script_path = project_dir / "script.md"
+        if not script_path.exists():
+            script_path.write_text(source, encoding="utf-8")
+
+        steps = state.setdefault("steps", {})
+        for key in ("research", "script"):
+            if key not in steps or steps[key].get("status") != "completed":
+                steps[key] = {
+                    "status": "completed",
+                    "completed_at": now,
+                    "skipped_reason": "verbatim_script",
+                }
+
+        self._save_state(project_dir, state)
+        console.print(
+            "[bold cyan]⏭ Verbatim script: research + script steps skipped[/bold cyan]\n"
+        )
+
     def _run_pipeline(
         self,
         project_dir: Path,
@@ -601,6 +648,9 @@ class BuildPipeline:
         project_data = load_project(str(project_dir))
         state = self._load_state(project_dir)
         total_start = time.perf_counter()
+
+        if project_data.get("verbatim_script"):
+            self._inject_verbatim_script(project_dir, project_data, state)
 
         agent_steps = get_default_pipeline_steps()
         service_steps = self._build_service_steps(
