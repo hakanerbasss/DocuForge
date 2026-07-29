@@ -1106,7 +1106,7 @@ async function startBuild(){
   try{
     const r=await fetch("/api/builds",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const res=await r.json();
-    if(!r.ok)throw new Error(res.detail||"\u00dcretim ba\u015flat\u0131lamad\u0131.");
+    if(!r.ok)throw new Error(_apiErr(res.detail)||"\u00dcretim ba\u015flat\u0131lamad\u0131.");
     document.getElementById("statusTitle").textContent="\u00dcretim devam ediyor";
     document.getElementById("statusText").textContent="Ara\u015ft\u0131rma, senaryo, medya, ses ve video haz\u0131rlan\u0131yor.";
     currentJobId=res.job_id;
@@ -1176,12 +1176,19 @@ async function pollJob(jobId){
   }catch(e){showError(e.message);}
 }
 
+function _apiErr(detail){
+  if(!detail)return "";
+  if(typeof detail==="string")return detail;
+  if(Array.isArray(detail))return detail.map(d=>d.msg||d.message||JSON.stringify(d)).join("; ");
+  if(typeof detail==="object")return detail.msg||detail.message||detail.detail||JSON.stringify(detail);
+  return String(detail);
+}
 function showError(msg){
   clearTimeout(pollTimer);
   const sb=document.getElementById("statusBox");
   sb.style.display="block";sb.className="status error";
   document.getElementById("statusTitle").textContent="\u00dcretim ba\u015far\u0131s\u0131z";
-  document.getElementById("statusText").textContent=msg;
+  document.getElementById("statusText").textContent=typeof msg==="string"?msg:_apiErr(msg);
   document.getElementById("progressBar").style.width="100%";
   document.getElementById("startButton").disabled=false;
 }
