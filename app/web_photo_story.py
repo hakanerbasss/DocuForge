@@ -996,8 +996,13 @@ def confirm_split(
     h_fracs: str = "",
     v_fracs: str = "",
     reversed: int = 0,
+    margin: int = 15,
 ) -> dict:
-    """Crop the stored grid image at the given line positions and save panels."""
+    """Crop the stored grid image at the given line positions and save panels.
+
+    margin — pixels to exclude on each side of every cut line, so the
+             white separator band is fully removed from both adjacent panels.
+    """
 
     project_dir = _safe_project_dir(slug)
     grid_path = project_dir / "preview_grid.jpg"
@@ -1022,19 +1027,31 @@ def confirm_split(
                     pass
         return sorted(pts)
 
-    h_pts = _parse_fracs(h_fracs, H)
-    v_pts = _parse_fracs(v_fracs, W)
+    def _pts_to_regions(pts: list[int], total: int) -> list[tuple[int, int]]:
+        """Convert cut-line pixel positions into (start, end) content regions.
 
-    h_cuts = [0] + h_pts + [H]
-    v_cuts = [0] + v_pts + [W]
+        Each cut point pt → content above ends at pt-margin,
+                            content below starts at pt+margin.
+        """
+        m = max(0, margin)
+        regions: list[tuple[int, int]] = []
+        prev = 0
+        for pt in pts:
+            regions.append((prev, max(prev, pt - m)))
+            prev = min(total, pt + m)
+        regions.append((prev, total))
+        return regions
+
+    h_regions = _pts_to_regions(_parse_fracs(h_fracs, H), H)
+    v_regions = _pts_to_regions(_parse_fracs(v_fracs, W), W)
 
     panels_dir = project_dir / "panels"
     panels_dir.mkdir(exist_ok=True)
 
     cells: list[tuple[int, int, int, int]] = []
-    for ri in range(len(h_cuts) - 1):
-        for ci in range(len(v_cuts) - 1):
-            cells.append((v_cuts[ci], h_cuts[ri], v_cuts[ci + 1], h_cuts[ri + 1]))
+    for y0, y1 in h_regions:
+        for x0, x1 in v_regions:
+            cells.append((x0, y0, x1, y1))
 
     if reversed:
         cells.reverse()
