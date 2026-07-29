@@ -810,20 +810,15 @@ async def upload_panel(slug: str, num: int, file: UploadFile) -> dict:
 # API — grid split: preview + confirm                                          #
 # --------------------------------------------------------------------------- #
 
-def _find_separators(line_means: list[float], expected: int, threshold: float = 245.0) -> list[int]:
-    """Find midpoints of white bands in a 1-D brightness array.
+def _find_band_ranges(
+    line_means: list[float],
+    threshold: float = 240.0,
+) -> list[tuple[int, int]]:
+    """Return (start, end) pixel ranges for every white band in *line_means*.
 
-    line_means  – average pixel brightness per row (or per column)
-    expected    – number of interior separator lines we expect (rows-1 or cols-1)
-    threshold   – brightness ≥ this counts as "white"
-
-    Returns a sorted list of pixel positions.  Falls back to an evenly-spaced
-    grid when the detected count doesn't match *expected*.
+    A white band is a contiguous run of values >= *threshold*.
     """
-    total = len(line_means)
-
-    # Find contiguous white bands and record their centre pixel
-    separators: list[int] = []
+    ranges: list[tuple[int, int]] = []
     in_band = False
     band_start = 0
     for i, b in enumerate(line_means):
@@ -831,41 +826,50 @@ def _find_separators(line_means: list[float], expected: int, threshold: float = 
             band_start = i
             in_band = True
         elif b < threshold and in_band:
-            separators.append((band_start + i) // 2)
+            ranges.append((band_start, i))
             in_band = False
     if in_band:
-        separators.append((band_start + total) // 2)
-
-    if len(separators) == expected:
-        return separators
-
-    # Wrong count — fall back to even split
-    return [round((k + 1) * total / (expected + 1)) for k in range(expected)]
+        ranges.append((band_start, len(line_means)))
+    return ranges
 
 
-def _img_row_means(arr: "np.ndarray") -> list[float]:
-    """Mean brightness per horizontal row (grayscale ndarray h×w)."""
-    return arr.mean(axis=1).tolist()
+def _band_ranges_to_regions(
+    band_ranges: list[tuple[int, int]],
+    total: int,
+    expected_seps: int,
+) -> list[tuple[int, int]]:
+    """Convert separator band ranges into content-region (start, end) pairs.
+
+    Content starts where the previous separator *ends* and stops where the
+    next separator *starts* — so no separator pixel ever ends up inside a cell.
+    Falls back to even division when the detected band count is wrong.
+    """
+    n = expected_seps + 1
+    if len(band_ranges) != expected_seps:
+        # Fallback: even grid
+        return [(round(i * total / n), round((i + 1) * total / n)) for i in range(n)]
+
+    regions: list[tuple[int, int]] = []
+    prev_end = 0
+    for sep_start, sep_end in band_ranges:
+        regions.append((prev_end, sep_start))
+        prev_end = sep_end
+    regions.append((prev_end, total))
+    return regions
 
 
-def _img_col_means(arr: "np.ndarray") -> list[float]:
-    """Mean brightness per vertical column (grayscale ndarray h×w)."""
-    return arr.mean(axis=0).tolist()
-
-
-def _trim_white(cell: "Image.Image", threshold: float = 245.0) -> "Image.Image":
-    """Remove white/near-white border padding from a single cell."""
+def _trim_white(cell: "Image.Image", threshold: float = 250.0) -> "Image.Image":
+    """Trim any remaining near-pure-white padding from cell edges."""
     import numpy as np
     gray = np.array(cell.convert("L"), dtype=float)
     row_bright = gray.mean(axis=1)
     col_bright = gray.mean(axis=0)
-    rows_content = (row_bright < threshold).nonzero()[0]
-    cols_content = (col_bright < threshold).nonzero()[0]
-    if rows_content.size < 4 or cols_content.size < 4:
-        return cell  # cell is almost entirely white — keep as-is
-    top, bottom = int(rows_content[0]), int(rows_content[-1]) + 1
-    left, right = int(cols_content[0]), int(cols_content[-1]) + 1
-    return cell.crop((left, top, right, bottom))
+    rows_ok = (row_bright < threshold).nonzero()[0]
+    cols_ok = (col_bright < threshold).nonzero()[0]
+    if rows_ok.size < 4 or cols_ok.size < 4:
+        return cell
+    return cell.crop((int(cols_ok[0]), int(rows_ok[0]),
+                      int(cols_ok[-1]) + 1, int(rows_ok[-1]) + 1))
 
 
 def _crop_cells(
@@ -877,32 +881,28 @@ def _crop_cells(
 ) -> list["Image.Image"]:
     """Divide img into rows×cols cells using white-border detection.
 
-    Detects the actual white separator lines between panels so cuts are
-    exact even when the source image has uneven margins.  Falls back to
-    even grid division when detection finds the wrong number of lines.
-
-    swap_axes   — transpose row/col (user entered dimensions in wrong order)
-    reverse_order — reverse the final list (panels placed bottom-to-top)
+    Finds each white separator band and cuts exactly at its edges so that
+    no separator pixel is included in any panel.  Falls back to even grid
+    division when detection finds the wrong number of bands.
     """
     import numpy as np
 
-    # Swap interpretation so the user can just flip a toggle when wrong
     r, c = (cols, rows) if swap_axes else (rows, cols)
 
-    gray = np.array(img.convert("L"), dtype=float)   # h×w grayscale
+    gray = np.array(img.convert("L"), dtype=float)   # h × w
 
-    # Detect interior separator positions
-    h_seps = _find_separators(_img_row_means(gray), expected=r - 1)
-    v_seps = _find_separators(_img_col_means(gray), expected=c - 1)
+    h_bands = _find_band_ranges(gray.mean(axis=1).tolist())
+    v_bands = _find_band_ranges(gray.mean(axis=0).tolist())
 
-    h_cuts = [0] + h_seps + [img.height]
-    v_cuts = [0] + v_seps + [img.width]
+    h_regions = _band_ranges_to_regions(h_bands, img.height, r - 1)
+    v_regions = _band_ranges_to_regions(v_bands, img.width,  c - 1)
 
     cells: list["Image.Image"] = []
     for ri in range(r):
+        y0, y1 = h_regions[ri]
         for ci in range(c):
-            cell = img.crop((v_cuts[ci], h_cuts[ri], v_cuts[ci + 1], h_cuts[ri + 1]))
-            cells.append(_trim_white(cell))
+            x0, x1 = v_regions[ci]
+            cells.append(_trim_white(img.crop((x0, y0, x1, y1))))
 
     if reverse_order:
         cells.reverse()
