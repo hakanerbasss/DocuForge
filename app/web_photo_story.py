@@ -468,11 +468,13 @@ def photo_story_detail(slug: str) -> HTMLResponse:
         <div class="row">
             <div>
                 <label>Satır Sayısı</label>
-                <input id="gridRows" type="number" value="3" min="1" max="20">
+                <input id="gridRows" type="number" value="5" min="1" max="20">
+                <div class="hint">Dikey resim → 5 satır</div>
             </div>
             <div>
                 <label>Sütun Sayısı</label>
-                <input id="gridCols" type="number" value="5" min="1" max="20">
+                <input id="gridCols" type="number" value="3" min="1" max="20">
+                <div class="hint">Dikey resim → 3 sütun</div>
             </div>
         </div>
         <label id="gridUploadBtn" style="display:flex;align-items:center;justify-content:center;
@@ -635,8 +637,8 @@ def photo_story_detail(slug: str) -> HTMLResponse:
         if (file) _splitFile = file;
         if (!_splitFile) return;
 
-        const rows = parseInt(document.getElementById('gridRows').value) || 3;
-        const cols = parseInt(document.getElementById('gridCols').value) || 5;
+        const rows = parseInt(document.getElementById('gridRows').value) || 5;
+        const cols = parseInt(document.getElementById('gridCols').value) || 3;
         const statusEl = document.getElementById('splitStatus');
         statusEl.style.display = 'block';
         statusEl.className = 'status-box';
@@ -675,8 +677,8 @@ def photo_story_detail(slug: str) -> HTMLResponse:
     }}
 
     async function confirmSplit() {{
-        const rows = parseInt(document.getElementById('gridRows').value) || 3;
-        const cols = parseInt(document.getElementById('gridCols').value) || 5;
+        const rows = parseInt(document.getElementById('gridRows').value) || 5;
+        const cols = parseInt(document.getElementById('gridCols').value) || 3;
         const panelCount = (_splitSwapped ? cols : rows) * (_splitSwapped ? rows : cols);
         const statusEl = document.getElementById('splitStatus');
         statusEl.style.display = 'block';
@@ -826,18 +828,6 @@ def _crop_cells(
 
     w, h = img.size
 
-    # Square-crop the source first so the grid divides evenly and each
-    # cell comes out as close to 1:1 as possible.  Many comic-strip grid
-    # apps produce a square canvas; if the source is already close to
-    # square this is a no-op.  We take the largest square centred on the
-    # image so we never stretch content.
-    if abs(w - h) > 4:
-        side = min(w, h)
-        x0 = (w - side) // 2
-        y0 = (h - side) // 2
-        img = img.crop((x0, y0, x0 + side, y0 + side))
-        w, h = img.size
-
     # Swap interpretation so the user can just flip a toggle when wrong
     r, c = (cols, rows) if swap_axes else (rows, cols)
 
@@ -863,8 +853,8 @@ def _crop_cells(
 async def preview_split(
     slug: str,
     file: UploadFile,
-    rows: int = 3,
-    cols: int = 5,
+    rows: int = 5,
+    cols: int = 3,
     swap_axes: int = 0,
     reverse_order: int = 0,
 ) -> dict:
