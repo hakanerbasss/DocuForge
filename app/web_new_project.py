@@ -1089,9 +1089,9 @@ async function startBuild(){
   deriveTopicFromSource();
   const topic=document.getElementById("topic").value.trim();
   if(!topic){alert("Konu giriniz (ya da Kaynak Metin kutusuna bir metin yapıştır, konu otomatik doldurulsun).");return;}
-  if(topic.length>200){alert("⚠️ Konu alanı en fazla 200 karakter olabilir.\n\nSenaryonu veya uzun metni 'Kaynak Metin' kutusuna yapıştır — Konu alanına sadece kısa bir başlık yaz (örn: 'Kuantum Fiziği').");return;}
+  if(topic.length>200){alert("⚠️ Konu alanı en fazla 200 karakter olabilir.\\n\\nSenaryonu veya uzun metni 'Kaynak Metin' kutusuna yapıştır — Konu alanına sadece kısa bir başlık yaz (örn: 'Kuantum Fiziği').");return;}
   const verbatim=document.getElementById("verbatim_script").checked;
-  if(verbatim&&!document.getElementById("source_material").value.trim()){alert("⚠️ 'Senaryoyu birebir kullan' açık ama Kaynak Metin boş.\n\nSenaryonu Kaynak Metin alanına yapıştır veya toggle'ı kapat.");return;}
+  if(verbatim&&!document.getElementById("source_material").value.trim()){alert("⚠️ 'Senaryoyu birebir kullan' açık ama Kaynak Metin boş.\\n\\nSenaryonu Kaynak Metin alanına yapıştır veya toggle'ı kapat.");return;}
   btn.disabled=true;
   const statusBox=document.getElementById("statusBox");
   statusBox.style.display="block";
