@@ -56,7 +56,7 @@ CANCEL_EVENTS: dict[str, threading.Event] = {}
 
 class BuildRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
-    source_material: str = Field(default="", max_length=8000)
+    source_material: str = Field(default="", max_length=100000)
     source_citation: str = Field(default="", max_length=500)
     language: str = Field(default="tr")
     content_type: str = Field(default="documentary")
