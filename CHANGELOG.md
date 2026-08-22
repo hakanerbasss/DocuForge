@@ -6,6 +6,40 @@ This project follows Semantic Versioning.
 
 ---
 
+# Unreleased
+
+## Added
+
+- **From-scratch server install (`deploy/`)** — `deploy/bootstrap.sh` takes an
+  empty Ubuntu box to a running panel in one command: system packages
+  (`ffmpeg`, `espeak-ng`), venv, `docuforge-web` systemd unit, and optionally
+  nginx + Let's Encrypt + HTTP Basic Auth. No API keys are needed to install.
+  The systemd unit and nginx config previously existed only on the live server,
+  so the repo could not rebuild it.
+- **`[web]`, `[voices]` and `[xtts]` optional dependencies** in
+  `pyproject.toml`.
+
+## Fixed
+
+- **`pip install -e .` produced a dead web panel.** fastapi/uvicorn/pydantic/
+  python-multipart were only listed as a manual README step, so a fresh install
+  raised `ModuleNotFoundError: No module named 'fastapi'` on `import app.web`.
+  They are now the `[web]` extra.
+- **Supertonic was selectable but never installed.** The wizard offers it as a
+  voice and the provider imports it lazily, so on a fresh box the failure
+  surfaced only mid-build. It is now the `[voices]` extra, installed by default
+  by the bootstrap.
+
+## Security
+
+- Documented, and made the installer account for, the fact that **the web panel
+  has no authentication**: `/settings` shows and edits the DeepSeek, Pexels,
+  OpenAI and fal.ai keys. With `DOMAIN` the service binds `127.0.0.1` behind
+  nginx (optionally with Basic Auth via `PANEL_PASS`); without it the installer
+  binds `0.0.0.0` as before but prints a clear warning and the firewall command.
+
+---
+
 # v0.5.0 (Current Development)
 
 ## Added

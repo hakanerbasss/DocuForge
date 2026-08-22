@@ -54,30 +54,46 @@ An optional 12th stage (**Thumbnail**) runs when enabled on the project.
 
 # Installation
 
+## On a server (from scratch)
+
+One command turns an empty Ubuntu box into a running install — system packages,
+venv, systemd service, optional nginx/HTTPS. No API keys needed to install; they
+go in from `/settings` afterwards. Details and options: [`deploy/README.md`](deploy/README.md).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hakanerbasss/DocuForge/main/deploy/bootstrap.sh -o bootstrap.sh
+bash bootstrap.sh
+```
+
+## Locally
+
 ```bash
 git clone https://github.com/hakanerbasss/DocuForge.git
 cd DocuForge
 
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[web,voices]"
 ```
 
-The web panel additionally needs `fastapi`, `uvicorn` and `pydantic` (not yet pinned in `pyproject.toml` — install manually):
+The extras matter: `[web]` is fastapi/uvicorn/pydantic/python-multipart — a bare
+`pip install -e .` gives you a working CLI and a web panel that dies on
+`import app.web`. `[voices]` is Supertonic, which the wizard offers as a voice
+but which is imported lazily, so without it the failure only shows up mid-build.
+
+FFmpeg and ffprobe must be available on `PATH`, and `espeak-ng` is the *default*
+voice provider — install it from your package manager (`apt install ffmpeg
+espeak-ng`) or a project with untouched settings will fail at narration. For the
+Piper voice, see its setup docs under `models/`.
+
+For the XTTS voice-clone provider (optional, only needed if you select
+`voice_provider: xtts`):
 
 ```bash
-pip install fastapi uvicorn pydantic python-multipart
+pip install -e ".[xtts]"
 ```
 
-FFmpeg and ffprobe must be available on `PATH`. For Piper/Supertonic voices, see their respective setup docs under `models/`.
-
-For the XTTS voice-clone provider (optional, only needed if you select `voice_provider: xtts`):
-
-```bash
-pip install coqui-tts torch torchaudio
-```
-
-This is a heavy dependency (torch) — nothing else in DocuForge needs it, so it's not in `pyproject.toml` by default. XTTS-v2 also needs considerably more RAM than the rest of the pipeline; if it's fighting for memory with everything else on the same box, that will show up as the model failing to load rather than a clear error.
+This is a heavy dependency (torch) — nothing else in DocuForge needs it, so it's a separate extra. XTTS-v2 also needs considerably more RAM than the rest of the pipeline; if it's fighting for memory with everything else on the same box, that will show up as the model failing to load rather than a clear error.
 
 ---
 

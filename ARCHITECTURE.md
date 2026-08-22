@@ -296,15 +296,37 @@ JSON-backed config, masked status instead of ever echoing the key back to the br
 
 # Deployment
 
-Typically run as a systemd service:
+Runs as a systemd service (`docuforge-web`), serving uvicorn on port 8090.
+
+A whole server is reproducible from the repo — `deploy/bootstrap.sh` installs
+system packages, the venv, the systemd unit and (optionally) nginx + HTTPS on an
+empty Ubuntu box. `deploy/systemd/` and `deploy/nginx/` hold the templates;
+`deploy/README.md` documents the options. No API keys are required to install.
 
 ```bash
-uvicorn app.web:app --host 0.0.0.0 --port 8090
+bash deploy/bootstrap.sh                      # empty server, IP access
+DOMAIN=df.example.com PANEL_PASS=x SSL=1 \
+  bash deploy/bootstrap.sh                    # behind nginx, with auth + HTTPS
 ```
 
+Updating an already-running server does not use the bootstrap:
+
+```bash
+cd /root/docuforge && git pull \
+  && .venv/bin/pip install -e ".[web,voices]" \
+  && systemctl restart docuforge-web
 ```
-systemctl restart docuforge-web
-```
+
+Two constraints the unit encodes:
+
+- **`WorkingDirectory` is load-bearing.** `jobs/`, `projects/` and `models/` are
+  resolved relative to the process's working directory (`JOBS_DIR = Path("jobs")`).
+  Starting the service from elsewhere silently writes state to a different place
+  and the panel appears to have lost the projects.
+- **Bind address depends on whether nginx is in front.** There is no
+  authentication in the app (see *Secrets and Settings*), so behind nginx it
+  binds `127.0.0.1`; standalone it binds `0.0.0.0` and the panel — including the
+  API keys on `/settings` — is reachable by anyone who knows the address.
 
 ---
 

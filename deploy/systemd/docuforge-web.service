@@ -1,0 +1,26 @@
+[Unit]
+Description=DocuForge — web panel
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# WorkingDirectory KRİTİK: kod göreli yollar kullanıyor — jobs/ (JOBS_DIR =
+# Path("jobs")), projects/, models/xtts/. Servis başka bir dizinden
+# başlatılırsa iş kayıtları ve projeler bambaşka bir yere yazılır, panel de
+# onları bulamaz ("üretim kayboldu" gibi görünür).
+WorkingDirectory=__APP_DIR__
+# __BIND__ bootstrap tarafından doldurulur:
+#   127.0.0.1 → önünde nginx var (DOMAIN verildiğinde). Panelde HİÇBİR kimlik
+#               doğrulama yok, o yüzden tercih edilen budur.
+#   0.0.0.0   → nginx yok, panele doğrudan IP:PORT ile giriliyor. Bu durumda
+#               panel internete AÇIK ve girişsizdir: /settings sayfasındaki
+#               DeepSeek/Pexels/OpenAI anahtarlarını IP'yi bilen herkes
+#               okuyabilir. Güvenlik duvarıyla kısıtla.
+ExecStart=__APP_DIR__/.venv/bin/uvicorn app.web:app --host __BIND__ --port __PORT__
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
